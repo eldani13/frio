@@ -1,36 +1,78 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Bodega de Frío
 
-## Getting Started
+Sistema frontend para gestionar una bodega de frío con 12 posiciones. Permite registrar objetos con id y temperatura, moverlos entre posiciones, retirarlos y buscar por id. Los datos se guardan en localStorage para persistir al recargar.
 
-First, run the development server:
+## Funcionalidades
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+- 12 posiciones con estado (libre/ocupada).
+- Registrar o actualizar id y temperatura.
+- Mover objetos entre posiciones.
+- Retirar objetos.
+- Buscar por id.
+- Toast flotante con mensajes.
+- Persistencia en localStorage.
+
+## Estructura del proyecto
+
+```
+app/
+	page.tsx
+	globals.css
+	components/
+		BodegaDashboard.tsx
+		bodega/
+			Header.tsx
+			SlotsGrid.tsx
+			SlotCard.tsx
+			UpsertForm.tsx
+			MoveForm.tsx
+			RemoveForm.tsx
+			SearchForm.tsx
+			MessageBanner.tsx
+	interfaces/
+		bodega.ts
+		bodega/
+			Header.ts
+			SlotCard.ts
+			SlotsGrid.ts
+			UpsertForm.ts
+			MoveForm.ts
+			RemoveForm.ts
+			SearchForm.ts
+			MessageBanner.ts
+public/
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Arquitectura y responsabilidades
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+- [app/page.tsx](app/page.tsx): página principal; solo renderiza el dashboard.
+- [app/components/BodegaDashboard.tsx](app/components/BodegaDashboard.tsx): lógica de negocio, estado y persistencia en localStorage.
+- Componentes en [app/components/bodega](app/components/bodega): UI desacoplada para cada sección.
+- Tipos compartidos en [app/interfaces](app/interfaces):
+	- [app/interfaces/bodega.ts](app/interfaces/bodega.ts): tipo `Slot`.
+	- [app/interfaces/bodega/*](app/interfaces/bodega): props de cada componente.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Persistencia (localStorage)
 
-## Learn More
+El estado de las posiciones se guarda automáticamente en localStorage con la clave `bodegaSlotsV1`. Al recargar, se restaura si el formato es válido.
 
-To learn more about Next.js, take a look at the following resources:
+## Cómo ejecutar
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+```bash
+npm install
+npm run dev
+```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Abrir [http://localhost:3000](http://localhost:3000).
 
-## Deploy on Vercel
+## Scripts
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+- `npm run dev`: entorno de desarrollo.
+- `npm run build`: build de producción.
+- `npm run start`: ejecutar build.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Convenciones
+
+- Componentes UI en `app/components/bodega`.
+- Tipos en `app/interfaces`.
+- Lógica de estado en `BodegaDashboard`.
