@@ -5,7 +5,7 @@ export type Slot = {
 	temperature: number | null;
 };
 
-export type Role = "custodio" | "administrador" | "operario";
+export type Role = "custodio" | "administrador" | "operario" | "jefe";
 
 export type Box = {
 	position: number;
@@ -14,9 +14,9 @@ export type Box = {
 	temperature: number;
 };
 
-export type OrderType = "a_bodega" | "a_salida";
+export type OrderType = "a_bodega" | "a_salida" | "revisar";
 
-export type OrderSource = "ingresos" | "bodega";
+export type OrderSource = "ingresos" | "bodega" | "salida";
 
 export type BodegaOrder = {
 	id: string;
@@ -25,5 +25,6 @@ export type BodegaOrder = {
 	sourceZone: OrderSource;
 	targetPosition?: number;
 	createdAt: string;
+	createdAtMs: number;
 	createdBy: Role;
 };

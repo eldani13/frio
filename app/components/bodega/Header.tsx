@@ -12,6 +12,7 @@ export default function Header({
   dateLabel,
   warehouseId,
   warehouseName,
+  showIntro = true,
   showMeta = true,
   canSearch,
   searchValue,
@@ -21,8 +22,8 @@ export default function Header({
   onLogout,
 }: ExtendedHeaderProps) {
   return (
-    <header className="flex flex-col gap-3 relative">
-      <div className="absolute top-0 right-0 flex items-center gap-2">
+    <header className="relative flex flex-col gap-3">
+      <div className="absolute right-0 -top-4 flex items-center gap-3">
         {userDisplayName && (
           <span className="text-sm font-semibold text-slate-700">
             {userDisplayName}
@@ -37,16 +38,20 @@ export default function Header({
           </button>
         )}
       </div>
-      <p className="text-sm font-semibold uppercase tracking-[0.3em] text-slate-500">
-        Bodega de frío
-      </p>
-      <h1 className="text-3xl font-semibold text-slate-900 sm:text-4xl">
-        Control de {totalSlots} posiciones
-      </h1>
-      <p className="max-w-2xl text-base text-slate-600">
-        Administra la temperatura y la posición de cada objeto almacenado.
-        Puedes registrar, mover o retirar objetos y buscar por id.
-      </p>
+      {showIntro ? (
+        <>
+          <p className="text-sm font-semibold uppercase tracking-[0.3em] text-slate-500">
+            Bodega de frío
+          </p>
+          <h1 className="text-3xl font-semibold text-slate-900 sm:text-4xl">
+            Control de {totalSlots} posiciones
+          </h1>
+          <p className="max-w-2xl text-base text-slate-600">
+            Administra la temperatura y la posición de cada objeto almacenado.
+            Puedes registrar, mover o retirar objetos y buscar por id.
+          </p>
+        </>
+      ) : null}
       <div className="flex flex-wrap items-center gap-3 text-sm text-slate-600">
         {showMeta ? (
           <>

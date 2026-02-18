@@ -5,16 +5,20 @@ export default function SlotsGrid({
   slots,
   selectedPosition,
   onSelect,
+  headerActions,
 }: SlotsGridProps) {
   return (
     <div className="rounded-2xl bg-white p-6 shadow-sm">
-      <h2 className="text-lg font-semibold text-slate-900">
-        Posiciones de la bodega
-      </h2>
+      <div className="flex items-center justify-between gap-3">
+        <h2 className="text-lg font-semibold text-slate-900">
+          Posiciones de la bodega
+        </h2>
+        {headerActions ? <div>{headerActions}</div> : null}
+      </div>
       <p className="mt-1 text-sm text-slate-600">
         Selecciona una tarjeta para ver su estado actual.
       </p>
-      <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="mt-5 grid gap-4 sm:grid-cols-2 2xl:grid-cols-3">
         {slots.map((slot) => (
           <SlotCard
             key={slot.position}

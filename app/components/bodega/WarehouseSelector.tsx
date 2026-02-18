@@ -3,12 +3,14 @@ import type { WarehouseSelectorProps } from "../../interfaces/bodega/WarehouseSe
 const ROLE_LABELS: Record<string, string> = {
 	custodio: "Custodio",
 	administrador: "Administrador",
+	jefe: "Jefe",
 	operario: "Operario",
 };
 
 const ROLE_HELP: Record<string, string> = {
 	custodio: "Registra ingresos y crea salidas para el operario.",
-	administrador: "Asigna tareas de ingreso a bodega.",
+	administrador: "Visualiza toda la bodega en modo solo lectura.",
+	jefe: "Da la orden de trabajo para mover ingresos a bodega.",
 	operario: "Ejecuta las solicitudes pendientes.",
 };
 
@@ -19,10 +21,12 @@ export default function WarehouseSelector({
 	warehouseName,
 	onWarehouseNameChange,
 }: WarehouseSelectorProps) {
+	const isReadOnly = role === "administrador";
+
 	return (
-		<div className="rounded-2xl bg-white p-6 shadow-sm">
+		<div>
 			
-			
+{/* 			
 			
 			<div className="mt-4 grid gap-3">
 				<p className="text-sm text-slate-600">{ROLE_HELP[role]}</p>
@@ -40,12 +44,17 @@ export default function WarehouseSelector({
 					</label>
 					<input
 						value={warehouseName}
-						onChange={(event) => onWarehouseNameChange(event.target.value)}
-						className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+						readOnly={isReadOnly}
+						onChange={(event) =>
+							isReadOnly ? undefined : onWarehouseNameChange(event.target.value)
+						}
+						className={`w-full rounded-lg border border-slate-200 px-3 py-2 text-sm ${
+							isReadOnly ? "bg-slate-100" : ""
+						}`}
 						placeholder="Ej: Bodega Norte"
 					/>
 				</div>
-			</div>
+			</div> */}
 		</div>
 	);
 }

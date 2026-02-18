@@ -29,6 +29,12 @@ const USERS: UserAccount[] = [
     displayName: "Administrador",
   },
   {
+    username: "jefe",
+    password: "jefe123",
+    role: "jefe",
+    displayName: "Jefe",
+  },
+  {
     username: "operario",
     password: "operario123",
     role: "operario",
@@ -37,6 +43,7 @@ const USERS: UserAccount[] = [
 ];
 
 import { useEffect, useMemo, useState } from "react";
+import { FiAlertTriangle, FiClipboard } from "react-icons/fi";
 import Header from "./bodega/Header";
 import MessageBanner from "./bodega/MessageBanner";
 import SlotsGrid from "./bodega/SlotsGrid";
@@ -70,6 +77,7 @@ const SLOTS_STORAGE_KEY = "bodegaSlotsV1";
 const ROLE_STORAGE_KEY = "bodegaRoleV1";
 const INBOUND_STORAGE_KEY = "bodegaIngresosV1";
 const OUTBOUND_STORAGE_KEY = "bodegaSalidasV1";
+const DISPATCHED_STORAGE_KEY = "bodegaDespachosV1";
 const ORDERS_STORAGE_KEY = "bodegaOrdenesV1";
 const WAREHOUSE_ID_KEY = "bodegaWarehouseIdV1";
 const WAREHOUSE_NAME_KEY = "bodegaWarehouseNameV1";
@@ -82,11 +90,39 @@ type BodegaStats = {
   movimientosBodega: number;
 };
 
+type AlertReason = "no_tuve_tiempo" | "no_quise" | "no_pude";
+
+type AlertItem = {
+  id: string;
+  title: string;
+  description: string;
+  reason?: AlertReason;
+};
+
+type ZoneKey = "entrada" | "bodega" | "salida";
+type ModalKind = "alertas" | "tareas";
+
+type DetailItem = {
+  id: string;
+  title: string;
+  description: string;
+  meta?: string;
+};
+
 const defaultStats: BodegaStats = {
   ingresos: 0,
   salidas: 0,
   movimientosBodega: 0,
 };
+
+const ALERT_REASONS: Array<{ value: AlertReason; label: string }> = [
+  { value: "no_tuve_tiempo", label: "No tuve tiempo" },
+  { value: "no_quise", label: "No quise" },
+  { value: "no_pude", label: "No pude" },
+];
+const ALERT_DELAY_MS = 2 * 60 * 1000;
+const ALERT_TEMPERATURE_ID = "alerta-temperatura-5";
+const ALERT_ORDER_PREFIX = "alerta-orden-";
 
 const createInitialSlots = (): Slot[] =>
   Array.from({ length: TOTAL_SLOTS }, (_, index) => ({
@@ -163,7 +199,10 @@ const normalizeSlots = (value: unknown): Slot[] | null => {
 };
 
 const isValidRole = (value: unknown): value is Role =>
-  value === "custodio" || value === "administrador" || value === "operario";
+  value === "custodio" ||
+  value === "administrador" ||
+  value === "operario" ||
+  value === "jefe";
 
 const normalizeBoxes = (value: unknown): Box[] | null => {
   if (!Array.isArray(value)) {
@@ -218,9 +257,10 @@ const normalizeOrders = (value: unknown): BodegaOrder[] | null => {
     const type = record.type;
     const createdAt = record.createdAt;
     const createdBy = record.createdBy;
+    const createdAtMs = record.createdAtMs;
     if (
       typeof id !== "string" ||
-      (type !== "a_bodega" && type !== "a_salida") ||
+      (type !== "a_bodega" && type !== "a_salida" && type !== "revisar") ||
       typeof createdAt !== "string" ||
       typeof createdBy !== "string"
     ) {
@@ -228,7 +268,11 @@ const normalizeOrders = (value: unknown): BodegaOrder[] | null => {
     }
 
     const sourceZone: OrderSource =
-      record.sourceZone === "bodega" ? "bodega" : "ingresos";
+      record.sourceZone === "bodega"
+        ? "bodega"
+        : record.sourceZone === "salida"
+          ? "salida"
+          : "ingresos";
     const sourcePosition =
       typeof record.sourcePosition === "number"
         ? record.sourcePosition
@@ -244,6 +288,11 @@ const normalizeOrders = (value: unknown): BodegaOrder[] | null => {
         ? record.targetPosition
         : undefined;
 
+    const normalizedCreatedAtMs =
+      typeof createdAtMs === "number" && Number.isFinite(createdAtMs)
+        ? createdAtMs
+        : Date.now();
+
     orders.push({
       id,
       type,
@@ -251,6 +300,7 @@ const normalizeOrders = (value: unknown): BodegaOrder[] | null => {
       sourceZone,
       targetPosition,
       createdAt,
+      createdAtMs: normalizedCreatedAtMs,
       createdBy: isValidRole(createdBy) ? createdBy as Role : "custodio",
     });
   }
@@ -268,6 +318,24 @@ const createOrderId = () => {
 const sortByPosition = <T extends { position: number }>(items: T[]) =>
   [...items].sort((a, b) => a.position - b.position);
 
+const getNextIngresoPosition = (boxes: Box[]) => {
+  const occupied = new Set(boxes.map((box) => box.position));
+  let next = 1;
+  while (occupied.has(next)) {
+    next += 1;
+  }
+  return next;
+};
+
+const getNextSalidaPosition = (boxes: Box[]) => {
+  const occupied = new Set(boxes.map((box) => box.position));
+  let next = 1;
+  while (occupied.has(next)) {
+    next += 1;
+  }
+  return next;
+};
+
 
 export default function BodegaDashboard() {
   const [session, setSession] = useState<Session | null>(null);
@@ -275,13 +343,16 @@ export default function BodegaDashboard() {
   const [dateLabel, setDateLabel] = useState("");
   const [hasRestoredSession, setHasRestoredSession] = useState(false);
   const [activeTab, setActiveTab] = useState<
-    | "bodega"
+    | "estado"
     | "ingresos"
     | "salida"
     | "ordenes"
     | "solicitudes"
+    | "despachados"
+    | "actividades"
+    | "alertas"
     | "reportes"
-  >("bodega");
+  >("estado");
 
   // Define handleLogout function
   const handleLogout = () => {
@@ -320,8 +391,18 @@ export default function BodegaDashboard() {
   const [warehouseName, setWarehouseName] = useState<string>("");
   const [inboundBoxes, setInboundBoxes] = useState<Box[]>([]);
   const [outboundBoxes, setOutboundBoxes] = useState<Box[]>([]);
+  const [dispatchedBoxes, setDispatchedBoxes] = useState<Box[]>([]);
   const [orders, setOrders] = useState<BodegaOrder[]>([]);
   const [stats, setStats] = useState<BodegaStats>(defaultStats);
+  const [alerts, setAlerts] = useState<AlertItem[]>([]);
+  const [alertClock, setAlertClock] = useState(() => Date.now());
+  const [statusModal, setStatusModal] = useState<
+    | {
+        zone: ZoneKey;
+        kind: ModalKind;
+      }
+    | null
+  >(null);
 
   const [ingresoPosition, setIngresoPosition] = useState<number>(1);
   const [ingresoName, setIngresoName] = useState<string>("");
@@ -333,6 +414,10 @@ export default function BodegaDashboard() {
   const [orderDestination, setOrderDestination] =
     useState<OrderType>("a_bodega");
   const [orderTargetPosition, setOrderTargetPosition] = useState<number>(1);
+  const [salidaSourcePosition, setSalidaSourcePosition] = useState<number>(1);
+  const [reviewSourceZone, setReviewSourceZone] =
+    useState<OrderSource>("ingresos");
+  const [reviewSourcePosition, setReviewSourcePosition] = useState<number>(1);
 
   const [searchId, setSearchId] = useState<string>("");
   const [selectedPosition, setSelectedPosition] = useState<number | null>(null);
@@ -428,6 +513,19 @@ export default function BodegaDashboard() {
     }
 
     try {
+      const storedDispatched = localStorage.getItem(DISPATCHED_STORAGE_KEY);
+      if (storedDispatched) {
+        const parsedDispatched = JSON.parse(storedDispatched) as unknown;
+        const normalized = normalizeBoxes(parsedDispatched);
+        if (normalized) {
+          setDispatchedBoxes(normalized);
+        }
+      }
+    } catch {
+      // ignore invalid storage
+    }
+
+    try {
       const storedOrders = localStorage.getItem(ORDERS_STORAGE_KEY);
       if (storedOrders) {
         const parsedOrders = JSON.parse(storedOrders) as unknown;
@@ -499,6 +597,12 @@ export default function BodegaDashboard() {
             setOutboundBoxes(normalized);
           }
         }
+        if (event.key === DISPATCHED_STORAGE_KEY) {
+          const normalized = normalizeBoxes(event.newValue ? JSON.parse(event.newValue) : []);
+          if (normalized) {
+            setDispatchedBoxes(normalized);
+          }
+        }
         if (event.key === ORDERS_STORAGE_KEY) {
           const normalized = normalizeOrders(event.newValue ? JSON.parse(event.newValue) : []);
           if (normalized) {
@@ -543,12 +647,27 @@ export default function BodegaDashboard() {
   }, [inboundBoxes]);
 
   useEffect(() => {
+    setIngresoPosition(getNextIngresoPosition(inboundBoxes));
+  }, [inboundBoxes]);
+
+  useEffect(() => {
     try {
       localStorage.setItem(OUTBOUND_STORAGE_KEY, JSON.stringify(outboundBoxes));
     } catch {
       // ignore storage errors
     }
   }, [outboundBoxes]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(
+        DISPATCHED_STORAGE_KEY,
+        JSON.stringify(dispatchedBoxes)
+      );
+    } catch {
+      // ignore storage errors
+    }
+  }, [dispatchedBoxes]);
 
   useEffect(() => {
     try {
@@ -575,6 +694,13 @@ export default function BodegaDashboard() {
       // ignore storage errors
     }
   }, [warehouseName]);
+
+  useEffect(() => {
+    const timerId = window.setInterval(() => {
+      setAlertClock(Date.now());
+    }, 30000);
+    return () => window.clearInterval(timerId);
+  }, []);
 
   const occupiedCount = useMemo(
     () => slots.filter((slot) => slot.autoId.trim() !== "").length,
@@ -604,6 +730,38 @@ export default function BodegaDashboard() {
     [slots]
   );
 
+  const pendingSourceKeys = useMemo(() => {
+    const keys = new Set<string>();
+    orders.forEach((order) => {
+      keys.add(`${order.sourceZone}:${order.sourcePosition}`);
+    });
+    return keys;
+  }, [orders]);
+
+  const availableInboundForOrders = useMemo(
+    () =>
+      inboundBoxes.filter(
+        (box) => !pendingSourceKeys.has(`ingresos:${box.position}`)
+      ),
+    [inboundBoxes, pendingSourceKeys]
+  );
+
+  const availableBodegaForOrders = useMemo(
+    () =>
+      bodegaBoxes.filter(
+        (box) => !pendingSourceKeys.has(`bodega:${box.position}`)
+      ),
+    [bodegaBoxes, pendingSourceKeys]
+  );
+
+  const availableOutboundForReview = useMemo(
+    () =>
+      outboundBoxes.filter(
+        (box) => !pendingSourceKeys.has(`salida:${box.position}`)
+      ),
+    [outboundBoxes, pendingSourceKeys]
+  );
+
   const reportData = useMemo(
     () => [
       { name: "Ingresos", value: stats.ingresos, fill: "#38bdf8" },
@@ -613,13 +771,268 @@ export default function BodegaDashboard() {
         value: stats.movimientosBodega,
         fill: "#22c55e",
       },
+      {
+        name: "Despachados",
+        value: dispatchedBoxes.length,
+        fill: "#0ea5e9",
+      },
     ],
-    [stats]
+    [dispatchedBoxes.length, stats]
   );
+
+  const zoneLabels: Record<ZoneKey, string> = {
+    entrada: "Entrada",
+    bodega: "Bodega",
+    salida: "Salida",
+  };
+
+  const formatOrderDetails = (order: BodegaOrder) => {
+    const target = order.targetPosition ?? "-";
+    const sourceLabel =
+      order.sourceZone === "bodega"
+        ? "Bodega"
+        : order.sourceZone === "salida"
+          ? "Salida"
+          : "Ingreso";
+    if (order.type === "revisar") {
+      return `Revisar ${sourceLabel} ${order.sourcePosition}`;
+    }
+    if (order.type === "a_bodega") {
+      return `${sourceLabel} ${order.sourcePosition} · Destino bodega ${target}`;
+    }
+    return `${sourceLabel} ${order.sourcePosition} · Destino salida ${target}`;
+  };
+
+  const inboundHighBoxes = useMemo(
+    () => inboundBoxes.filter((box) => box.temperature > 5),
+    [inboundBoxes]
+  );
+  const outboundHighBoxes = useMemo(
+    () => outboundBoxes.filter((box) => box.temperature > 5),
+    [outboundBoxes]
+  );
+  const bodegaHighSlots = useMemo(
+    () =>
+      slots.filter(
+        (slot) => typeof slot.temperature === "number" && slot.temperature > 5
+      ),
+    [slots]
+  );
+  const overdueOrders = useMemo(
+    () =>
+      orders.filter(
+        (order) => alertClock - order.createdAtMs >= ALERT_DELAY_MS
+      ),
+    [alertClock, orders]
+  );
+
+  const zoneAlertItems = useMemo(() => {
+    const items: Record<ZoneKey, DetailItem[]> = {
+      entrada: [],
+      bodega: [],
+      salida: [],
+    };
+
+    inboundHighBoxes.forEach((box) => {
+      items.entrada.push({
+        id: `alerta-in-${box.autoId}`,
+        title: `Temperatura alta en ingreso ${box.position}`,
+        description: `Caja ${box.name} · ${box.autoId} · ${box.temperature} °C.`,
+      });
+    });
+
+    bodegaHighSlots.forEach((slot) => {
+      items.bodega.push({
+        id: `alerta-bodega-${slot.position}`,
+        title: `Temperatura alta en bodega ${slot.position}`,
+        description: `Caja ${slot.name} · ${slot.autoId} · ${slot.temperature ?? "-"} °C.`,
+      });
+    });
+
+    outboundHighBoxes.forEach((box) => {
+      items.salida.push({
+        id: `alerta-out-${box.autoId}`,
+        title: `Temperatura alta en salida ${box.position}`,
+        description: `Caja ${box.name} · ${box.autoId} · ${box.temperature} °C.`,
+      });
+    });
+
+    overdueOrders.forEach((order) => {
+      const zone = order.type === "a_bodega" ? "bodega" : "salida";
+      items[zone].push({
+        id: `alerta-orden-${order.id}`,
+        title: "Tarea demorada",
+        description: `Orden pendiente por mas de 2 minutos: ${formatOrderDetails(order)}.`,
+        meta: `Solicitado por ${order.createdBy} · ${order.createdAt}`,
+      });
+    });
+
+    return items;
+  }, [bodegaHighSlots, inboundHighBoxes, outboundHighBoxes, overdueOrders]);
+
+  const zoneTaskItems = useMemo(() => {
+    const byZone: Record<ZoneKey, DetailItem[]> = {
+      entrada: [],
+      bodega: [],
+      salida: [],
+    };
+
+    orders
+      .filter((order) => order.sourceZone === "ingresos")
+      .forEach((order) => {
+        byZone.entrada.push({
+          id: `tarea-entrada-${order.id}`,
+          title: "Tarea pendiente",
+          description: formatOrderDetails(order),
+          meta: `Solicitado por ${order.createdBy} · ${order.createdAt}`,
+        });
+      });
+
+    orders
+      .filter((order) => order.type === "a_bodega" || order.sourceZone === "bodega")
+      .forEach((order) => {
+        byZone.bodega.push({
+          id: `tarea-bodega-${order.id}`,
+          title: "Tarea pendiente",
+          description: formatOrderDetails(order),
+          meta: `Solicitado por ${order.createdBy} · ${order.createdAt}`,
+        });
+      });
+
+    orders
+      .filter((order) => order.type === "a_salida" || order.sourceZone === "salida")
+      .forEach((order) => {
+        byZone.salida.push({
+          id: `tarea-salida-${order.id}`,
+          title: "Tarea pendiente",
+          description: formatOrderDetails(order),
+          meta: `Solicitado por ${order.createdBy} · ${order.createdAt}`,
+        });
+      });
+
+    return byZone;
+  }, [orders]);
+
+  const renderStatusButtons = (zone: ZoneKey) => {
+    const alertCount = zoneAlertItems[zone].length;
+    const taskCount = zoneTaskItems[zone].length;
+
+    if (alertCount === 0 && taskCount === 0) {
+      return null;
+    }
+
+    return (
+      <div className="flex items-center gap-2">
+        {alertCount > 0 ? (
+          <button
+            type="button"
+            onClick={() => setStatusModal({ zone, kind: "alertas" })}
+            className="flex items-center gap-2 rounded-full bg-rose-600 px-3 py-1 text-xs font-semibold text-white shadow-sm transition hover:bg-rose-500"
+            aria-label={`Ver alertas en ${zoneLabels[zone]}`}
+          >
+            <FiAlertTriangle className="h-4 w-4" />
+            {alertCount}
+          </button>
+        ) : null}
+        {taskCount > 0 ? (
+          <button
+            type="button"
+            onClick={() => setStatusModal({ zone, kind: "tareas" })}
+            className="flex items-center gap-2 rounded-full bg-amber-300 px-3 py-1 text-xs font-semibold text-amber-950 shadow-sm transition hover:bg-amber-200"
+            aria-label={`Ver tareas en ${zoneLabels[zone]}`}
+          >
+            <FiClipboard className="h-4 w-4" />
+            {taskCount}
+          </button>
+        ) : null}
+      </div>
+    );
+  };
+
+  useEffect(() => {
+    const hasHighTemp =
+      inboundHighBoxes.length > 0 ||
+      outboundHighBoxes.length > 0 ||
+      bodegaHighSlots.length > 0;
+
+    const overdueOrders = orders.filter(
+      (order) => alertClock - order.createdAtMs >= ALERT_DELAY_MS
+    );
+
+    setAlerts((prev) => {
+      const previousById = new Map(prev.map((alert) => [alert.id, alert]));
+      const next: AlertItem[] = [];
+
+      if (hasHighTemp) {
+        const existing = previousById.get(ALERT_TEMPERATURE_ID);
+        const tempDetails = [
+          ...inboundHighBoxes.map(
+            (box) =>
+              `Ingreso ${box.position} · ${box.name} (${box.autoId}) · ${box.temperature} °C`
+          ),
+          ...bodegaHighSlots.map(
+            (slot) =>
+              `Bodega ${slot.position} · ${slot.name} (${slot.autoId}) · ${slot.temperature} °C`
+          ),
+          ...outboundHighBoxes.map(
+            (box) =>
+              `Salida ${box.position} · ${box.name} (${box.autoId}) · ${box.temperature} °C`
+          ),
+        ];
+        next.push(
+          existing ?? {
+            id: ALERT_TEMPERATURE_ID,
+            title: "Temperatura alta",
+            description: `Temperaturas > 5 °C: ${tempDetails.join(" | ")}.`,
+          }
+        );
+      }
+
+      for (const order of overdueOrders) {
+        const alertId = `${ALERT_ORDER_PREFIX}${order.id}`;
+        const existing = previousById.get(alertId);
+        const orderTarget = order.targetPosition ?? null;
+        const sourceLabel =
+          order.sourceZone === "bodega"
+            ? "Bodega"
+            : order.sourceZone === "salida"
+              ? "Salida"
+              : "Ingreso";
+        const orderLabel =
+          order.type === "revisar"
+            ? `Revisar ${sourceLabel} ${order.sourcePosition}`
+            : order.type === "a_bodega"
+              ? `Ingreso ${order.sourcePosition} -> Bodega ${
+                  orderTarget ?? "-"
+                }`
+              : `${sourceLabel} ${order.sourcePosition} -> Salida ${
+                  orderTarget ?? "-"
+                }`;
+
+        next.push(
+          existing ?? {
+            id: alertId,
+            title: "Tarea demorada",
+            description: `Orden pendiente por mas de 2 minutos: ${orderLabel}. Solicitado por ${order.createdBy} · ${order.createdAt}.`,
+          }
+        );
+      }
+
+      return next;
+    });
+  }, [
+    alertClock,
+    bodegaHighSlots,
+    inboundHighBoxes,
+    outboundHighBoxes,
+    orders,
+  ]);
 
   useEffect(() => {
     const sourceList =
-      orderSourceZone === "bodega" ? bodegaBoxes : inboundBoxes;
+      orderSourceZone === "bodega"
+        ? availableBodegaForOrders
+        : availableInboundForOrders;
     if (sourceList.length === 0) {
       setOrderSourcePosition(1);
       return;
@@ -627,14 +1040,38 @@ export default function BodegaDashboard() {
     if (!sourceList.some((box) => box.position === orderSourcePosition)) {
       setOrderSourcePosition(sourceList[0].position);
     }
-  }, [bodegaBoxes, inboundBoxes, orderSourcePosition, orderSourceZone]);
+  }, [
+    availableBodegaForOrders,
+    availableInboundForOrders,
+    orderSourcePosition,
+    orderSourceZone,
+  ]);
+
+  useEffect(() => {
+    const reviewList =
+      reviewSourceZone === "bodega"
+        ? availableBodegaForOrders
+        : reviewSourceZone === "salida"
+          ? availableOutboundForReview
+          : availableInboundForOrders;
+    if (reviewList.length === 0) {
+      setReviewSourcePosition(1);
+      return;
+    }
+    if (!reviewList.some((box) => box.position === reviewSourcePosition)) {
+      setReviewSourcePosition(reviewList[0].position);
+    }
+  }, [
+    availableBodegaForOrders,
+    availableInboundForOrders,
+    availableOutboundForReview,
+    reviewSourcePosition,
+    reviewSourceZone,
+  ]);
 
   useEffect(() => {
     if (orderDestination !== "a_bodega") {
       return;
-    }
-    if (orderSourceZone !== "ingresos") {
-      setOrderSourceZone("ingresos");
     }
     if (freeSlots.length === 0) {
       setOrderTargetPosition(1);
@@ -645,20 +1082,39 @@ export default function BodegaDashboard() {
     }
   }, [freeSlots, orderDestination, orderSourceZone, orderTargetPosition]);
 
+  useEffect(() => {
+    if (orderDestination !== "a_salida") {
+      return;
+    }
+    setOrderTargetPosition(getNextSalidaPosition(outboundBoxes));
+  }, [orderDestination, outboundBoxes]);
+
+  useEffect(() => {
+    if (availableBodegaForOrders.length === 0) {
+      setSalidaSourcePosition(1);
+      return;
+    }
+    if (!availableBodegaForOrders.some((box) => box.position === salidaSourcePosition)) {
+      setSalidaSourcePosition(availableBodegaForOrders[0].position);
+    }
+  }, [availableBodegaForOrders, salidaSourcePosition]);
+
   // role ahora se deriva de session
   const role = session?.role ?? "custodio";
   const isAdmin = role === "administrador";
   const isOperario = role === "operario";
   const isCustodio = role === "custodio";
+  const isJefe = role === "jefe";
+  const canManageAlerts = isJefe;
 
   const canSeeBodega = isAdmin || isOperario;
   const canUseIngresoForm = isCustodio;
-  const canUseOrderForm = isAdmin;
+  const canUseOrderForm = isJefe;
   const canSeeOrders = isAdmin || isOperario;
-  const canUseSearch = isAdmin || isOperario;
+  const canUseSearch = isAdmin;
 
   useEffect(() => {
-    if (role === "administrador" && orderDestination !== "a_bodega") {
+    if (role === "jefe" && orderDestination !== "a_bodega") {
       setOrderDestination("a_bodega");
       return;
     }
@@ -688,18 +1144,10 @@ export default function BodegaDashboard() {
       return;
     }
 
-    if (ingresoPosition <= 0) {
-      setMessage("Ingresa una posicion valida.");
-      return;
-    }
-
-    if (inboundBoxes.some((box) => box.position === ingresoPosition)) {
-      setMessage("La posicion de ingreso ya esta ocupada.");
-      return;
-    }
+    const nextPosition = getNextIngresoPosition(inboundBoxes);
 
     const newBox: Box = {
-      position: ingresoPosition,
+      position: nextPosition,
       autoId: createAutoId("BOX"),
       name: ingresoName.trim(),
       temperature: parsedTemp,
@@ -709,36 +1157,40 @@ export default function BodegaDashboard() {
     setStats((prev) => ({ ...prev, ingresos: prev.ingresos + 1 }));
     setIngresoName("");
     setIngresoTemp("");
-    setMessage(`Caja registrada en ingresos ${ingresoPosition}.`);
+    setMessage(`Caja registrada en ingresos ${nextPosition}.`);
   };
 
   const handleCreateOrder = (destinationOverride?: OrderType) => {
     const destination = destinationOverride ?? orderDestination;
+    const effectiveSourceZone =
+      destination === "a_salida" ? "bodega" : orderSourceZone;
+    const effectiveSourcePosition =
+      destination === "a_salida" ? salidaSourcePosition : orderSourcePosition;
+    const salidaPosition =
+      destination === "a_salida"
+        ? getNextSalidaPosition(outboundBoxes)
+        : orderTargetPosition;
 
-    if (role === "administrador") {
-      if (destination !== "a_bodega") {
-        setMessage("El administrador solo crea ordenes a bodega.");
-        return;
-      }
-    } else if (role === "custodio") {
-      if (destination !== "a_salida") {
-        setMessage("El custodio solo crea ordenes de salida.");
-        return;
-      }
-    } else {
-      setMessage("Solo el administrador o el custodio crean ordenes.");
+    if (role !== "jefe") {
+      setMessage("Solo el jefe crea ordenes.");
+      return;
+    }
+    if (destination === "a_salida" && effectiveSourceZone !== "bodega") {
+      setMessage("La salida debe salir de bodega.");
       return;
     }
 
     const sourceList =
-      orderSourceZone === "bodega" ? bodegaBoxes : inboundBoxes;
+      effectiveSourceZone === "bodega"
+        ? availableBodegaForOrders
+        : availableInboundForOrders;
     if (sourceList.length === 0) {
-      setMessage("No hay cajas disponibles en el origen.");
+      setMessage("No hay cajas disponibles sin tareas asignadas.");
       return;
     }
 
     const box = sourceList.find(
-      (item) => item.position === orderSourcePosition
+      (item) => item.position === effectiveSourcePosition
     );
     if (!box) {
       setMessage("Selecciona una caja valida.");
@@ -751,33 +1203,69 @@ export default function BodegaDashboard() {
         return;
       }
     } else {
-      if (orderTargetPosition <= 0) {
+      if (salidaPosition <= 0) {
         setMessage("Ingresa una posicion de salida valida.");
         return;
       }
-      if (outboundBoxes.some((item) => item.position === orderTargetPosition)) {
-        setMessage("La posicion de salida ya esta ocupada.");
-        return;
-      }
-    }
-
-    if (destination === "a_bodega" && orderSourceZone === "bodega") {
-      setMessage("La orden a bodega debe salir de ingresos.");
-      return;
     }
 
     const newOrder: BodegaOrder = {
       id: createOrderId(),
       type: destination,
       sourcePosition: box.position,
-      sourceZone: orderSourceZone,
-      targetPosition: orderTargetPosition,
+      sourceZone: effectiveSourceZone,
+      targetPosition: salidaPosition,
       createdAt: new Date().toLocaleString("es-CO"),
+      createdAtMs: Date.now(),
       createdBy: role,
     };
 
     setOrders((prev) => [newOrder, ...prev]);
     setMessage("Orden creada correctamente.");
+    if (role === "jefe") {
+      setOrderSourceZone("ingresos");
+      setOrderSourcePosition(1);
+      setOrderTargetPosition(freeSlots[0] ?? 1);
+    }
+  };
+
+  const handleCreateReviewOrder = () => {
+    if (role !== "jefe") {
+      setMessage("Solo el jefe crea ordenes de revision.");
+      return;
+    }
+
+    const reviewList =
+      reviewSourceZone === "bodega"
+        ? availableBodegaForOrders
+        : reviewSourceZone === "salida"
+          ? availableOutboundForReview
+          : availableInboundForOrders;
+    if (reviewList.length === 0) {
+      setMessage("No hay cajas disponibles sin tareas asignadas.");
+      return;
+    }
+
+    const box = reviewList.find(
+      (item) => item.position === reviewSourcePosition
+    );
+    if (!box) {
+      setMessage("Selecciona una caja valida.");
+      return;
+    }
+
+    const newOrder: BodegaOrder = {
+      id: createOrderId(),
+      type: "revisar",
+      sourcePosition: box.position,
+      sourceZone: reviewSourceZone,
+      createdAt: new Date().toLocaleString("es-CO"),
+      createdAtMs: Date.now(),
+      createdBy: role,
+    };
+
+    setOrders((prev) => [newOrder, ...prev]);
+    setMessage("Orden de revision creada correctamente.");
   };
 
   const executeOrder = (orderId: string) => {
@@ -799,33 +1287,69 @@ export default function BodegaDashboard() {
       (item) => item.position === order.sourcePosition
     );
 
+    if (order.type === "revisar") {
+      const existsInIngreso = inboundBoxes.some(
+        (item) => item.position === order.sourcePosition
+      );
+      const existsInBodega = slots.some(
+        (item) => item.position === order.sourcePosition && item.autoId.trim()
+      );
+      const existsInSalida = outboundBoxes.some(
+        (item) => item.position === order.sourcePosition
+      );
+      if (
+        (order.sourceZone === "ingresos" && !existsInIngreso) ||
+        (order.sourceZone === "bodega" && !existsInBodega) ||
+        (order.sourceZone === "salida" && !existsInSalida)
+      ) {
+        setMessage("La caja ya no esta disponible para revision.");
+        return;
+      }
+      setOrders((prev) => prev.filter((item) => item.id !== orderId));
+      setMessage("Revision completada correctamente.");
+      return;
+    }
+
     if (order.type === "a_bodega") {
-      if (sourceIsBodega) {
-        setMessage("La orden a bodega debe salir de ingresos.");
-        return;
-      }
-      if (!boxFromIngreso) {
-        setMessage("La caja ya no esta en ingresos.");
-        return;
-      }
       const target = order.targetPosition;
       const slot = slots.find((item) => item.position === target);
       if (!target || !slot) {
         setMessage("La posicion de bodega no es valida.");
         return;
       }
+      if (sourceIsBodega && target === order.sourcePosition) {
+        setMessage("La posicion de destino debe ser diferente.");
+        return;
+      }
       if (slot.autoId.trim()) {
         setMessage("La posicion de bodega ya esta ocupada.");
         return;
       }
+      if (!sourceIsBodega && !boxFromIngreso) {
+        setMessage("La caja ya no esta en ingresos.");
+        return;
+      }
+      if (sourceIsBodega && (!boxFromBodega || !boxFromBodega.autoId.trim())) {
+        setMessage("La caja ya no esta en bodega.");
+        return;
+      }
+      const boxAutoId = sourceIsBodega
+        ? boxFromBodega?.autoId ?? ""
+        : boxFromIngreso?.autoId ?? "";
+      const boxName = sourceIsBodega
+        ? boxFromBodega?.name ?? ""
+        : boxFromIngreso?.name ?? "";
+      const boxTemp = sourceIsBodega
+        ? boxFromBodega?.temperature ?? 0
+        : boxFromIngreso?.temperature ?? 0;
       setSlots((prev) =>
         prev.map((item) =>
           item.position === target
             ? {
                 ...item,
-                autoId: boxFromIngreso.autoId,
-                name: boxFromIngreso.name,
-                temperature: boxFromIngreso.temperature,
+                autoId: boxAutoId,
+                name: boxName,
+                temperature: boxTemp,
               }
             : item
         )
@@ -928,16 +1452,44 @@ export default function BodegaDashboard() {
     setMessage(`No se encontro el id ${id}.`);
   };
 
+  const handleDispatchBox = (position: number) => {
+    if (role !== "custodio") {
+      setMessage("Solo el custodio puede enviar cajas.");
+      return;
+    }
+
+    const box = outboundBoxes.find((item) => item.position === position);
+    if (!box) {
+      setMessage("La caja ya no esta en salida.");
+      return;
+    }
+
+    setOutboundBoxes((prev) => prev.filter((item) => item.position !== position));
+    setDispatchedBoxes((prev) => sortByPosition([box, ...prev]));
+    setMessage(`Caja en salida ${position} enviada.`);
+  };
+
+  const handleResolveAlert = (alertId: string) => {
+    setAlerts((prev) => prev.filter((alert) => alert.id !== alertId));
+  };
+
+  const handleAlertReasonChange = (alertId: string, reason: AlertReason) => {
+    setAlerts((prev) =>
+      prev.map((alert) =>
+        alert.id === alertId ? { ...alert, reason } : alert
+      )
+    );
+  };
+
   const tabs = useMemo(
     () =>
       [
-        { key: "bodega", label: "Bodega", visible: isAdmin },
+        { key: "estado", label: "Estado de bodega", visible: isAdmin },
         {
           key: "ingresos",
           label: "Ingresos",
-          visible: isAdmin || isCustodio,
+          visible: isCustodio,
         },
-        { key: "salida", label: "Salida", visible: isAdmin || isCustodio },
         {
           key: "ordenes",
           label: "Orden de trabajo",
@@ -946,11 +1498,17 @@ export default function BodegaDashboard() {
         {
           key: "solicitudes",
           label: "Solicitudes pendientes",
-          visible: canSeeOrders || canUseSearch,
+          visible: isOperario,
         },
+        {
+          key: "despachados",
+          label: "Despachados",
+          visible: isCustodio,
+        },
+        { key: "alertas", label: "Gestion de alertas", visible: isJefe },
         { key: "reportes", label: "Reportes", visible: isAdmin },
       ].filter((tab) => tab.visible),
-    [isAdmin, isCustodio, canUseOrderForm, canSeeOrders, canUseSearch]
+    [isAdmin, isCustodio, isOperario, isJefe, canUseOrderForm]
   );
 
   useEffect(() => {
@@ -961,8 +1519,8 @@ export default function BodegaDashboard() {
 
   if (!isHydrated) {
     return (
-      <div className="min-h-screen bg-slate-100 px-6 py-10 text-slate-900">
-        <main className="mx-auto flex w-full max-w-6xl flex-col items-center justify-center">
+      <div className="relative min-h-screen bg-slate-100 px-6 text-slate-900">
+        <main className="mx-auto flex min-h-screen w-full max-w-6xl flex-col items-center justify-center">
           <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-md" />
         </main>
       </div>
@@ -971,7 +1529,8 @@ export default function BodegaDashboard() {
 
   if (!session) {
     return (
-      <div className="min-h-screen bg-slate-100 px-6 py-10 text-slate-900">
+      <div className="relative flex min-h-dvh items-center justify-center bg-slate-100 px-6 text-slate-900">
+        <div className="absolute inset-0 -z-10 bg-[radial-gradient(circle_at_top,#e2e8f0,transparent_60%)]" />
         <main className="mx-auto flex w-full max-w-6xl flex-col items-center justify-center">
           <LoginCard
             users={USERS}
@@ -996,6 +1555,7 @@ export default function BodegaDashboard() {
           dateLabel={dateLabel}
           warehouseId={warehouseId}
           warehouseName={warehouseName}
+          showIntro={!isOperario}
           showMeta={!isOperario}
           canSearch={canUseSearch}
           searchValue={searchId}
@@ -1034,13 +1594,48 @@ export default function BodegaDashboard() {
           </div>
         </section>
 
-        {activeTab === "bodega" && isAdmin ? (
-          <section className="grid gap-4 xl:grid-cols-[1.4fr_1fr]">
-            <div className="flex flex-col gap-4">
+        {activeTab === "estado" && canSeeBodega ? (
+          <section className="grid gap-6 xl:grid-cols-[1fr_1.8fr_1fr] 2xl:grid-cols-[1fr_2.1fr_1fr]">
+            <div className="min-w-0 rounded-2xl bg-white p-6 shadow-sm">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <h2 className="text-lg font-semibold text-slate-900">Entrada</h2>
+                <div className="flex flex-wrap items-center gap-2">
+                  {renderStatusButtons("entrada")}
+                  <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
+                    {inboundBoxes.length} cajas
+                  </span>
+                </div>
+              </div>
+              <p className="mt-1 text-sm text-slate-600">
+                Cajas registradas en ingresos.
+              </p>
+              <div className="mt-4 grid gap-3">
+                {inboundBoxes.length === 0 ? (
+                  <p className="text-sm text-slate-500">
+                    No hay cajas en ingresos.
+                  </p>
+                ) : (
+                  sortByPosition(inboundBoxes).map((box) => (
+                    <div
+                      key={`estado-ingreso-${box.position}`}
+                      className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700"
+                    >
+                      <p className="font-semibold">Ingreso {box.position}</p>
+                      <p>Id unico: {box.autoId}</p>
+                      <p>Nombre: {box.name}</p>
+                      <p>Temperatura: {box.temperature} °C</p>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+
+            <div className="min-w-0 flex flex-col gap-4">
               <SlotsGrid
                 slots={slots}
                 selectedPosition={selectedPosition}
                 onSelect={handleSelectSlot}
+                headerActions={renderStatusButtons("bodega")}
               />
               <SelectedSlotCard
                 slot={selectedSlot}
@@ -1049,11 +1644,45 @@ export default function BodegaDashboard() {
                 canEdit={false}
               />
             </div>
+
+            <div className="min-w-0 rounded-2xl bg-white p-6 shadow-sm">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <h2 className="text-lg font-semibold text-slate-900">Salida</h2>
+                <div className="flex flex-wrap items-center gap-2">
+                  {renderStatusButtons("salida")}
+                  <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
+                    {outboundBoxes.length} cajas
+                  </span>
+                </div>
+              </div>
+              <p className="mt-1 text-sm text-slate-600">
+                Cajas despachadas por el operario.
+              </p>
+              <div className="mt-4 grid gap-3">
+                {outboundBoxes.length === 0 ? (
+                  <p className="text-sm text-slate-500">
+                    No hay cajas en salida.
+                  </p>
+                ) : (
+                  sortByPosition(outboundBoxes).map((box) => (
+                    <div
+                      key={`estado-salida-${box.position}`}
+                      className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700"
+                    >
+                      <p className="font-semibold">Salida {box.position}</p>
+                      <p>Id unico: {box.autoId}</p>
+                      <p>Nombre: {box.name}</p>
+                      <p>Temperatura: {box.temperature} °C</p>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
           </section>
         ) : null}
 
         {activeTab === "ingresos" ? (
-          <section className="grid gap-4">
+          <section className="grid gap-4 lg:grid-cols-3">
             {isAdmin || isCustodio ? (
               <div className="rounded-2xl bg-white p-6 shadow-sm">
                 <div className="flex items-center justify-between">
@@ -1099,15 +1728,13 @@ export default function BodegaDashboard() {
                 </p>
                 <div className="mt-4 grid gap-3">
                   <label className="text-sm font-medium text-slate-600">
-                    Posicion de ingreso
+                    Orden de posicion
                   </label>
                   <input
                     value={ingresoPosition}
-                    onChange={(event) =>
-                      setIngresoPosition(Number(event.target.value))
-                    }
                     type="number"
-                    className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                    readOnly
+                    className="w-full rounded-lg border border-slate-200 bg-slate-100 px-3 py-2 text-sm text-slate-600"
                   />
                   <label className="text-sm font-medium text-slate-600">
                     Nombre de la caja
@@ -1138,115 +1765,48 @@ export default function BodegaDashboard() {
                 </div>
               </div>
             ) : null}
-          </section>
-        ) : null}
-
-        {activeTab === "salida" && (isAdmin || isCustodio) ? (
-          <section className="grid gap-4">
-            <div className="rounded-2xl bg-white p-6 shadow-sm">
-              <div className="flex items-center justify-between">
-                <h2 className="text-lg font-semibold text-slate-900">
-                  Zona de salida
-                </h2>
-                <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
-                  {outboundBoxes.length} cajas
-                </span>
-              </div>
-              <p className="mt-1 text-sm text-slate-600">
-                Cajas despachadas por el operario.
-              </p>
-              <div className="mt-4 grid gap-3">
-                {outboundBoxes.length === 0 ? (
-                  <p className="text-sm text-slate-500">
-                    No hay cajas en salida.
-                  </p>
-                ) : (
-                  sortByPosition(outboundBoxes).map((box) => (
-                    <div
-                      key={`salida-${box.position}`}
-                      className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700"
-                    >
-                      <p className="font-semibold">Salida {box.position}</p>
-                      <p>Id unico: {box.autoId}</p>
-                      <p>Nombre: {box.name}</p>
-                      <p>Temperatura: {box.temperature} °C</p>
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
             {isCustodio ? (
               <div className="rounded-2xl bg-white p-6 shadow-sm">
-                <h2 className="text-lg font-semibold text-slate-900">
-                  Crear salida
-                </h2>
+                <div className="flex items-center justify-between">
+                  <h2 className="text-lg font-semibold text-slate-900">
+                    Zona de salida
+                  </h2>
+                  <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
+                    {outboundBoxes.length} cajas
+                  </span>
+                </div>
                 <p className="mt-1 text-sm text-slate-600">
-                  Define el origen y la posicion final para que el operario ejecute.
+                  Cajas listas para enviar.
                 </p>
                 <div className="mt-4 grid gap-3">
-                  <label className="text-sm font-medium text-slate-600">
-                    Origen
-                  </label>
-                  <select
-                    value={orderSourceZone}
-                    onChange={(event) =>
-                      setOrderSourceZone(event.target.value as OrderSource)
-                    }
-                    className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
-                  >
-                    <option value="ingresos">Ingresos</option>
-                    <option value="bodega">Bodega</option>
-                  </select>
-                  <label className="text-sm font-medium text-slate-600">
-                    {orderSourceZone === "bodega"
-                      ? "Caja en bodega"
-                      : "Caja en ingresos"}
-                  </label>
-                  <select
-                    value={orderSourcePosition}
-                    onChange={(event) =>
-                      setOrderSourcePosition(Number(event.target.value))
-                    }
-                    className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
-                  >
-                    {orderSourceZone === "bodega"
-                      ? bodegaBoxes.length === 0
-                        ? (
-                          <option value={1}>Sin cajas</option>
-                        )
-                        : sortByPosition(bodegaBoxes).map((box) => (
-                          <option key={box.position} value={box.position}>
-                            {`Bodega ${box.position} - ${box.name} (${box.autoId})`}
-                          </option>
-                        ))
-                      : inboundBoxes.length === 0
-                        ? (
-                          <option value={1}>Sin cajas</option>
-                        )
-                        : sortByPosition(inboundBoxes).map((box) => (
-                          <option key={box.position} value={box.position}>
-                            {`Ingreso ${box.position} - ${box.name} (${box.autoId})`}
-                          </option>
-                        ))}
-                  </select>
-                  <label className="text-sm font-medium text-slate-600">
-                    Posicion en salida
-                  </label>
-                  <input
-                    value={orderTargetPosition}
-                    onChange={(event) =>
-                      setOrderTargetPosition(Number(event.target.value))
-                    }
-                    type="number"
-                    className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => handleCreateOrder("a_salida")}
-                    className="mt-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-500"
-                  >
-                    Crear salida
-                  </button>
+                  {outboundBoxes.length === 0 ? (
+                    <p className="text-sm text-slate-500">
+                      No hay cajas en salida.
+                    </p>
+                  ) : (
+                    sortByPosition(outboundBoxes).map((box) => (
+                      <div
+                        key={`ingreso-salida-${box.position}`}
+                        className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700"
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <p className="font-semibold">Salida {box.position}</p>
+                            <p>Id unico: {box.autoId}</p>
+                            <p>Nombre: {box.name}</p>
+                            <p>Temperatura: {box.temperature} °C</p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => handleDispatchBox(box.position)}
+                            className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-emerald-500"
+                          >
+                            Enviar
+                          </button>
+                        </div>
+                      </div>
+                    ))
+                  )}
                 </div>
               </div>
             ) : null}
@@ -1254,15 +1814,15 @@ export default function BodegaDashboard() {
         ) : null}
 
         {activeTab === "ordenes" && canUseOrderForm ? (
-          <section className="grid gap-4">
-            <div className="rounded-2xl bg-white p-6 shadow-sm">
+          <section className="grid gap-4 lg:grid-cols-3">
+            <div className="flex h-full flex-col rounded-2xl bg-white p-6 shadow-sm">
               <h2 className="text-lg font-semibold text-slate-900">
                 Orden de trabajo
               </h2>
               <p className="mt-1 text-sm text-slate-600">
                 Selecciona una caja y el destino final.
               </p>
-              <div className="mt-4 grid gap-3">
+              <div className="mt-4 grid flex-1 gap-3">
                 <label className="text-sm font-medium text-slate-600">
                   Destino
                 </label>
@@ -1274,7 +1834,20 @@ export default function BodegaDashboard() {
                   <option value="a_bodega">Bodega</option>
                 </select>
                 <label className="text-sm font-medium text-slate-600">
-                  {orderDestination === "a_salida" && orderSourceZone === "bodega"
+                  Origen
+                </label>
+                <select
+                  value={orderSourceZone}
+                  onChange={(event) =>
+                    setOrderSourceZone(event.target.value as OrderSource)
+                  }
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                >
+                  <option value="ingresos">Ingresos</option>
+                  <option value="bodega">Bodega</option>
+                </select>
+                <label className="text-sm font-medium text-slate-600">
+                  {orderSourceZone === "bodega"
                     ? "Caja en bodega"
                     : "Caja en ingresos"}
                 </label>
@@ -1285,85 +1858,380 @@ export default function BodegaDashboard() {
                   }
                   className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
                 >
-                  {orderDestination === "a_salida" && orderSourceZone === "bodega"
-                    ? bodegaBoxes.length === 0
+                  {orderSourceZone === "bodega"
+                    ? availableBodegaForOrders.length === 0
                       ? (
                         <option value={1}>Sin cajas</option>
                       )
-                      : sortByPosition(bodegaBoxes).map((box) => (
+                      : sortByPosition(availableBodegaForOrders).map((box) => (
                         <option key={box.position} value={box.position}>
                           {`Bodega ${box.position} - ${box.name} (${box.autoId})`}
                         </option>
                       ))
-                    : inboundBoxes.length === 0
+                    : availableInboundForOrders.length === 0
                       ? (
                         <option value={1}>Sin cajas</option>
                       )
-                      : sortByPosition(inboundBoxes).map((box) => (
+                      : sortByPosition(availableInboundForOrders).map((box) => (
                         <option key={box.position} value={box.position}>
                           {`Ingreso ${box.position} - ${box.name} (${box.autoId})`}
                         </option>
                       ))}
                 </select>
-                {orderDestination === "a_bodega" ? (
-                  <>
-                    <label className="text-sm font-medium text-slate-600">
-                      Posicion en bodega
-                    </label>
-                    <select
-                      value={orderTargetPosition}
-                      onChange={(event) =>
-                        setOrderTargetPosition(Number(event.target.value))
-                      }
-                      className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
-                    >
-                      {freeSlots.length === 0 ? (
-                        <option value={1}>Sin posiciones libres</option>
-                      ) : (
-                        freeSlots.map((position) => (
-                          <option key={position} value={position}>
-                            {position}
-                          </option>
-                        ))
-                      )}
-                    </select>
-                  </>
-                ) : (
-                  <>
-                    <label className="text-sm font-medium text-slate-600">
-                      Posicion en salida
-                    </label>
-                    <input
-                      value={orderTargetPosition}
-                      onChange={(event) =>
-                        setOrderTargetPosition(Number(event.target.value))
-                      }
-                      type="number"
-                      className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
-                    />
-                  </>
-                )}
+                <label className="text-sm font-medium text-slate-600">
+                  Posicion en bodega
+                </label>
+                <select
+                  value={orderTargetPosition}
+                  onChange={(event) =>
+                    setOrderTargetPosition(Number(event.target.value))
+                  }
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                >
+                  {freeSlots.length === 0 ? (
+                    <option value={1}>Sin posiciones libres</option>
+                  ) : (
+                    freeSlots.map((position) => (
+                      <option key={position} value={position}>
+                        {position}
+                      </option>
+                    ))
+                  )}
+                </select>
                 <button
                   type="button"
                   onClick={() => handleCreateOrder()}
-                  className="mt-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-500"
+                  className="mt-auto rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-500"
                 >
                   Crear orden
+                </button>
+              </div>
+            </div>
+            <div className="flex h-full flex-col rounded-2xl bg-white p-6 shadow-sm">
+              <h2 className="text-lg font-semibold text-slate-900">
+                Crear salida
+              </h2>
+              <p className="mt-1 text-sm text-slate-600">
+                Define la caja en bodega y la posicion final en salida.
+              </p>
+              <div className="mt-4 grid flex-1 gap-3">
+                <label className="text-sm font-medium text-slate-600">
+                  Origen
+                </label>
+                <input
+                  value="Bodega"
+                  readOnly
+                  className="w-full rounded-lg border border-slate-200 bg-slate-100 px-3 py-2 text-sm text-slate-600"
+                />
+                <label className="text-sm font-medium text-slate-600">
+                  Caja en bodega
+                </label>
+                <select
+                  value={salidaSourcePosition}
+                  onChange={(event) =>
+                    setSalidaSourcePosition(Number(event.target.value))
+                  }
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                >
+                  {availableBodegaForOrders.length === 0
+                    ? (
+                      <option value={1}>Sin cajas</option>
+                    )
+                    : sortByPosition(availableBodegaForOrders).map((box) => (
+                      <option key={box.position} value={box.position}>
+                        {`Bodega ${box.position} - ${box.name} (${box.autoId})`}
+                      </option>
+                    ))}
+                </select>
+                <label className="text-sm font-medium text-slate-600">
+                  Posicion en salida
+                </label>
+                <input
+                  value={orderTargetPosition}
+                  type="number"
+                  readOnly
+                  className="w-full rounded-lg border border-slate-200 bg-slate-100 px-3 py-2 text-sm text-slate-600"
+                />
+                <button
+                  type="button"
+                  onClick={() => handleCreateOrder("a_salida")}
+                  className="mt-auto rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-500"
+                >
+                  Crear salida
+                </button>
+              </div>
+            </div>
+            <div className="flex h-full flex-col rounded-2xl bg-white p-6 shadow-sm">
+              <h2 className="text-lg font-semibold text-slate-900">
+                Revisar
+              </h2>
+              <p className="mt-1 text-sm text-slate-600">
+                Crea una tarea para que el operario revise una caja.
+              </p>
+              <div className="mt-4 grid flex-1 gap-3">
+                <label className="text-sm font-medium text-slate-600">
+                  Zona
+                </label>
+                <select
+                  value={reviewSourceZone}
+                  onChange={(event) =>
+                    setReviewSourceZone(event.target.value as OrderSource)
+                  }
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                >
+                  <option value="ingresos">Ingresos</option>
+                  <option value="bodega">Bodega</option>
+                  <option value="salida">Salida</option>
+                </select>
+                <label className="text-sm font-medium text-slate-600">
+                  Caja
+                </label>
+                <select
+                  value={reviewSourcePosition}
+                  onChange={(event) =>
+                    setReviewSourcePosition(Number(event.target.value))
+                  }
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                >
+                  {reviewSourceZone === "bodega"
+                    ? availableBodegaForOrders.length === 0
+                      ? (
+                        <option value={1}>Sin cajas</option>
+                      )
+                      : sortByPosition(availableBodegaForOrders).map((box) => (
+                        <option key={box.position} value={box.position}>
+                          {`Bodega ${box.position} - ${box.name} (${box.autoId})`}
+                        </option>
+                      ))
+                    : reviewSourceZone === "salida"
+                      ? availableOutboundForReview.length === 0
+                        ? (
+                          <option value={1}>Sin cajas</option>
+                        )
+                        : sortByPosition(availableOutboundForReview).map((box) => (
+                          <option key={box.position} value={box.position}>
+                            {`Salida ${box.position} - ${box.name} (${box.autoId})`}
+                          </option>
+                        ))
+                      : availableInboundForOrders.length === 0
+                        ? (
+                          <option value={1}>Sin cajas</option>
+                        )
+                        : sortByPosition(availableInboundForOrders).map((box) => (
+                          <option key={box.position} value={box.position}>
+                            {`Ingreso ${box.position} - ${box.name} (${box.autoId})`}
+                          </option>
+                        ))}
+                </select>
+                <button
+                  type="button"
+                  onClick={handleCreateReviewOrder}
+                  className="mt-auto rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-500"
+                >
+                  Crear revision
                 </button>
               </div>
             </div>
           </section>
         ) : null}
 
-        {activeTab === "solicitudes" ? (
+        {activeTab === "actividades" && isAdmin ? (
+          <section className="grid gap-4 lg:grid-cols-2">
+            <div className="rounded-2xl bg-white p-6 shadow-sm">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <h2 className="text-lg font-semibold text-slate-900">
+                    Gestion de alertas
+                  </h2>
+                  <p className="mt-1 text-sm text-slate-600">
+                    Solo lectura para el administrador.
+                  </p>
+                </div>
+                <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
+                  Total: {alerts.length}
+                </span>
+              </div>
+              <div className="mt-4 grid gap-3">
+                {alerts.length === 0 ? (
+                  <p className="text-sm text-slate-500">
+                    No hay alertas activas.
+                  </p>
+                ) : (
+                  alerts.map((alert) => (
+                    <div
+                      key={alert.id}
+                      className="rounded-xl border border-slate-200 bg-slate-50 p-4"
+                    >
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                          <p className="text-sm font-semibold text-slate-900">
+                            {alert.title}
+                          </p>
+                          <p className="mt-1 text-sm text-slate-600">
+                            {alert.description}
+                          </p>
+                          {alert.reason ? (
+                            <p className="mt-2 text-xs font-semibold text-slate-500">
+                              No gestionada: {ALERT_REASONS.find((r) => r.value === alert.reason)?.label}
+                            </p>
+                          ) : null}
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+
+            <div className="rounded-2xl bg-white p-6 shadow-sm">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <h2 className="text-lg font-semibold text-slate-900">
+                    Solicitudes pendientes
+                  </h2>
+                  <p className="mt-1 text-sm text-slate-600">
+                    Vista consolidada para el administrador.
+                  </p>
+                </div>
+                <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
+                  Total: {orders.length}
+                </span>
+              </div>
+              <div className="mt-4">
+                <RequestsQueue
+                  requests={orders}
+                  canExecute={false}
+                  onExecute={() => undefined}
+                />
+              </div>
+            </div>
+          </section>
+        ) : null}
+
+        {activeTab === "solicitudes" && isOperario ? (
           <section className="grid gap-4">
-            {canSeeOrders ? (
-              <RequestsQueue
-                requests={orders}
-                canExecute={isOperario}
-                onExecute={executeOrder}
-              />
-            ) : null}
+            <RequestsQueue
+              requests={orders}
+              canExecute
+              onExecute={executeOrder}
+            />
+          </section>
+        ) : null}
+
+        {activeTab === "despachados" && isCustodio ? (
+          <section className="rounded-2xl bg-white p-6 shadow-sm">
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-semibold text-slate-900">
+                Despachados
+              </h2>
+              <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
+                {dispatchedBoxes.length} cajas
+              </span>
+            </div>
+            <p className="mt-1 text-sm text-slate-600">
+              Cajas enviadas por el custodio.
+            </p>
+            <div className="mt-4 grid gap-3">
+              {dispatchedBoxes.length === 0 ? (
+                <p className="text-sm text-slate-500">
+                  No hay cajas despachadas.
+                </p>
+              ) : (
+                sortByPosition(dispatchedBoxes).map((box) => (
+                  <div
+                    key={`despachado-${box.position}`}
+                    className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700"
+                  >
+                    <p className="font-semibold">Salida {box.position}</p>
+                    <p>Id unico: {box.autoId}</p>
+                    <p>Nombre: {box.name}</p>
+                    <p>Temperatura: {box.temperature} °C</p>
+                  </div>
+                ))
+              )}
+            </div>
+          </section>
+        ) : null}
+
+        {activeTab === "alertas" && (isAdmin || isJefe) ? (
+          <section className="grid gap-4">
+            <div className="rounded-2xl bg-white p-6 shadow-sm">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <h2 className="text-lg font-semibold text-slate-900">
+                    Gestion de alertas
+                  </h2>
+                  <p className="mt-1 text-sm text-slate-600">
+                    {canManageAlerts
+                      ? "Revisa y gestiona las alertas activas."
+                      : "Revisa las alertas activas (solo lectura)."}
+                  </p>
+                </div>
+                <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
+                  Total: {alerts.length}
+                </span>
+              </div>
+              <div className="mt-4 grid gap-3">
+                {alerts.length === 0 ? (
+                  <p className="text-sm text-slate-500">
+                    No hay alertas activas.
+                  </p>
+                ) : (
+                  alerts.map((alert) => (
+                    <div
+                      key={alert.id}
+                      className="rounded-xl border border-slate-200 bg-slate-50 p-4"
+                    >
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                          <p className="text-sm font-semibold text-slate-900">
+                            {alert.title}
+                          </p>
+                          <p className="mt-1 text-sm text-slate-600">
+                            {alert.description}
+                          </p>
+                          {alert.reason ? (
+                            <p className="mt-2 text-xs font-semibold text-slate-500">
+                              No gestionada: {ALERT_REASONS.find((r) => r.value === alert.reason)?.label}
+                            </p>
+                          ) : null}
+                        </div>
+                        {canManageAlerts ? (
+                          <div className="flex flex-wrap gap-2">
+                            <button
+                              type="button"
+                              onClick={() => handleResolveAlert(alert.id)}
+                              className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-emerald-500"
+                            >
+                              Gestionada
+                            </button>
+                            <select
+                              value={alert.reason ?? ""}
+                              onChange={(event) =>
+                                handleAlertReasonChange(
+                                  alert.id,
+                                  event.target.value as AlertReason
+                                )
+                              }
+                              className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600"
+                            >
+                              <option value="" disabled>
+                                No gestionada...
+                              </option>
+                              {ALERT_REASONS.map((reason) => (
+                                <option key={reason.value} value={reason.value}>
+                                  {reason.label}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        ) : null}
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
           </section>
         ) : null}
 
@@ -1435,6 +2303,72 @@ export default function BodegaDashboard() {
               ))}
             </div>
           </section>
+        ) : null}
+
+        {statusModal ? (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4"
+            role="dialog"
+            aria-modal="true"
+            onClick={() => setStatusModal(null)}
+          >
+            <div
+              className="w-full max-w-2xl rounded-2xl bg-white p-6 shadow-xl"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.25em] text-slate-400">
+                    {statusModal.kind === "alertas"
+                      ? "Alertas"
+                      : "Lista de tareas"}
+                  </p>
+                  <h3 className="mt-2 text-2xl font-semibold text-slate-900">
+                    {zoneLabels[statusModal.zone]}
+                  </h3>
+                  <p className="mt-1 text-sm text-slate-600">
+                    {statusModal.kind === "alertas"
+                      ? "Detalles de alertas activas en esta zona."
+                      : "Tareas pendientes relacionadas con esta zona."}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setStatusModal(null)}
+                  className="rounded-full border border-slate-200 px-3 py-1 text-sm font-semibold text-slate-600 transition hover:bg-slate-50"
+                >
+                  Cerrar
+                </button>
+              </div>
+              <div className="mt-6 grid gap-3">
+                {(statusModal.kind === "alertas"
+                  ? zoneAlertItems[statusModal.zone]
+                  : zoneTaskItems[statusModal.zone]
+                ).map((item) => (
+                  <div
+                    key={item.id}
+                    className="rounded-xl border border-slate-200 bg-slate-50 p-4"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-semibold text-slate-900">
+                          {item.title}
+                        </p>
+                        <p className="mt-1 text-sm text-slate-600">
+                          {item.description}
+                        </p>
+                        {item.meta ? (
+                          <p className="mt-2 text-xs font-semibold text-slate-500">
+                            {item.meta}
+                          </p>
+                        ) : null}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
         ) : null}
 
         <MessageBanner message={message} />

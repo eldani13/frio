@@ -25,7 +25,7 @@ export default function SlotCard({ slot, isSelected, onSelect }: SlotCardProps) 
           {slot.autoId ? "Ocupada" : "Libre"}
         </span>
       </div>
-      <div className="mt-4 space-y-2 text-sm text-slate-700">
+      <div className="mt-4 space-y-2 text-xs text-slate-700">
         <p>
           <span className="font-semibold">Id unico:</span> {slot.autoId || "—"}
         </p>

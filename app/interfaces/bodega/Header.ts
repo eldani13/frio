@@ -4,6 +4,7 @@ export type HeaderProps = {
   dateLabel: string;
   warehouseId?: string;
   warehouseName?: string;
+  showIntro?: boolean;
   showMeta?: boolean;
   canSearch?: boolean;
   searchValue?: string;
