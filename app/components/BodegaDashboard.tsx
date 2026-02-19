@@ -902,6 +902,7 @@ export default function BodegaDashboard() {
 
     return options;
   }, [bodegaHighSlots, inboundHighBoxes, outboundHighBoxes]);
+  const nextAlert = alerts[0] ?? null;
   const overdueOrders = useMemo(
     () =>
       orders.filter(
@@ -942,7 +943,12 @@ export default function BodegaDashboard() {
     });
 
     overdueOrders.forEach((order) => {
-      const zone = order.type === "a_bodega" ? "bodega" : "salida";
+      const zone: ZoneKey =
+        order.sourceZone === "ingresos"
+          ? "entrada"
+          : order.sourceZone === "salida"
+            ? "salida"
+            : "bodega";
       items[zone].push({
         id: `alerta-orden-${order.id}`,
         title: "Tarea demorada",
@@ -961,38 +967,21 @@ export default function BodegaDashboard() {
       salida: [],
     };
 
-    orders
-      .filter((order) => order.sourceZone === "ingresos")
-      .forEach((order) => {
-        byZone.entrada.push({
-          id: `tarea-entrada-${order.id}`,
-          title: "Tarea pendiente",
-          description: formatOrderDetails(order),
-          meta: `Solicitado por ${order.createdBy} · ${order.createdAt}`,
-        });
-      });
+    orders.forEach((order) => {
+      const zone: ZoneKey =
+        order.sourceZone === "ingresos"
+          ? "entrada"
+          : order.sourceZone === "salida"
+            ? "salida"
+            : "bodega";
 
-    orders
-      .filter((order) => order.type === "a_bodega" || order.sourceZone === "bodega")
-      .forEach((order) => {
-        byZone.bodega.push({
-          id: `tarea-bodega-${order.id}`,
-          title: "Tarea pendiente",
-          description: formatOrderDetails(order),
-          meta: `Solicitado por ${order.createdBy} · ${order.createdAt}`,
-        });
+      byZone[zone].push({
+        id: `tarea-${zone}-${order.id}`,
+        title: "Tarea pendiente",
+        description: formatOrderDetails(order),
+        meta: `Solicitado por ${order.createdBy} · ${order.createdAt}`,
       });
-
-    orders
-      .filter((order) => order.type === "a_salida" || order.sourceZone === "salida")
-      .forEach((order) => {
-        byZone.salida.push({
-          id: `tarea-salida-${order.id}`,
-          title: "Tarea pendiente",
-          description: formatOrderDetails(order),
-          meta: `Solicitado por ${order.createdBy} · ${order.createdAt}`,
-        });
-      });
+    });
 
     return byZone;
   }, [orders]);
@@ -1689,29 +1678,30 @@ export default function BodegaDashboard() {
         {
           key: "ordenes",
           label: "Orden de trabajo",
-          visible: canUseOrderForm,
+          visible: canUseOrderForm && !isJefe,
         },
         {
           key: "solicitudes",
           label: "Solicitudes pendientes",
           visible: isOperario,
         },
-        {
-          key: "despachados",
-          label: "Envios",
-          visible: isAdmin,
-        },
-        { key: "alertas", label: "Gestion de alertas", visible: isJefe },
+        { key: "alertas", label: "Gestion de alertas", visible: false },
         { key: "reportes", label: "Reportes", visible: isAdmin },
       ].filter((tab) => tab.visible),
     [isAdmin, isCustodio, isOperario, isJefe, canUseOrderForm]
   );
 
   useEffect(() => {
+    if (isJefe) {
+      if (activeTab !== "ordenes") {
+        setActiveTab("ordenes");
+      }
+      return;
+    }
     if (!tabs.some((tab) => tab.key === activeTab)) {
       setActiveTab((tabs[0]?.key ?? "ingresos") as typeof activeTab);
     }
-  }, [activeTab, tabs]);
+  }, [activeTab, isJefe, tabs]);
 
   if (!isHydrated) {
     return (
@@ -1771,24 +1761,26 @@ export default function BodegaDashboard() {
           />
         ) : null}
 
-        <section className="rounded-2xl bg-white p-2 shadow-sm">
-          <div className="flex flex-wrap gap-2">
-            {tabs.map((tab) => (
-              <button
-                key={tab.key}
-                type="button"
-                onClick={() => setActiveTab(tab.key as typeof activeTab)}
-                className={`rounded-xl px-4 py-2 text-sm font-semibold transition ${
-                  activeTab === tab.key
-                    ? "bg-slate-900 text-white"
-                    : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-                }`}
-              >
-                {tab.label}
-              </button>
-            ))}
-          </div>
-        </section>
+        {!isJefe && tabs.length > 1 ? (
+          <section className="rounded-2xl bg-white p-2 shadow-sm">
+            <div className="flex flex-wrap gap-2">
+              {tabs.map((tab) => (
+                <button
+                  key={tab.key}
+                  type="button"
+                  onClick={() => setActiveTab(tab.key as typeof activeTab)}
+                  className={`rounded-xl px-4 py-2 text-sm font-semibold transition ${
+                    activeTab === tab.key
+                      ? "bg-slate-900 text-white"
+                      : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+          </section>
+        ) : null}
 
         {activeTab === "estado" && canSeeBodega ? (
           <section className="grid gap-6 xl:grid-cols-[1fr_1.8fr_1fr] 2xl:grid-cols-[1fr_2.1fr_1fr]">
@@ -1802,9 +1794,9 @@ export default function BodegaDashboard() {
                   </span>
                 </div>
               </div>
-              <p className="mt-1 text-sm text-slate-600">
+              {/* <p className="mt-1 text-sm text-slate-600">
                 Cajas registradas en ingresos.
-              </p>
+              </p> */}
               <div className="mt-4 grid gap-3">
                 {inboundBoxes.length === 0 ? (
                   <p className="text-sm text-slate-500">
@@ -1851,9 +1843,9 @@ export default function BodegaDashboard() {
                   </span>
                 </div>
               </div>
-              <p className="mt-1 text-sm text-slate-600">
+              {/* <p className="mt-1 text-sm text-slate-600">
                 Cajas despachadas por el operario.
-              </p>
+              </p> */}
               <div className="mt-4 grid gap-3">
                 {outboundBoxes.length === 0 ? (
                   <p className="text-sm text-slate-500">
@@ -1878,90 +1870,91 @@ export default function BodegaDashboard() {
         ) : null}
 
         {activeTab === "ingresos" ? (
-          <section className="grid gap-4 lg:grid-cols-3">
-            {isAdmin || isCustodio ? (
-              <div className="rounded-2xl bg-white p-6 shadow-sm">
-                <div className="flex items-center justify-between">
-                  <h2 className="text-lg font-semibold text-slate-900">
-                    Zona de ingresos
-                  </h2>
-                  <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
-                    {inboundBoxes.length} cajas
-                  </span>
-                </div>
-                <p className="mt-1 text-sm text-slate-600">
-                  Cajas registradas por el custodio.
-                </p>
-                <div className="mt-4 grid gap-3">
-                  {inboundBoxes.length === 0 ? (
-                    <p className="text-sm text-slate-500">
-                      No hay cajas en ingresos.
-                    </p>
-                  ) : (
-                    sortByPosition(inboundBoxes).map((box) => (
-                      <div
-                        key={`ingreso-${box.position}`}
-                        className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700"
+          isCustodio ? (
+            <section className="grid gap-4 lg:grid-cols-[1.5fr_1fr]">
+              <div className="flex flex-col gap-4">
+                {canUseIngresoForm ? (
+                  <div className="rounded-2xl bg-white p-6 shadow-sm">
+                    <h2 className="text-lg font-semibold text-slate-900">
+                      Ingreso de cajas
+                    </h2>
+                    {/* <p className="mt-1 text-sm text-slate-600">
+                      Registra nuevas cajas en la zona de ingresos.
+                    </p> */}
+                    <div className="mt-4 grid gap-3">
+                      <label className="text-sm font-medium text-slate-600">
+                        Orden de posicion
+                      </label>
+                      <input
+                        value={ingresoPosition}
+                        type="number"
+                        readOnly
+                        className="w-full rounded-lg border border-slate-200 bg-slate-100 px-3 py-2 text-sm text-slate-600"
+                      />
+                      <label className="text-sm font-medium text-slate-600">
+                        Nombre de la caja
+                      </label>
+                      <input
+                        value={ingresoName}
+                        onChange={(event) => setIngresoName(event.target.value)}
+                        className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                        placeholder="Ej: Caja banano"
+                      />
+                      <label className="text-sm font-medium text-slate-600">
+                        Temperatura (°C)
+                      </label>
+                      <input
+                        value={ingresoTemp}
+                        onChange={(event) => setIngresoTemp(event.target.value)}
+                        type="number"
+                        className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                        placeholder="Ej: -8"
+                      />
+                      <button
+                        type="button"
+                        onClick={handleIngreso}
+                        className="mt-2 rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800"
                       >
-                        <p className="font-semibold">Ingreso {box.position}</p>
-                        <p>Id unico: {box.autoId}</p>
-                        <p>Nombre: {box.name}</p>
-                        <p>Temperatura: {box.temperature} °C</p>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </div>
-            ) : null}
+                        Registrar ingreso
+                      </button>
+                    </div>
+                  </div>
+                ) : null}
 
-            {canUseIngresoForm ? (
-              <div className="rounded-2xl bg-white p-6 shadow-sm">
-                <h2 className="text-lg font-semibold text-slate-900">
-                  Ingreso de cajas
-                </h2>
-                <p className="mt-1 text-sm text-slate-600">
-                  Registra nuevas cajas en la zona de ingresos.
-                </p>
-                <div className="mt-4 grid gap-3">
-                  <label className="text-sm font-medium text-slate-600">
-                    Orden de posicion
-                  </label>
-                  <input
-                    value={ingresoPosition}
-                    type="number"
-                    readOnly
-                    className="w-full rounded-lg border border-slate-200 bg-slate-100 px-3 py-2 text-sm text-slate-600"
-                  />
-                  <label className="text-sm font-medium text-slate-600">
-                    Nombre de la caja
-                  </label>
-                  <input
-                    value={ingresoName}
-                    onChange={(event) => setIngresoName(event.target.value)}
-                    className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
-                    placeholder="Ej: Caja banano"
-                  />
-                  <label className="text-sm font-medium text-slate-600">
-                    Temperatura (°C)
-                  </label>
-                  <input
-                    value={ingresoTemp}
-                    onChange={(event) => setIngresoTemp(event.target.value)}
-                    type="number"
-                    className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
-                    placeholder="Ej: -8"
-                  />
-                  <button
-                    type="button"
-                    onClick={handleIngreso}
-                    className="mt-2 rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800"
-                  >
-                    Registrar ingreso
-                  </button>
+                <div className="rounded-2xl bg-white p-6 shadow-sm">
+                  <div className="flex items-center justify-between">
+                    <h2 className="text-lg font-semibold text-slate-900">
+                      Zona de ingresos
+                    </h2>
+                    <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
+                      {inboundBoxes.length} cajas
+                    </span>
+                  </div>
+                  {/* <p className="mt-1 text-sm text-slate-600">
+                    Cajas registradas por el custodio.
+                  </p> */}
+                  <div className="mt-4 grid gap-3">
+                    {inboundBoxes.length === 0 ? (
+                      <p className="text-sm text-slate-500">
+                        No hay cajas en ingresos.
+                      </p>
+                    ) : (
+                      sortByPosition(inboundBoxes).map((box) => (
+                        <div
+                          key={`ingreso-${box.position}`}
+                          className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700"
+                        >
+                          <p className="font-semibold">Ingreso {box.position}</p>
+                          <p>Id unico: {box.autoId}</p>
+                          <p>Nombre: {box.name}</p>
+                          <p>Temperatura: {box.temperature} °C</p>
+                        </div>
+                      ))
+                    )}
+                  </div>
                 </div>
               </div>
-            ) : null}
-            {isCustodio ? (
+
               <div className="rounded-2xl bg-white p-6 shadow-sm">
                 <div className="flex items-center justify-between">
                   <h2 className="text-lg font-semibold text-slate-900">
@@ -1971,9 +1964,9 @@ export default function BodegaDashboard() {
                     {outboundBoxes.length} cajas
                   </span>
                 </div>
-                <p className="mt-1 text-sm text-slate-600">
+                {/* <p className="mt-1 text-sm text-slate-600">
                   Cajas listas para enviar.
-                </p>
+                </p> */}
                 <div className="mt-4 grid gap-3">
                   {outboundBoxes.length === 0 ? (
                     <p className="text-sm text-slate-500">
@@ -2005,19 +1998,127 @@ export default function BodegaDashboard() {
                   )}
                 </div>
               </div>
-            ) : null}
-          </section>
+            </section>
+          ) : (
+            <section className="grid gap-4 lg:grid-cols-3">
+              {isAdmin ? (
+                <div className="rounded-2xl bg-white p-6 shadow-sm">
+                  <div className="flex items-center justify-between">
+                    <h2 className="text-lg font-semibold text-slate-900">
+                      Zona de ingresos
+                    </h2>
+                    <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
+                      {inboundBoxes.length} cajas
+                    </span>
+                  </div>
+                  <p className="mt-1 text-sm text-slate-600">
+                    Cajas registradas por el custodio.
+                  </p>
+                  <div className="mt-4 grid gap-3">
+                    {inboundBoxes.length === 0 ? (
+                      <p className="text-sm text-slate-500">
+                        No hay cajas en ingresos.
+                      </p>
+                    ) : (
+                      sortByPosition(inboundBoxes).map((box) => (
+                        <div
+                          key={`ingreso-${box.position}`}
+                          className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700"
+                        >
+                          <p className="font-semibold">Ingreso {box.position}</p>
+                          <p>Id unico: {box.autoId}</p>
+                          <p>Nombre: {box.name}</p>
+                          <p>Temperatura: {box.temperature} °C</p>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              ) : null}
+            </section>
+          )
         ) : null}
 
-        {activeTab === "ordenes" && canUseOrderForm ? (
+        {(activeTab === "ordenes" || isJefe) && canUseOrderForm ? (
           <section className="grid gap-4 lg:grid-cols-2 xl:grid-cols-4">
             <div className="flex h-full flex-col rounded-2xl bg-white p-6 shadow-sm">
+              <h2 className="text-lg font-semibold text-slate-900">Ingresos</h2>
+              {/* <p className="mt-1 text-sm text-slate-600">
+                Ordena ingresos hacia posiciones de bodega.
+              </p> */}
+              <div className="mt-4 grid flex-1 gap-3">
+                <label className="text-sm font-medium text-slate-600">
+                  Origen
+                </label>
+                <input
+                  value="Ingresos"
+                  readOnly
+                  className="w-full rounded-lg border border-slate-200 bg-slate-100 px-3 py-2 text-sm text-slate-600"
+                />
+                <label className="text-sm font-medium text-slate-600">
+                  Caja en ingresos
+                </label>
+                <select
+                  value={ingresoOrderSourcePosition}
+                  onChange={(event) =>
+                    setIngresoOrderSourcePosition(Number(event.target.value))
+                  }
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                >
+                  {availableInboundForOrders.length === 0
+                    ? (
+                      <option value={1}>Sin cajas</option>
+                    )
+                    : sortByPosition(availableInboundForOrders).map((box) => (
+                      <option key={box.position} value={box.position}>
+                        {`Ingreso ${box.position} - ${box.name} (${box.autoId})`}
+                      </option>
+                    ))}
+                </select>
+                <label className="text-sm font-medium text-slate-600">
+                  Posicion en bodega
+                </label>
+                <select
+                  value={ingresoOrderTargetPosition}
+                  onChange={(event) =>
+                    setIngresoOrderTargetPosition(Number(event.target.value))
+                  }
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                >
+                  {availableBodegaTargets.length === 0 ? (
+                    <option value={1}>Sin posiciones libres</option>
+                  ) : (
+                    availableBodegaTargets.map((position) => (
+                      <option key={position} value={position}>
+                        {position}
+                      </option>
+                    ))
+                  )}
+                </select>
+                <button
+                  type="button"
+                  onClick={() =>
+                    handleCreateOrder({
+                      destination: "a_bodega",
+                      sourceZone: "ingresos",
+                      sourcePosition: ingresoOrderSourcePosition,
+                      targetPosition: ingresoOrderTargetPosition,
+                    })
+                  }
+                  className="mt-auto rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-500"
+                >
+                  Crear ingreso
+                </button>
+              </div>
+            </div>
+
+            <div className="flex h-full flex-col rounded-2xl bg-white p-6 shadow-sm">
               <h2 className="text-lg font-semibold text-slate-900">
-                Orden de trabajo
+                Bodega a Bodega
               </h2>
-              <p className="mt-1 text-sm text-slate-600">
+              {/* <p className="mt-1 text-sm text-slate-600">
                 Movimiento interno de bodega a bodega.
-              </p>
+              </p> */}
               <div className="mt-4 grid flex-1 gap-3">
                 <label className="text-sm font-medium text-slate-600">
                   Destino
@@ -2093,83 +2194,62 @@ export default function BodegaDashboard() {
                 </button>
               </div>
             </div>
+
             <div className="flex h-full flex-col rounded-2xl bg-white p-6 shadow-sm">
-              <h2 className="text-lg font-semibold text-slate-900">Ingresos</h2>
-              <p className="mt-1 text-sm text-slate-600">
-                Ordena ingresos hacia posiciones de bodega.
-              </p>
+              <h2 className="text-lg font-semibold text-slate-900">
+                Revisar
+              </h2>
+              {/* <p className="mt-1 text-sm text-slate-600">
+                Crea una tarea para que el operario revise una caja.
+              </p> */}
               <div className="mt-4 grid flex-1 gap-3">
                 <label className="text-sm font-medium text-slate-600">
-                  Origen
-                </label>
-                <input
-                  value="Ingresos"
-                  readOnly
-                  className="w-full rounded-lg border border-slate-200 bg-slate-100 px-3 py-2 text-sm text-slate-600"
-                />
-                <label className="text-sm font-medium text-slate-600">
-                  Caja en ingresos
+                  Zona
                 </label>
                 <select
-                  value={ingresoOrderSourcePosition}
+                  value="bodega"
+                  disabled
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                >
+                  <option value="bodega">Bodega</option>
+                </select>
+                <label className="text-sm font-medium text-slate-600">
+                  Caja
+                </label>
+                <select
+                  value={reviewSourcePosition}
                   onChange={(event) =>
-                    setIngresoOrderSourcePosition(Number(event.target.value))
+                    setReviewSourcePosition(Number(event.target.value))
                   }
                   className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
                 >
-                  {availableInboundForOrders.length === 0
+                  {reviewBodegaList.length === 0
                     ? (
                       <option value={1}>Sin cajas</option>
                     )
-                    : sortByPosition(availableInboundForOrders).map((box) => (
+                    : sortByPosition(reviewBodegaList).map((box) => (
                       <option key={box.position} value={box.position}>
-                        {`Ingreso ${box.position} - ${box.name} (${box.autoId})`}
+                        {`Bodega ${box.position} - ${box.name} (${box.autoId})`}
                       </option>
                     ))}
                 </select>
-                <label className="text-sm font-medium text-slate-600">
-                  Posicion en bodega
-                </label>
-                <select
-                  value={ingresoOrderTargetPosition}
-                  onChange={(event) =>
-                    setIngresoOrderTargetPosition(Number(event.target.value))
-                  }
-                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
-                >
-                  {availableBodegaTargets.length === 0 ? (
-                    <option value={1}>Sin posiciones libres</option>
-                  ) : (
-                    availableBodegaTargets.map((position) => (
-                      <option key={position} value={position}>
-                        {position}
-                      </option>
-                    ))
-                  )}
-                </select>
                 <button
                   type="button"
-                  onClick={() =>
-                    handleCreateOrder({
-                      destination: "a_bodega",
-                      sourceZone: "ingresos",
-                      sourcePosition: ingresoOrderSourcePosition,
-                      targetPosition: ingresoOrderTargetPosition,
-                    })
-                  }
+                  onClick={handleCreateReviewOrder}
                   className="mt-auto rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-500"
                 >
-                  Crear ingreso
+                  Crear revision
                 </button>
               </div>
             </div>
+
             <div className="flex h-full flex-col rounded-2xl bg-white p-6 shadow-sm">
               <h2 className="text-lg font-semibold text-slate-900">
                 Crear salida
               </h2>
-              <p className="mt-1 text-sm text-slate-600">
+              {/* <p className="mt-1 text-sm text-slate-600">
                 Define la caja en bodega y la posicion final en salida.
-              </p>
+              </p> */}
               <div className="mt-4 grid flex-1 gap-3">
                 <label className="text-sm font-medium text-slate-600">
                   Origen
@@ -2223,53 +2303,83 @@ export default function BodegaDashboard() {
                 </button>
               </div>
             </div>
-            <div className="flex h-full flex-col rounded-2xl bg-white p-6 shadow-sm">
-              <h2 className="text-lg font-semibold text-slate-900">
-                Revisar
-              </h2>
-              <p className="mt-1 text-sm text-slate-600">
-                Crea una tarea para que el operario revise una caja.
-              </p>
-              <div className="mt-4 grid flex-1 gap-3">
-                <label className="text-sm font-medium text-slate-600">
-                  Zona
-                </label>
-                <select
-                  value="bodega"
-                  disabled
-                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
-                >
-                  <option value="bodega">Bodega</option>
-                </select>
-                <label className="text-sm font-medium text-slate-600">
-                  Caja
-                </label>
-                <select
-                  value={reviewSourcePosition}
-                  onChange={(event) =>
-                    setReviewSourcePosition(Number(event.target.value))
-                  }
-                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
-                >
-                  {reviewBodegaList.length === 0
-                    ? (
-                      <option value={1}>Sin cajas</option>
-                    )
-                    : sortByPosition(reviewBodegaList).map((box) => (
-                      <option key={box.position} value={box.position}>
-                        {`Bodega ${box.position} - ${box.name} (${box.autoId})`}
-                      </option>
-                    ))}
-                </select>
-                <button
-                  type="button"
-                  onClick={handleCreateReviewOrder}
-                  className="mt-auto rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-500"
-                >
-                  Crear revision
-                </button>
+            {isJefe ? (
+              <div className="lg:col-span-2 xl:col-span-4">
+                <div className="rounded-2xl bg-white p-6 shadow-sm">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <h2 className="text-lg font-semibold text-slate-900">
+                        Gestion de alertas
+                      </h2>
+                      {/* <p className="mt-1 text-sm text-slate-600">
+                        Revisa y gestiona las alertas activas.
+                      </p> */}
+                    </div> 
+                    <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
+                      Total: {alerts.length}
+                    </span>
+                  </div>
+                  <div className="mt-4 grid gap-3">
+                    {alerts.length === 0 ? (
+                      <p className="text-sm text-slate-500">
+                        No hay alertas activas.
+                      </p>
+                    ) : (
+                      nextAlert ? (
+                        <div
+                          key={nextAlert.id}
+                          className="rounded-xl border border-slate-200 bg-slate-50 p-4"
+                        >
+                          <div className="flex flex-wrap items-start justify-between gap-3">
+                            <div>
+                              <p className="text-sm font-semibold text-slate-900">
+                                {nextAlert.title}
+                              </p>
+                              <p className="mt-1 text-sm text-slate-600">
+                                {nextAlert.description}
+                              </p>
+                              {nextAlert.reason ? (
+                                <p className="mt-2 text-xs font-semibold text-slate-500">
+                                  No gestionada: {ALERT_REASONS.find((r) => r.value === nextAlert.reason)?.label}
+                                </p>
+                              ) : null}
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                              <button
+                                type="button"
+                                onClick={() => openResolveModal(nextAlert)}
+                                className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-emerald-500"
+                              >
+                                Gestionada
+                              </button>
+                              <select
+                                value={nextAlert.reason ?? ""}
+                                onChange={(event) =>
+                                  handleAlertReasonChange(
+                                    nextAlert.id,
+                                    event.target.value as AlertReason
+                                  )
+                                }
+                                className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600"
+                              >
+                                <option value="" disabled>
+                                  No gestionada...
+                                </option>
+                                {ALERT_REASONS.map((reason) => (
+                                  <option key={reason.value} value={reason.value}>
+                                    {reason.label}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                          </div>
+                        </div>
+                      ) : null
+                    )}
+                  </div>
+                </div>
               </div>
-            </div>
+            ) : null}
           </section>
         ) : null}
 
