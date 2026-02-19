@@ -38,7 +38,7 @@ export default function Header({
           </button>
         )}
       </div>
-      {showIntro ? (
+      {/* {showIntro ? (
         <>
           <p className="text-sm font-semibold uppercase tracking-[0.3em] text-slate-500">
             Bodega de frío
@@ -51,7 +51,7 @@ export default function Header({
             Puedes registrar, mover o retirar objetos y buscar por id.
           </p>
         </>
-      ) : null}
+      ) : null} */}
       <div className="flex flex-wrap items-center gap-3 text-sm text-slate-600">
         {showMeta ? (
           <>

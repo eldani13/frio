@@ -123,6 +123,7 @@ const ALERT_REASONS: Array<{ value: AlertReason; label: string }> = [
 const ALERT_DELAY_MS = 2 * 60 * 1000;
 const ALERT_TEMPERATURE_ID = "alerta-temperatura-5";
 const ALERT_ORDER_PREFIX = "alerta-orden-";
+const ALERT_REPORT_PREFIX = "alerta-fallo-";
 
 const createInitialSlots = (): Slot[] =>
   Array.from({ length: TOTAL_SLOTS }, (_, index) => ({
@@ -315,6 +316,9 @@ const createOrderId = () => {
   return `orden-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
 };
 
+const createAlertId = (prefix: string) =>
+  `${prefix}${Date.now()}-${Math.floor(Math.random() * 10000)}`;
+
 const sortByPosition = <T extends { position: number }>(items: T[]) =>
   [...items].sort((a, b) => a.position - b.position);
 
@@ -327,8 +331,11 @@ const getNextIngresoPosition = (boxes: Box[]) => {
   return next;
 };
 
-const getNextSalidaPosition = (boxes: Box[]) => {
+const getNextSalidaPosition = (boxes: Box[], reserved?: Set<number>) => {
   const occupied = new Set(boxes.map((box) => box.position));
+  if (reserved) {
+    reserved.forEach((position) => occupied.add(position));
+  }
   let next = 1;
   while (occupied.has(next)) {
     next += 1;
@@ -403,18 +410,25 @@ export default function BodegaDashboard() {
       }
     | null
   >(null);
+  const [resolveModalAlert, setResolveModalAlert] = useState<AlertItem | null>(null);
+  const [tempFixZone, setTempFixZone] = useState<OrderSource>("ingresos");
+  const [tempFixPosition, setTempFixPosition] = useState<number>(1);
+  const [tempFixValue, setTempFixValue] = useState<string>("");
 
   const [ingresoPosition, setIngresoPosition] = useState<number>(1);
   const [ingresoName, setIngresoName] = useState<string>("");
   const [ingresoTemp, setIngresoTemp] = useState<string>("");
 
-  const [orderSourcePosition, setOrderSourcePosition] = useState<number>(1);
-  const [orderSourceZone, setOrderSourceZone] =
-    useState<OrderSource>("ingresos");
-  const [orderDestination, setOrderDestination] =
-    useState<OrderType>("a_bodega");
-  const [orderTargetPosition, setOrderTargetPosition] = useState<number>(1);
+  const [bodegaOrderSourcePosition, setBodegaOrderSourcePosition] =
+    useState<number>(1);
+  const [bodegaOrderTargetPosition, setBodegaOrderTargetPosition] =
+    useState<number>(1);
+  const [ingresoOrderSourcePosition, setIngresoOrderSourcePosition] =
+    useState<number>(1);
+  const [ingresoOrderTargetPosition, setIngresoOrderTargetPosition] =
+    useState<number>(1);
   const [salidaSourcePosition, setSalidaSourcePosition] = useState<number>(1);
+  const [salidaTargetPosition, setSalidaTargetPosition] = useState<number>(1);
   const [reviewSourceZone, setReviewSourceZone] =
     useState<OrderSource>("ingresos");
   const [reviewSourcePosition, setReviewSourcePosition] = useState<number>(1);
@@ -717,6 +731,37 @@ export default function BodegaDashboard() {
     [slots]
   );
 
+  const reservedBodegaTargets = useMemo(() => {
+    const reserved = new Set<number>();
+    orders.forEach((order) => {
+      if (order.type !== "a_bodega") {
+        return;
+      }
+      if (typeof order.targetPosition === "number") {
+        reserved.add(order.targetPosition);
+      }
+    });
+    return reserved;
+  }, [orders]);
+
+  const reservedSalidaTargets = useMemo(() => {
+    const reserved = new Set<number>();
+    orders.forEach((order) => {
+      if (order.type !== "a_salida") {
+        return;
+      }
+      if (typeof order.targetPosition === "number") {
+        reserved.add(order.targetPosition);
+      }
+    });
+    return reserved;
+  }, [orders]);
+
+  const availableBodegaTargets = useMemo(
+    () => freeSlots.filter((position) => !reservedBodegaTargets.has(position)),
+    [freeSlots, reservedBodegaTargets]
+  );
+
   const bodegaBoxes = useMemo(
     () =>
       slots
@@ -752,6 +797,11 @@ export default function BodegaDashboard() {
         (box) => !pendingSourceKeys.has(`bodega:${box.position}`)
       ),
     [bodegaBoxes, pendingSourceKeys]
+  );
+
+  const reviewBodegaList = useMemo(
+    () => availableBodegaForOrders,
+    [availableBodegaForOrders]
   );
 
   const availableOutboundForReview = useMemo(
@@ -818,6 +868,40 @@ export default function BodegaDashboard() {
       ),
     [slots]
   );
+
+  const tempFixOptions = useMemo(() => {
+    const options: Array<{
+      zone: OrderSource;
+      position: number;
+      label: string;
+    }> = [];
+
+    inboundHighBoxes.forEach((box) => {
+      options.push({
+        zone: "ingresos",
+        position: box.position,
+        label: `Ingreso ${box.position} - ${box.name} (${box.autoId})`,
+      });
+    });
+
+    bodegaHighSlots.forEach((slot) => {
+      options.push({
+        zone: "bodega",
+        position: slot.position,
+        label: `Bodega ${slot.position} - ${slot.name} (${slot.autoId})`,
+      });
+    });
+
+    outboundHighBoxes.forEach((box) => {
+      options.push({
+        zone: "salida",
+        position: box.position,
+        label: `Salida ${box.position} - ${box.name} (${box.autoId})`,
+      });
+    });
+
+    return options;
+  }, [bodegaHighSlots, inboundHighBoxes, outboundHighBoxes]);
   const overdueOrders = useMemo(
     () =>
       orders.filter(
@@ -1018,6 +1102,14 @@ export default function BodegaDashboard() {
         );
       }
 
+      prev
+        .filter((alert) => alert.id.startsWith(ALERT_REPORT_PREFIX))
+        .forEach((alert) => {
+          if (!next.some((item) => item.id === alert.id)) {
+            next.push(alert);
+          }
+        });
+
       return next;
     });
   }, [
@@ -1029,31 +1121,35 @@ export default function BodegaDashboard() {
   ]);
 
   useEffect(() => {
-    const sourceList =
-      orderSourceZone === "bodega"
-        ? availableBodegaForOrders
-        : availableInboundForOrders;
-    if (sourceList.length === 0) {
-      setOrderSourcePosition(1);
+    if (availableBodegaForOrders.length === 0) {
+      setBodegaOrderSourcePosition(1);
       return;
     }
-    if (!sourceList.some((box) => box.position === orderSourcePosition)) {
-      setOrderSourcePosition(sourceList[0].position);
+    if (
+      !availableBodegaForOrders.some(
+        (box) => box.position === bodegaOrderSourcePosition
+      )
+    ) {
+      setBodegaOrderSourcePosition(availableBodegaForOrders[0].position);
     }
-  }, [
-    availableBodegaForOrders,
-    availableInboundForOrders,
-    orderSourcePosition,
-    orderSourceZone,
-  ]);
+  }, [availableBodegaForOrders, bodegaOrderSourcePosition]);
 
   useEffect(() => {
-    const reviewList =
-      reviewSourceZone === "bodega"
-        ? availableBodegaForOrders
-        : reviewSourceZone === "salida"
-          ? availableOutboundForReview
-          : availableInboundForOrders;
+    if (availableInboundForOrders.length === 0) {
+      setIngresoOrderSourcePosition(1);
+      return;
+    }
+    if (
+      !availableInboundForOrders.some(
+        (box) => box.position === ingresoOrderSourcePosition
+      )
+    ) {
+      setIngresoOrderSourcePosition(availableInboundForOrders[0].position);
+    }
+  }, [availableInboundForOrders, ingresoOrderSourcePosition]);
+
+  useEffect(() => {
+    const reviewList = reviewBodegaList;
     if (reviewList.length === 0) {
       setReviewSourcePosition(1);
       return;
@@ -1062,32 +1158,39 @@ export default function BodegaDashboard() {
       setReviewSourcePosition(reviewList[0].position);
     }
   }, [
-    availableBodegaForOrders,
-    availableInboundForOrders,
-    availableOutboundForReview,
     reviewSourcePosition,
-    reviewSourceZone,
+    reviewBodegaList,
   ]);
 
   useEffect(() => {
-    if (orderDestination !== "a_bodega") {
-      return;
+    if (reviewSourceZone !== "bodega") {
+      setReviewSourceZone("bodega");
     }
-    if (freeSlots.length === 0) {
-      setOrderTargetPosition(1);
-      return;
-    }
-    if (!freeSlots.includes(orderTargetPosition)) {
-      setOrderTargetPosition(freeSlots[0]);
-    }
-  }, [freeSlots, orderDestination, orderSourceZone, orderTargetPosition]);
+  }, [reviewSourceZone]);
 
   useEffect(() => {
-    if (orderDestination !== "a_salida") {
+    if (availableBodegaTargets.length === 0) {
+      setBodegaOrderTargetPosition(1);
+      setIngresoOrderTargetPosition(1);
       return;
     }
-    setOrderTargetPosition(getNextSalidaPosition(outboundBoxes));
-  }, [orderDestination, outboundBoxes]);
+    if (!availableBodegaTargets.includes(bodegaOrderTargetPosition)) {
+      setBodegaOrderTargetPosition(availableBodegaTargets[0]);
+    }
+    if (!availableBodegaTargets.includes(ingresoOrderTargetPosition)) {
+      setIngresoOrderTargetPosition(availableBodegaTargets[0]);
+    }
+  }, [
+    bodegaOrderTargetPosition,
+    availableBodegaTargets,
+    ingresoOrderTargetPosition,
+  ]);
+
+  useEffect(() => {
+    setSalidaTargetPosition(
+      getNextSalidaPosition(outboundBoxes, reservedSalidaTargets)
+    );
+  }, [outboundBoxes, reservedSalidaTargets]);
 
   useEffect(() => {
     if (availableBodegaForOrders.length === 0) {
@@ -1112,16 +1215,6 @@ export default function BodegaDashboard() {
   const canUseOrderForm = isJefe;
   const canSeeOrders = isAdmin || isOperario;
   const canUseSearch = isAdmin;
-
-  useEffect(() => {
-    if (role === "jefe" && orderDestination !== "a_bodega") {
-      setOrderDestination("a_bodega");
-      return;
-    }
-    if (role === "custodio" && orderDestination !== "a_salida") {
-      setOrderDestination("a_salida");
-    }
-  }, [orderDestination, role]);
 
   const handleSelectSlot = (position: number) => {
     setSelectedPosition(position);
@@ -1160,26 +1253,21 @@ export default function BodegaDashboard() {
     setMessage(`Caja registrada en ingresos ${nextPosition}.`);
   };
 
-  const handleCreateOrder = (destinationOverride?: OrderType) => {
-    const destination = destinationOverride ?? orderDestination;
+  const handleCreateOrder = (params: {
+    destination: OrderType;
+    sourceZone: OrderSource;
+    sourcePosition: number;
+    targetPosition?: number;
+  }) => {
+    const { destination, sourceZone, sourcePosition, targetPosition } = params;
     const effectiveSourceZone =
-      destination === "a_salida" ? "bodega" : orderSourceZone;
-    const effectiveSourcePosition =
-      destination === "a_salida" ? salidaSourcePosition : orderSourcePosition;
-    const salidaPosition =
-      destination === "a_salida"
-        ? getNextSalidaPosition(outboundBoxes)
-        : orderTargetPosition;
+      destination === "a_salida" ? "bodega" : sourceZone;
+    const effectiveSourcePosition = sourcePosition;
 
     if (role !== "jefe") {
       setMessage("Solo el jefe crea ordenes.");
       return;
     }
-    if (destination === "a_salida" && effectiveSourceZone !== "bodega") {
-      setMessage("La salida debe salir de bodega.");
-      return;
-    }
-
     const sourceList =
       effectiveSourceZone === "bodega"
         ? availableBodegaForOrders
@@ -1198,23 +1286,32 @@ export default function BodegaDashboard() {
     }
 
     if (destination === "a_bodega") {
-      if (!freeSlots.includes(orderTargetPosition)) {
+      if (!targetPosition || !availableBodegaTargets.includes(targetPosition)) {
         setMessage("Selecciona una posicion libre en bodega.");
         return;
       }
     } else {
+      const salidaPosition = getNextSalidaPosition(
+        outboundBoxes,
+        reservedSalidaTargets
+      );
       if (salidaPosition <= 0) {
         setMessage("Ingresa una posicion de salida valida.");
         return;
       }
     }
 
+    const finalTargetPosition =
+      destination === "a_salida"
+        ? getNextSalidaPosition(outboundBoxes, reservedSalidaTargets)
+        : targetPosition;
+
     const newOrder: BodegaOrder = {
       id: createOrderId(),
       type: destination,
       sourcePosition: box.position,
       sourceZone: effectiveSourceZone,
-      targetPosition: salidaPosition,
+      targetPosition: finalTargetPosition,
       createdAt: new Date().toLocaleString("es-CO"),
       createdAtMs: Date.now(),
       createdBy: role,
@@ -1223,9 +1320,10 @@ export default function BodegaDashboard() {
     setOrders((prev) => [newOrder, ...prev]);
     setMessage("Orden creada correctamente.");
     if (role === "jefe") {
-      setOrderSourceZone("ingresos");
-      setOrderSourcePosition(1);
-      setOrderTargetPosition(freeSlots[0] ?? 1);
+      setBodegaOrderSourcePosition(availableBodegaForOrders[0]?.position ?? 1);
+      setIngresoOrderSourcePosition(availableInboundForOrders[0]?.position ?? 1);
+      setBodegaOrderTargetPosition(availableBodegaTargets[0] ?? 1);
+      setIngresoOrderTargetPosition(availableBodegaTargets[0] ?? 1);
     }
   };
 
@@ -1235,12 +1333,7 @@ export default function BodegaDashboard() {
       return;
     }
 
-    const reviewList =
-      reviewSourceZone === "bodega"
-        ? availableBodegaForOrders
-        : reviewSourceZone === "salida"
-          ? availableOutboundForReview
-          : availableInboundForOrders;
+    const reviewList = reviewBodegaList;
     if (reviewList.length === 0) {
       setMessage("No hay cajas disponibles sin tareas asignadas.");
       return;
@@ -1258,7 +1351,7 @@ export default function BodegaDashboard() {
       id: createOrderId(),
       type: "revisar",
       sourcePosition: box.position,
-      sourceZone: reviewSourceZone,
+      sourceZone: "bodega",
       createdAt: new Date().toLocaleString("es-CO"),
       createdAtMs: Date.now(),
       createdBy: role,
@@ -1469,6 +1562,29 @@ export default function BodegaDashboard() {
     setMessage(`Caja en salida ${position} enviada.`);
   };
 
+  const handleReportOrder = (orderId: string) => {
+    if (role !== "operario") {
+      setMessage("Solo el operario puede reportar fallos.");
+      return;
+    }
+    const order = orders.find((item) => item.id === orderId);
+    if (!order) {
+      setMessage("No se encontro la tarea para reportar.");
+      return;
+    }
+
+    const createdAt = new Date().toLocaleString("es-CO");
+    setAlerts((prev) => [
+      {
+        id: createAlertId(ALERT_REPORT_PREFIX),
+        title: "Reporte de fallo",
+        description: `${formatOrderDetails(order)} · Reportado por ${session?.displayName ?? "Operario"} · ${createdAt}.`,
+      },
+      ...prev,
+    ]);
+    setMessage("Reporte enviado al jefe.");
+  };
+
   const handleResolveAlert = (alertId: string) => {
     setAlerts((prev) => prev.filter((alert) => alert.id !== alertId));
   };
@@ -1479,6 +1595,86 @@ export default function BodegaDashboard() {
         alert.id === alertId ? { ...alert, reason } : alert
       )
     );
+  };
+
+  const openResolveModal = (alert: AlertItem) => {
+    setResolveModalAlert(alert);
+    if (alert.id === ALERT_TEMPERATURE_ID) {
+      const first = tempFixOptions[0];
+      if (first) {
+        setTempFixZone(first.zone);
+        setTempFixPosition(first.position);
+      }
+      setTempFixValue("");
+    }
+  };
+
+  const handleResolveWithSolution = () => {
+    if (!resolveModalAlert) {
+      return;
+    }
+
+    if (resolveModalAlert.id === ALERT_TEMPERATURE_ID) {
+      const parsedTemp = Number(tempFixValue);
+      if (!Number.isFinite(parsedTemp)) {
+        setMessage("Ingresa una temperatura valida.");
+        return;
+      }
+
+      if (tempFixZone === "ingresos") {
+        setInboundBoxes((prev) =>
+          prev.map((box) =>
+            box.position === tempFixPosition
+              ? { ...box, temperature: parsedTemp }
+              : box
+          )
+        );
+      } else if (tempFixZone === "salida") {
+        setOutboundBoxes((prev) =>
+          prev.map((box) =>
+            box.position === tempFixPosition
+              ? { ...box, temperature: parsedTemp }
+              : box
+          )
+        );
+      } else {
+        setSlots((prev) =>
+          prev.map((slot) =>
+            slot.position === tempFixPosition
+              ? { ...slot, temperature: parsedTemp }
+              : slot
+          )
+        );
+      }
+
+      setMessage("Temperatura actualizada.");
+      handleResolveAlert(resolveModalAlert.id);
+      setResolveModalAlert(null);
+      return;
+    }
+
+    if (resolveModalAlert.id.startsWith(ALERT_ORDER_PREFIX)) {
+      const orderId = resolveModalAlert.id.replace(ALERT_ORDER_PREFIX, "");
+      setOrders((prev) =>
+        prev.map((order) =>
+          order.id === orderId
+            ? {
+                ...order,
+                createdAt: new Date().toLocaleString("es-CO"),
+                createdAtMs: Date.now(),
+              }
+            : order
+        )
+      );
+      setMessage("Tarea reprogramada.");
+      handleResolveAlert(resolveModalAlert.id);
+      setResolveModalAlert(null);
+      return;
+    }
+
+    handleResolveAlert(resolveModalAlert.id);
+    setMessage("Alerta gestionada.");
+    setResolveModalAlert(null);
   };
 
   const tabs = useMemo(
@@ -1502,8 +1698,8 @@ export default function BodegaDashboard() {
         },
         {
           key: "despachados",
-          label: "Despachados",
-          visible: isCustodio,
+          label: "Envios",
+          visible: isAdmin,
         },
         { key: "alertas", label: "Gestion de alertas", visible: isJefe },
         { key: "reportes", label: "Reportes", visible: isAdmin },
@@ -1814,20 +2010,20 @@ export default function BodegaDashboard() {
         ) : null}
 
         {activeTab === "ordenes" && canUseOrderForm ? (
-          <section className="grid gap-4 lg:grid-cols-3">
+          <section className="grid gap-4 lg:grid-cols-2 xl:grid-cols-4">
             <div className="flex h-full flex-col rounded-2xl bg-white p-6 shadow-sm">
               <h2 className="text-lg font-semibold text-slate-900">
                 Orden de trabajo
               </h2>
               <p className="mt-1 text-sm text-slate-600">
-                Selecciona una caja y el destino final.
+                Movimiento interno de bodega a bodega.
               </p>
               <div className="mt-4 grid flex-1 gap-3">
                 <label className="text-sm font-medium text-slate-600">
                   Destino
                 </label>
                 <select
-                  value={orderDestination}
+                  value="a_bodega"
                   disabled
                   className="w-full rounded-lg border border-slate-200 bg-slate-100 px-3 py-2 text-sm"
                 >
@@ -1836,62 +2032,45 @@ export default function BodegaDashboard() {
                 <label className="text-sm font-medium text-slate-600">
                   Origen
                 </label>
-                <select
-                  value={orderSourceZone}
-                  onChange={(event) =>
-                    setOrderSourceZone(event.target.value as OrderSource)
-                  }
-                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
-                >
-                  <option value="ingresos">Ingresos</option>
-                  <option value="bodega">Bodega</option>
-                </select>
+                <input
+                  value="Bodega"
+                  readOnly
+                  className="w-full rounded-lg border border-slate-200 bg-slate-100 px-3 py-2 text-sm text-slate-600"
+                />
                 <label className="text-sm font-medium text-slate-600">
-                  {orderSourceZone === "bodega"
-                    ? "Caja en bodega"
-                    : "Caja en ingresos"}
+                  Caja en bodega
                 </label>
                 <select
-                  value={orderSourcePosition}
+                  value={bodegaOrderSourcePosition}
                   onChange={(event) =>
-                    setOrderSourcePosition(Number(event.target.value))
+                    setBodegaOrderSourcePosition(Number(event.target.value))
                   }
                   className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
                 >
-                  {orderSourceZone === "bodega"
-                    ? availableBodegaForOrders.length === 0
-                      ? (
-                        <option value={1}>Sin cajas</option>
-                      )
-                      : sortByPosition(availableBodegaForOrders).map((box) => (
-                        <option key={box.position} value={box.position}>
-                          {`Bodega ${box.position} - ${box.name} (${box.autoId})`}
-                        </option>
-                      ))
-                    : availableInboundForOrders.length === 0
-                      ? (
-                        <option value={1}>Sin cajas</option>
-                      )
-                      : sortByPosition(availableInboundForOrders).map((box) => (
-                        <option key={box.position} value={box.position}>
-                          {`Ingreso ${box.position} - ${box.name} (${box.autoId})`}
-                        </option>
-                      ))}
+                  {availableBodegaForOrders.length === 0
+                    ? (
+                      <option value={1}>Sin cajas</option>
+                    )
+                    : sortByPosition(availableBodegaForOrders).map((box) => (
+                      <option key={box.position} value={box.position}>
+                        {`Bodega ${box.position} - ${box.name} (${box.autoId})`}
+                      </option>
+                    ))}
                 </select>
                 <label className="text-sm font-medium text-slate-600">
                   Posicion en bodega
                 </label>
                 <select
-                  value={orderTargetPosition}
+                  value={bodegaOrderTargetPosition}
                   onChange={(event) =>
-                    setOrderTargetPosition(Number(event.target.value))
+                    setBodegaOrderTargetPosition(Number(event.target.value))
                   }
                   className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
                 >
-                  {freeSlots.length === 0 ? (
+                  {availableBodegaTargets.length === 0 ? (
                     <option value={1}>Sin posiciones libres</option>
                   ) : (
-                    freeSlots.map((position) => (
+                    availableBodegaTargets.map((position) => (
                       <option key={position} value={position}>
                         {position}
                       </option>
@@ -1900,10 +2079,87 @@ export default function BodegaDashboard() {
                 </select>
                 <button
                   type="button"
-                  onClick={() => handleCreateOrder()}
+                  onClick={() =>
+                    handleCreateOrder({
+                      destination: "a_bodega",
+                      sourceZone: "bodega",
+                      sourcePosition: bodegaOrderSourcePosition,
+                      targetPosition: bodegaOrderTargetPosition,
+                    })
+                  }
                   className="mt-auto rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-500"
                 >
                   Crear orden
+                </button>
+              </div>
+            </div>
+            <div className="flex h-full flex-col rounded-2xl bg-white p-6 shadow-sm">
+              <h2 className="text-lg font-semibold text-slate-900">Ingresos</h2>
+              <p className="mt-1 text-sm text-slate-600">
+                Ordena ingresos hacia posiciones de bodega.
+              </p>
+              <div className="mt-4 grid flex-1 gap-3">
+                <label className="text-sm font-medium text-slate-600">
+                  Origen
+                </label>
+                <input
+                  value="Ingresos"
+                  readOnly
+                  className="w-full rounded-lg border border-slate-200 bg-slate-100 px-3 py-2 text-sm text-slate-600"
+                />
+                <label className="text-sm font-medium text-slate-600">
+                  Caja en ingresos
+                </label>
+                <select
+                  value={ingresoOrderSourcePosition}
+                  onChange={(event) =>
+                    setIngresoOrderSourcePosition(Number(event.target.value))
+                  }
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                >
+                  {availableInboundForOrders.length === 0
+                    ? (
+                      <option value={1}>Sin cajas</option>
+                    )
+                    : sortByPosition(availableInboundForOrders).map((box) => (
+                      <option key={box.position} value={box.position}>
+                        {`Ingreso ${box.position} - ${box.name} (${box.autoId})`}
+                      </option>
+                    ))}
+                </select>
+                <label className="text-sm font-medium text-slate-600">
+                  Posicion en bodega
+                </label>
+                <select
+                  value={ingresoOrderTargetPosition}
+                  onChange={(event) =>
+                    setIngresoOrderTargetPosition(Number(event.target.value))
+                  }
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                >
+                  {availableBodegaTargets.length === 0 ? (
+                    <option value={1}>Sin posiciones libres</option>
+                  ) : (
+                    availableBodegaTargets.map((position) => (
+                      <option key={position} value={position}>
+                        {position}
+                      </option>
+                    ))
+                  )}
+                </select>
+                <button
+                  type="button"
+                  onClick={() =>
+                    handleCreateOrder({
+                      destination: "a_bodega",
+                      sourceZone: "ingresos",
+                      sourcePosition: ingresoOrderSourcePosition,
+                      targetPosition: ingresoOrderTargetPosition,
+                    })
+                  }
+                  className="mt-auto rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-500"
+                >
+                  Crear ingreso
                 </button>
               </div>
             </div>
@@ -1947,14 +2203,20 @@ export default function BodegaDashboard() {
                   Posicion en salida
                 </label>
                 <input
-                  value={orderTargetPosition}
+                  value={salidaTargetPosition}
                   type="number"
                   readOnly
                   className="w-full rounded-lg border border-slate-200 bg-slate-100 px-3 py-2 text-sm text-slate-600"
                 />
                 <button
                   type="button"
-                  onClick={() => handleCreateOrder("a_salida")}
+                  onClick={() =>
+                    handleCreateOrder({
+                      destination: "a_salida",
+                      sourceZone: "bodega",
+                      sourcePosition: salidaSourcePosition,
+                    })
+                  }
                   className="mt-auto rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-500"
                 >
                   Crear salida
@@ -1973,15 +2235,11 @@ export default function BodegaDashboard() {
                   Zona
                 </label>
                 <select
-                  value={reviewSourceZone}
-                  onChange={(event) =>
-                    setReviewSourceZone(event.target.value as OrderSource)
-                  }
+                  value="bodega"
+                  disabled
                   className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
                 >
-                  <option value="ingresos">Ingresos</option>
                   <option value="bodega">Bodega</option>
-                  <option value="salida">Salida</option>
                 </select>
                 <label className="text-sm font-medium text-slate-600">
                   Caja
@@ -1993,35 +2251,15 @@ export default function BodegaDashboard() {
                   }
                   className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
                 >
-                  {reviewSourceZone === "bodega"
-                    ? availableBodegaForOrders.length === 0
-                      ? (
-                        <option value={1}>Sin cajas</option>
-                      )
-                      : sortByPosition(availableBodegaForOrders).map((box) => (
-                        <option key={box.position} value={box.position}>
-                          {`Bodega ${box.position} - ${box.name} (${box.autoId})`}
-                        </option>
-                      ))
-                    : reviewSourceZone === "salida"
-                      ? availableOutboundForReview.length === 0
-                        ? (
-                          <option value={1}>Sin cajas</option>
-                        )
-                        : sortByPosition(availableOutboundForReview).map((box) => (
-                          <option key={box.position} value={box.position}>
-                            {`Salida ${box.position} - ${box.name} (${box.autoId})`}
-                          </option>
-                        ))
-                      : availableInboundForOrders.length === 0
-                        ? (
-                          <option value={1}>Sin cajas</option>
-                        )
-                        : sortByPosition(availableInboundForOrders).map((box) => (
-                          <option key={box.position} value={box.position}>
-                            {`Ingreso ${box.position} - ${box.name} (${box.autoId})`}
-                          </option>
-                        ))}
+                  {reviewBodegaList.length === 0
+                    ? (
+                      <option value={1}>Sin cajas</option>
+                    )
+                    : sortByPosition(reviewBodegaList).map((box) => (
+                      <option key={box.position} value={box.position}>
+                        {`Bodega ${box.position} - ${box.name} (${box.autoId})`}
+                      </option>
+                    ))}
                 </select>
                 <button
                   type="button"
@@ -2102,6 +2340,7 @@ export default function BodegaDashboard() {
                   requests={orders}
                   canExecute={false}
                   onExecute={() => undefined}
+                  onReport={() => undefined}
                 />
               </div>
             </div>
@@ -2114,11 +2353,12 @@ export default function BodegaDashboard() {
               requests={orders}
               canExecute
               onExecute={executeOrder}
+              onReport={handleReportOrder}
             />
           </section>
         ) : null}
 
-        {activeTab === "despachados" && isCustodio ? (
+        {activeTab === "despachados" && isAdmin ? (
           <section className="rounded-2xl bg-white p-6 shadow-sm">
             <div className="flex items-center justify-between">
               <h2 className="text-lg font-semibold text-slate-900">
@@ -2200,7 +2440,7 @@ export default function BodegaDashboard() {
                           <div className="flex flex-wrap gap-2">
                             <button
                               type="button"
-                              onClick={() => handleResolveAlert(alert.id)}
+                              onClick={() => openResolveModal(alert)}
                               className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-emerald-500"
                             >
                               Gestionada
@@ -2366,6 +2606,116 @@ export default function BodegaDashboard() {
                     </div>
                   </div>
                 ))}
+              </div>
+            </div>
+          </div>
+        ) : null}
+
+        {resolveModalAlert ? (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4"
+            role="dialog"
+            aria-modal="true"
+            onClick={() => setResolveModalAlert(null)}
+          >
+            <div
+              className="w-full max-w-xl rounded-2xl bg-white p-6 shadow-xl"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.25em] text-slate-400">
+                    Solucionar alerta
+                  </p>
+                  <h3 className="mt-2 text-2xl font-semibold text-slate-900">
+                    {resolveModalAlert.title}
+                  </h3>
+                  <p className="mt-1 text-sm text-slate-600">
+                    {resolveModalAlert.description}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setResolveModalAlert(null)}
+                  className="rounded-full border border-slate-200 px-3 py-1 text-sm font-semibold text-slate-600 transition hover:bg-slate-50"
+                >
+                  Cerrar
+                </button>
+              </div>
+
+              <div className="mt-6 grid gap-4">
+                {resolveModalAlert.id === ALERT_TEMPERATURE_ID ? (
+                  <>
+                    <div>
+                      <label className="text-sm font-medium text-slate-600">
+                        Caja con temperatura alta
+                      </label>
+                      <select
+                        value={`${tempFixZone}:${tempFixPosition}`}
+                        onChange={(event) => {
+                          const [zone, position] = event.target.value.split(":");
+                          setTempFixZone(zone as OrderSource);
+                          setTempFixPosition(Number(position));
+                        }}
+                        className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                      >
+                        {tempFixOptions.length === 0 ? (
+                          <option value="ingresos:1">Sin cajas</option>
+                        ) : (
+                          tempFixOptions.map((option) => (
+                            <option
+                              key={`${option.zone}-${option.position}`}
+                              value={`${option.zone}:${option.position}`}
+                            >
+                              {option.label}
+                            </option>
+                          ))
+                        )}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium text-slate-600">
+                        Nueva temperatura (°C)
+                      </label>
+                      <input
+                        value={tempFixValue}
+                        onChange={(event) => setTempFixValue(event.target.value)}
+                        type="number"
+                        className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                        placeholder="Ej: -5"
+                      />
+                    </div>
+                  </>
+                ) : null}
+
+                {resolveModalAlert.id.startsWith(ALERT_ORDER_PREFIX) ? (
+                  <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
+                    Reprograma la tarea para reiniciar el tiempo de respuesta.
+                  </div>
+                ) : null}
+
+                {resolveModalAlert.id.startsWith(ALERT_REPORT_PREFIX) ? (
+                  <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
+                    Marca el reporte como solucionado.
+                  </div>
+                ) : null}
+              </div>
+
+              <div className="mt-6 flex flex-wrap justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setResolveModalAlert(null)}
+                  className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 transition hover:bg-slate-50"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={handleResolveWithSolution}
+                  className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-500"
+                >
+                  Aplicar solucion
+                </button>
               </div>
             </div>
           </div>

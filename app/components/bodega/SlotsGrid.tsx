@@ -11,7 +11,7 @@ export default function SlotsGrid({
     <div className="rounded-2xl bg-white p-6 shadow-sm">
       <div className="flex items-center justify-between gap-3">
         <h2 className="text-lg font-semibold text-slate-900">
-          Posiciones de la bodega
+          Zona de almacenamiento
         </h2>
         {headerActions ? <div>{headerActions}</div> : null}
       </div>

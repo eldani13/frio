@@ -31,6 +31,7 @@ export default function RequestsQueue({
   requests,
   canExecute,
   onExecute,
+  onReport,
 }: RequestsQueueProps) {
   const orderedRequests = [...requests].sort(
     (a, b) => orderTimestamp(a) - orderTimestamp(b)
@@ -53,24 +54,44 @@ export default function RequestsQueue({
             </p>
           </div>
         ) : canExecute ? (
-          <button
-            type="button"
-            onClick={() => onExecute(nextRequest.id)}
-            className="flex min-h-[70vh] w-full flex-col justify-center rounded-[32px] bg-emerald-600 px-12 py-16 text-left text-white shadow-lg transition hover:bg-emerald-500"
-          >
-            <p className="text-4xl font-semibold">
-              {TYPE_LABELS[nextRequest.type]}
-            </p>
-            <p className="mt-5 text-3xl">
-              {formatOrderDetails(nextRequest)}
-            </p>
-            <p className="mt-5 text-lg text-emerald-50">
-              Solicitado por {nextRequest.createdBy} · {nextRequest.createdAt}
-            </p>
-            <p className="mt-12 text-7xl font-semibold leading-none">
-              Ejecutar
-            </p>
-          </button>
+          <div className="grid gap-4 lg:grid-cols-2">
+            <button
+              type="button"
+              onClick={() => onExecute(nextRequest.id)}
+              className="flex min-h-[70vh] w-full flex-col justify-center rounded-[32px] bg-emerald-600 px-12 py-16 text-left text-white shadow-lg transition hover:bg-emerald-500"
+            >
+              <p className="text-4xl font-semibold">
+                {TYPE_LABELS[nextRequest.type]}
+              </p>
+              <p className="mt-5 text-3xl">
+                {formatOrderDetails(nextRequest)}
+              </p>
+              <p className="mt-5 text-lg text-emerald-50">
+                Solicitado por {nextRequest.createdBy} · {nextRequest.createdAt}
+              </p>
+              <p className="mt-12 text-7xl font-semibold leading-none">
+                Ejecutar
+              </p>
+            </button>
+            <button
+              type="button"
+              onClick={() => onReport?.(nextRequest.id)}
+              className="flex min-h-[70vh] w-full flex-col justify-center rounded-[32px] bg-amber-500 px-12 py-16 text-left text-white shadow-lg transition hover:bg-amber-400"
+            >
+              <p className="text-4xl font-semibold">
+                Reportar fallo
+              </p>
+              <p className="mt-5 text-3xl">
+                {formatOrderDetails(nextRequest)}
+              </p>
+              <p className="mt-5 text-lg text-amber-50">
+                Solicitado por {nextRequest.createdBy} · {nextRequest.createdAt}
+              </p>
+              <p className="mt-12 text-6xl font-semibold leading-none">
+                Enviar
+              </p>
+            </button>
+          </div>
         ) : (
           <div className="rounded-2xl border border-slate-200 bg-slate-50 p-6">
             <p className="text-xl font-semibold text-slate-900">
