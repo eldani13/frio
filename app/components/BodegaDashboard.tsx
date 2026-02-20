@@ -97,6 +97,15 @@ type AlertItem = {
   title: string;
   description: string;
   reason?: AlertReason;
+  sourceOrderId?: string;
+};
+
+type AlertAssignment = {
+  alertId: string;
+  kind: "temperatura" | "reporte";
+  assignedAt: string;
+  assignedBy: string;
+  sourceOrderId?: string;
 };
 
 type ZoneKey = "entrada" | "bodega" | "salida";
@@ -402,6 +411,7 @@ export default function BodegaDashboard() {
   const [orders, setOrders] = useState<BodegaOrder[]>([]);
   const [stats, setStats] = useState<BodegaStats>(defaultStats);
   const [alerts, setAlerts] = useState<AlertItem[]>([]);
+  const [assignedAlerts, setAssignedAlerts] = useState<AlertAssignment[]>([]);
   const [alertClock, setAlertClock] = useState(() => Date.now());
   const [statusModal, setStatusModal] = useState<
     | {
@@ -411,6 +421,8 @@ export default function BodegaDashboard() {
     | null
   >(null);
   const [resolveModalAlert, setResolveModalAlert] = useState<AlertItem | null>(null);
+  const [alertsPanelOpen, setAlertsPanelOpen] = useState(false);
+  const [assignedAlertsPanelOpen, setAssignedAlertsPanelOpen] = useState(false);
   const [tempFixZone, setTempFixZone] = useState<OrderSource>("ingresos");
   const [tempFixPosition, setTempFixPosition] = useState<number>(1);
   const [tempFixValue, setTempFixValue] = useState<string>("");
@@ -902,6 +914,37 @@ export default function BodegaDashboard() {
 
     return options;
   }, [bodegaHighSlots, inboundHighBoxes, outboundHighBoxes]);
+
+  const getAlertKind = (alert: AlertItem) => {
+    if (alert.id === ALERT_TEMPERATURE_ID) {
+      return "temperatura";
+    }
+    if (alert.id.startsWith(ALERT_REPORT_PREFIX)) {
+      return "reporte";
+    }
+    return "otro";
+  };
+
+  const assignedAlertIds = useMemo(
+    () => new Set(assignedAlerts.map((assignment) => assignment.alertId)),
+    [assignedAlerts]
+  );
+
+  const assignedAlertsForOperario = useMemo(
+    () =>
+      assignedAlerts
+        .map((assignment) => ({
+          assignment,
+          alert: alerts.find((item) => item.id === assignment.alertId) ?? null,
+        }))
+        .filter(
+          (
+            item
+          ): item is { assignment: AlertAssignment; alert: AlertItem } =>
+            item.alert !== null
+        ),
+    [alerts, assignedAlerts]
+  );
   const nextAlert = alerts[0] ?? null;
   const overdueOrders = useMemo(
     () =>
@@ -1568,21 +1611,85 @@ export default function BodegaDashboard() {
         id: createAlertId(ALERT_REPORT_PREFIX),
         title: "Reporte de fallo",
         description: `${formatOrderDetails(order)} · Reportado por ${session?.displayName ?? "Operario"} · ${createdAt}.`,
+        sourceOrderId: order.id,
       },
       ...prev,
     ]);
     setMessage("Reporte enviado al jefe.");
   };
 
-  const handleResolveAlert = (alertId: string) => {
-    setAlerts((prev) => prev.filter((alert) => alert.id !== alertId));
+  const handleAssignAlert = (alert: AlertItem) => {
+    if (role !== "jefe") {
+      setMessage("Solo el jefe puede asignar alertas.");
+      return;
+    }
+
+    const kind = getAlertKind(alert);
+    if (kind === "otro") {
+      setMessage("Esta alerta no se puede asignar al operario.");
+      return;
+    }
+
+    if (assignedAlerts.some((item) => item.alertId === alert.id)) {
+      setMessage("La alerta ya esta asignada al operario.");
+      return;
+    }
+
+    const assignedAt = new Date().toLocaleString("es-CO");
+    setAssignedAlerts((prev) => [
+      {
+        alertId: alert.id,
+        kind,
+        assignedAt,
+        assignedBy: session?.displayName ?? "Jefe",
+        sourceOrderId: alert.sourceOrderId,
+      },
+      ...prev,
+    ]);
+    setMessage("Alerta asignada al operario.");
   };
 
-  const handleAlertReasonChange = (alertId: string, reason: AlertReason) => {
-    setAlerts((prev) =>
-      prev.map((alert) =>
-        alert.id === alertId ? { ...alert, reason } : alert
-      )
+  const handleExecuteAssignedAlert = (alert: AlertItem) => {
+    if (role !== "operario") {
+      setMessage("Solo el operario ejecuta alertas asignadas.");
+      return;
+    }
+
+    const kind = getAlertKind(alert);
+    if (kind === "temperatura") {
+      openResolveModal(alert);
+      return;
+    }
+
+    if (kind === "reporte") {
+      const sourceOrderId = alert.sourceOrderId;
+      if (!sourceOrderId) {
+        setMessage("No se encontro la orden reportada.");
+        return;
+      }
+      setOrders((prev) =>
+        prev.map((order) =>
+          order.id === sourceOrderId
+            ? {
+                ...order,
+                createdAt: new Date().toLocaleString("es-CO"),
+                createdAtMs: Date.now(),
+              }
+            : order
+        )
+      );
+      handleResolveAlert(alert.id);
+      setMessage("Tarea reprogramada y alerta gestionada.");
+      return;
+    }
+
+    setMessage("Esta alerta no se puede ejecutar.");
+  };
+
+  const handleResolveAlert = (alertId: string) => {
+    setAlerts((prev) => prev.filter((alert) => alert.id !== alertId));
+    setAssignedAlerts((prev) =>
+      prev.filter((assignment) => assignment.alertId !== alertId)
     );
   };
 
@@ -1656,6 +1763,29 @@ export default function BodegaDashboard() {
         )
       );
       setMessage("Tarea reprogramada.");
+      handleResolveAlert(resolveModalAlert.id);
+      setResolveModalAlert(null);
+      return;
+    }
+
+    if (resolveModalAlert.id.startsWith(ALERT_REPORT_PREFIX)) {
+      const sourceOrderId = resolveModalAlert.sourceOrderId;
+      if (sourceOrderId) {
+        setOrders((prev) =>
+          prev.map((order) =>
+            order.id === sourceOrderId
+              ? {
+                  ...order,
+                  createdAt: new Date().toLocaleString("es-CO"),
+                  createdAtMs: Date.now(),
+                }
+              : order
+          )
+        );
+        setMessage("Tarea reprogramada.");
+      } else {
+        setMessage("No se encontro la orden reportada.");
+      }
       handleResolveAlert(resolveModalAlert.id);
       setResolveModalAlert(null);
       return;
@@ -1749,6 +1879,10 @@ export default function BodegaDashboard() {
           onSearchSubmit={handleSearch}
           userDisplayName={session?.displayName}
           onLogout={handleLogout}
+          alertCount={isJefe ? alerts.length : undefined}
+          onAlertsClick={isJefe ? () => setAlertsPanelOpen(true) : undefined}
+          listCount={isOperario ? assignedAlertsForOperario.length : undefined}
+          onListClick={isOperario ? () => setAssignedAlertsPanelOpen(true) : undefined}
         />
 
         {isAdmin ? (
@@ -2303,83 +2437,6 @@ export default function BodegaDashboard() {
                 </button>
               </div>
             </div>
-            {isJefe ? (
-              <div className="lg:col-span-2 xl:col-span-4">
-                <div className="rounded-2xl bg-white p-6 shadow-sm">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div>
-                      <h2 className="text-lg font-semibold text-slate-900">
-                        Gestion de alertas
-                      </h2>
-                      {/* <p className="mt-1 text-sm text-slate-600">
-                        Revisa y gestiona las alertas activas.
-                      </p> */}
-                    </div> 
-                    <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
-                      Total: {alerts.length}
-                    </span>
-                  </div>
-                  <div className="mt-4 grid gap-3">
-                    {alerts.length === 0 ? (
-                      <p className="text-sm text-slate-500">
-                        No hay alertas activas.
-                      </p>
-                    ) : (
-                      nextAlert ? (
-                        <div
-                          key={nextAlert.id}
-                          className="rounded-xl border border-slate-200 bg-slate-50 p-4"
-                        >
-                          <div className="flex flex-wrap items-start justify-between gap-3">
-                            <div>
-                              <p className="text-sm font-semibold text-slate-900">
-                                {nextAlert.title}
-                              </p>
-                              <p className="mt-1 text-sm text-slate-600">
-                                {nextAlert.description}
-                              </p>
-                              {nextAlert.reason ? (
-                                <p className="mt-2 text-xs font-semibold text-slate-500">
-                                  No gestionada: {ALERT_REASONS.find((r) => r.value === nextAlert.reason)?.label}
-                                </p>
-                              ) : null}
-                            </div>
-                            <div className="flex flex-wrap gap-2">
-                              <button
-                                type="button"
-                                onClick={() => openResolveModal(nextAlert)}
-                                className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-emerald-500"
-                              >
-                                Gestionada
-                              </button>
-                              <select
-                                value={nextAlert.reason ?? ""}
-                                onChange={(event) =>
-                                  handleAlertReasonChange(
-                                    nextAlert.id,
-                                    event.target.value as AlertReason
-                                  )
-                                }
-                                className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600"
-                              >
-                                <option value="" disabled>
-                                  No gestionada...
-                                </option>
-                                {ALERT_REASONS.map((reason) => (
-                                  <option key={reason.value} value={reason.value}>
-                                    {reason.label}
-                                  </option>
-                                ))}
-                              </select>
-                            </div>
-                          </div>
-                        </div>
-                      ) : null
-                    )}
-                  </div>
-                </div>
-              </div>
-            ) : null}
           </section>
         ) : null}
 
@@ -2513,7 +2570,7 @@ export default function BodegaDashboard() {
                   </h2>
                   <p className="mt-1 text-sm text-slate-600">
                     {canManageAlerts
-                      ? "Revisa y gestiona las alertas activas."
+                      ? "Revisa y asigna las alertas al operario."
                       : "Revisa las alertas activas (solo lectura)."}
                   </p>
                 </div>
@@ -2547,33 +2604,20 @@ export default function BodegaDashboard() {
                           ) : null}
                         </div>
                         {canManageAlerts ? (
-                          <div className="flex flex-wrap gap-2">
+                          <div className="flex flex-wrap items-center gap-2">
+                            {assignedAlertIds.has(alert.id) ? (
+                              <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-800">
+                                Asignada al operario
+                              </span>
+                            ) : null}
                             <button
                               type="button"
-                              onClick={() => openResolveModal(alert)}
-                              className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-emerald-500"
+                              onClick={() => handleAssignAlert(alert)}
+                              disabled={assignedAlertIds.has(alert.id) || getAlertKind(alert) === "otro"}
+                              className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:bg-slate-300"
                             >
-                              Gestionada
+                              Asignar a operario
                             </button>
-                            <select
-                              value={alert.reason ?? ""}
-                              onChange={(event) =>
-                                handleAlertReasonChange(
-                                  alert.id,
-                                  event.target.value as AlertReason
-                                )
-                              }
-                              className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600"
-                            >
-                              <option value="" disabled>
-                                No gestionada...
-                              </option>
-                              {ALERT_REASONS.map((reason) => (
-                                <option key={reason.value} value={reason.value}>
-                                  {reason.label}
-                                </option>
-                              ))}
-                            </select>
                           </div>
                         ) : null}
                       </div>
@@ -2653,6 +2697,172 @@ export default function BodegaDashboard() {
               ))}
             </div>
           </section>
+        ) : null}
+
+        {alertsPanelOpen ? (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4"
+            role="dialog"
+            aria-modal="true"
+            onClick={() => setAlertsPanelOpen(false)}
+          >
+            <div
+              className="w-full max-w-2xl rounded-2xl bg-white p-6 shadow-xl"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.25em] text-slate-400">
+                    Alertas
+                  </p>
+                  <h3 className="mt-2 text-2xl font-semibold text-slate-900">
+                    Alertas activas
+                  </h3>
+                  <p className="mt-1 text-sm text-slate-600">
+                    {canManageAlerts
+                      ? "Revisa y gestiona las alertas activas."
+                      : "Revisa las alertas activas (solo lectura)."}
+                  </p>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
+                    Total: {alerts.length}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setAlertsPanelOpen(false)}
+                    className="rounded-full border border-slate-200 px-3 py-1 text-sm font-semibold text-slate-600 transition hover:bg-slate-50"
+                  >
+                    Cerrar
+                  </button>
+                </div>
+              </div>
+              <div className="mt-6 grid gap-3">
+                {alerts.length === 0 ? (
+                  <p className="text-sm text-slate-500">
+                    No hay alertas activas.
+                  </p>
+                ) : (
+                  alerts.map((alert) => (
+                    <div
+                      key={alert.id}
+                      className="rounded-xl border border-slate-200 bg-slate-50 p-4"
+                    >
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                          <p className="text-sm font-semibold text-slate-900">
+                            {alert.title}
+                          </p>
+                          <p className="mt-1 text-sm text-slate-600">
+                            {alert.description}
+                          </p>
+                          {alert.reason ? (
+                            <p className="mt-2 text-xs font-semibold text-slate-500">
+                              No gestionada: {ALERT_REASONS.find((r) => r.value === alert.reason)?.label}
+                            </p>
+                          ) : null}
+                        </div>
+                        {canManageAlerts ? (
+                          <div className="flex flex-wrap items-center gap-2">
+                            {assignedAlertIds.has(alert.id) ? (
+                              <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-800">
+                                Asignada al operario
+                              </span>
+                            ) : null}
+                            <button
+                              type="button"
+                              onClick={() => handleAssignAlert(alert)}
+                              disabled={assignedAlertIds.has(alert.id) || getAlertKind(alert) === "otro"}
+                              className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:bg-slate-300"
+                            >
+                              Asignar a operario
+                            </button>
+                          </div>
+                        ) : null}
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
+        ) : null}
+
+        {assignedAlertsPanelOpen ? (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4"
+            role="dialog"
+            aria-modal="true"
+            onClick={() => setAssignedAlertsPanelOpen(false)}
+          >
+            <div
+              className="w-full max-w-2xl rounded-2xl bg-white p-6 shadow-xl"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.25em] text-slate-400">
+                    Alertas asignadas
+                  </p>
+                  <h3 className="mt-2 text-2xl font-semibold text-slate-900">
+                    Tareas del jefe
+                  </h3>
+                  <p className="mt-1 text-sm text-slate-600">
+                    Ejecuta las alertas asignadas por el jefe.
+                  </p>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
+                    Total: {assignedAlertsForOperario.length}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setAssignedAlertsPanelOpen(false)}
+                    className="rounded-full border border-slate-200 px-3 py-1 text-sm font-semibold text-slate-600 transition hover:bg-slate-50"
+                  >
+                    Cerrar
+                  </button>
+                </div>
+              </div>
+              <div className="mt-6 grid gap-3">
+                {assignedAlertsForOperario.length === 0 ? (
+                  <p className="text-sm text-slate-500">
+                    No hay alertas asignadas.
+                  </p>
+                ) : (
+                  assignedAlertsForOperario.map(({ assignment, alert }) => (
+                    <div
+                      key={assignment.alertId}
+                      className="rounded-xl border border-slate-200 bg-slate-50 p-4"
+                    >
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                          <p className="text-sm font-semibold text-slate-900">
+                            {alert.title}
+                          </p>
+                          <p className="mt-1 text-sm text-slate-600">
+                            {alert.description}
+                          </p>
+                          <p className="mt-2 text-xs font-semibold text-slate-500">
+                            Asignada por {assignment.assignedBy} · {assignment.assignedAt}
+                          </p>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          <button
+                            type="button"
+                            onClick={() => handleExecuteAssignedAlert(alert)}
+                            className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-emerald-500"
+                          >
+                            {assignment.kind === "reporte" ? "Reprogramar" : "Ejecutar"}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
         ) : null}
 
         {statusModal ? (
@@ -2806,7 +3016,7 @@ export default function BodegaDashboard() {
 
                 {resolveModalAlert.id.startsWith(ALERT_REPORT_PREFIX) ? (
                   <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
-                    Marca el reporte como solucionado.
+                    Reprograma la tarea reportada.
                   </div>
                 ) : null}
               </div>

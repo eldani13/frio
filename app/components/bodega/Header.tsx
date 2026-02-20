@@ -1,9 +1,14 @@
+import { FiAlertTriangle, FiClipboard } from "react-icons/fi";
 import type { HeaderProps } from "../../interfaces/bodega/Header";
 import SearchForm from "./SearchForm";
 
 interface ExtendedHeaderProps extends HeaderProps {
   userDisplayName?: string;
   onLogout?: () => void;
+  alertCount?: number;
+  onAlertsClick?: () => void;
+  listCount?: number;
+  onListClick?: () => void;
 }
 
 export default function Header({
@@ -20,10 +25,36 @@ export default function Header({
   onSearchSubmit,
   userDisplayName,
   onLogout,
+  alertCount,
+  onAlertsClick,
+  listCount,
+  onListClick,
 }: ExtendedHeaderProps) {
   return (
     <header className="relative flex flex-col gap-3">
       <div className="absolute right-0 -top-4 flex items-center gap-3">
+        {onListClick && (listCount ?? 0) > 0 ? (
+          <button
+            type="button"
+            onClick={onListClick}
+            className="flex items-center gap-2 rounded-full bg-amber-500 px-3 py-1 text-xs font-semibold text-white shadow-sm transition hover:bg-amber-400"
+            aria-label="Ver alertas asignadas"
+          >
+            <FiClipboard className="h-4 w-4" />
+            {listCount ?? 0}
+          </button>
+        ) : null}
+        {onAlertsClick && (alertCount ?? 0) > 0 ? (
+          <button
+            type="button"
+            onClick={onAlertsClick}
+            className="flex items-center gap-2 rounded-full bg-rose-600 px-3 py-1 text-xs font-semibold text-white shadow-sm transition hover:bg-rose-500"
+            aria-label="Ver alertas"
+          >
+            <FiAlertTriangle className="h-4 w-4" />
+            {alertCount ?? 0}
+          </button>
+        ) : null}
         {userDisplayName && (
           <span className="text-sm font-semibold text-slate-700">
             {userDisplayName}
