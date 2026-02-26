@@ -1,24 +1,44 @@
+import { FiArchive } from "react-icons/fi";
 import type { SlotsGridProps } from "../../interfaces/bodega/SlotsGrid";
+import type { Role } from "../../interfaces/bodega";
 import SlotCard from "./SlotCard";
+
+type ExtendedSlotsGridProps = SlotsGridProps & {
+  occupiedCount?: number;
+  totalSlots?: number;
+  role?: Role;
+};
 
 export default function SlotsGrid({
   slots,
   selectedPosition,
   onSelect,
   headerActions,
-}: SlotsGridProps) {
+  occupiedCount,
+  totalSlots,
+  role,
+}: ExtendedSlotsGridProps) {
   return (
-    <div className="rounded-2xl bg-white p-4 shadow-sm sm:p-6">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
-        <h2 className="text-base font-semibold text-slate-900 sm:text-lg">
-          Zona de almacenamiento
+    <div className="flex-1 rounded-2xl bg-white p-2 sm:p-4 shadow-md border border-blue-200 w-full">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3 relative">
+        <h2 className="text-sm sm:text-lg font-semibold text-slate-900 mb-2 sm:mb-4 flex items-center gap-1 sm:gap-2">
+          <span className="inline-block">
+            <FiArchive className="w-4 h-4 sm:w-5 sm:h-5 text-cyan-400" />
+          </span>
+          Mapa de Bodega
         </h2>
-        {headerActions ? <div>{headerActions}</div> : null}
+        <div className="flex items-center gap-2 sm:gap-3 ml-auto relative z-10">
+          {headerActions ? <div>{headerActions}</div> : null}
+          {(role === "administrador" || role === "jefe") && typeof occupiedCount === "number" && typeof totalSlots === "number" && (
+            <div className="flex items-center gap-2 bg-blue-50 border border-blue-200 rounded-lg px-3 py-1 shadow text-xs font-semibold text-blue-900">
+              <FiArchive className="w-4 h-4 text-blue-500" />
+              Ocupadas: {occupiedCount} / {totalSlots}
+            </div>
+          )}
+        </div>
       </div>
-      <p className="mt-1 text-xs text-slate-600 sm:text-sm">
-        Selecciona una tarjeta para ver su estado actual.
-      </p>
-      <div className="mt-4 grid gap-3 sm:mt-5 sm:gap-4 sm:grid-cols-2 2xl:grid-cols-3">
+
+      <div className="grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-4">
         {slots.map((slot) => (
           <SlotCard
             key={slot.position}
@@ -27,6 +47,21 @@ export default function SlotsGrid({
             onSelect={onSelect}
           />
         ))}
+      </div>
+      {/* Indicador de estado alineado a la derecha debajo del grid */}
+      <div className="flex justify-end mt-2 sm:mt-4">
+        <div className="flex flex-wrap items-center gap-1 sm:gap-3">
+          <div className="flex items-center gap-1">
+            <span className="w-2 h-2 sm:w-3 sm:h-3 rounded-full bg-cyan-400 inline-block"></span>
+            <span className="text-[10px] sm:text-xs text-slate-600">
+              Ocupada
+            </span>
+          </div>
+          <div className="flex items-center gap-1">
+            <span className="w-2 h-2 sm:w-3 sm:h-3 rounded-full bg-slate-300 inline-block"></span>
+            <span className="text-[10px] sm:text-xs text-slate-600">Vacía</span>
+          </div>
+        </div>
       </div>
     </div>
   );

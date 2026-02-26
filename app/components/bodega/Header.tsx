@@ -1,14 +1,12 @@
-import { FiAlertTriangle, FiClipboard } from "react-icons/fi";
+import { FiArchive, FiLogOut, FiMenu, FiX } from "react-icons/fi";
+import { useState } from "react";
 import type { HeaderProps } from "../../interfaces/bodega/Header";
 import SearchForm from "./SearchForm";
 
 interface ExtendedHeaderProps extends HeaderProps {
   userDisplayName?: string;
   onLogout?: () => void;
-  alertCount?: number;
-  onAlertsClick?: () => void;
-  listCount?: number;
-  onListClick?: () => void;
+  role?: "administrador" | "jefe" | "custodio" | "operario";
 }
 
 export default function Header({
@@ -16,102 +14,120 @@ export default function Header({
   totalSlots,
   dateLabel,
   warehouseId,
-  warehouseName,
-  showIntro = true,
-  showMeta = true,
   canSearch,
   searchValue,
   onSearchChange,
   onSearchSubmit,
   userDisplayName,
   onLogout,
-  alertCount,
-  onAlertsClick,
-  listCount,
-  onListClick,
+  role,
 }: ExtendedHeaderProps) {
+  const [menuOpen, setMenuOpen] = useState(false);
+
   return (
-    <header className="relative flex flex-col gap-3">
-      <div className="absolute right-0 -top-4 flex items-center gap-3">
-        {onListClick && (listCount ?? 0) > 0 ? (
-          <button
-            type="button"
-            onClick={onListClick}
-            className="flex items-center gap-2 rounded-full bg-amber-500 px-3 py-1 text-xs font-semibold text-white shadow-sm transition hover:bg-amber-400"
-            aria-label="Ver alertas asignadas"
-          >
-            <FiClipboard className="h-4 w-4" />
-            {listCount ?? 0}
-          </button>
-        ) : null}
-        {onAlertsClick && (alertCount ?? 0) > 0 ? (
-          <button
-            type="button"
-            onClick={onAlertsClick}
-            className="flex items-center gap-2 rounded-full bg-rose-600 px-3 py-1 text-xs font-semibold text-white shadow-sm transition hover:bg-rose-500"
-            aria-label="Ver alertas"
-          >
-            <FiAlertTriangle className="h-4 w-4" />
-            {alertCount ?? 0}
-          </button>
-        ) : null}
-        {userDisplayName && (
-          <span className="text-sm font-semibold text-slate-700">
-            {userDisplayName}
-          </span>
-        )}
-        {onLogout && (
-          <button
-            className="bg-red-500 hover:bg-red-600 text-white font-semibold py-2 px-4 rounded"
-            onClick={onLogout}
-          >
-            Cerrar sesión
-          </button>
-        )}
-      </div>
-      {/* {showIntro ? (
-        <>
-          <p className="text-sm font-semibold uppercase tracking-[0.3em] text-slate-500">
-            Bodega de frío
-          </p>
-          <h1 className="text-3xl font-semibold text-slate-900 sm:text-4xl">
-            Control de {totalSlots} posiciones
-          </h1>
-          <p className="max-w-2xl text-base text-slate-600">
-            Administra la temperatura y la posición de cada objeto almacenado.
-            Puedes registrar, mover o retirar objetos y buscar por id.
-          </p>
-        </>
-      ) : null} */}
-      <div className="flex flex-wrap items-center gap-3 text-sm text-slate-600">
-        {showMeta ? (
-          <>
-            <span className="rounded-full bg-white px-3 py-1 shadow-sm">
-              Ocupadas: {occupiedCount} / {totalSlots}
+    <header className="w-full bg-white rounded-xl shadow-sm border border-slate-200 px-4 py-2">
+      {/* ===== HEADER DESKTOP ===== */}
+      <div className="hidden md:flex items-center justify-between gap-6">
+        {/* Izquierda: icono + ocupadas */}
+        {/* Ocupadas eliminado, ahora solo en el mapa */}
+
+        {/* Centro: meta */}
+        <div className="flex items-center gap-6 text-sm">
+          <div>
+            <span className="text-xs text-slate-500">ID Bodega</span>
+            <div className="font-semibold">{warehouseId}</div>
+          </div>
+          <div>
+            <span className="text-xs text-slate-500">Fecha</span>
+            <div className="font-semibold">{dateLabel}</div>
+          </div>
+        </div>
+
+        {/* Derecha: acciones */}
+        <div className="flex items-center gap-3">
+          {canSearch &&
+            searchValue !== undefined &&
+            onSearchChange &&
+            onSearchSubmit && (
+              <div className="w-56">
+                <SearchForm
+                  value={searchValue}
+                  onChange={onSearchChange}
+                  onSubmit={onSearchSubmit}
+                />
+              </div>
+            )}
+          <div className="mx-2 h-8 w-px bg-slate-200" />
+          {userDisplayName && (
+            <span className="bg-slate-100 px-3 py-1.5 rounded text-sm font-semibold">
+              {userDisplayName}
             </span>
-            {warehouseId ? (
-              <span className="rounded-full bg-white px-3 py-1 shadow-sm">
-                Id bodega: {warehouseId}
-              </span>
-            ) : null}
-            {warehouseName ? (
-              <span className="rounded-full bg-white px-3 py-1 shadow-sm">
-                Nombre: {warehouseName}
-              </span>
-            ) : null}
-            <span className="rounded-full bg-white px-3 py-1 shadow-sm">
-              Fecha: {dateLabel}
-            </span>
-          </>
-        ) : null}
-        {canSearch && searchValue !== undefined && onSearchChange && onSearchSubmit ? (
-          <SearchForm
-            value={searchValue}
-            onChange={onSearchChange}
-            onSubmit={onSearchSubmit}
-          />
-        ) : null}
+          )}
+
+          {onLogout && (
+            <button
+              onClick={onLogout}
+              className="bg-red-500 hover:bg-red-600 text-white px-3 py-1.5 rounded flex items-center gap-2 text-sm"
+            >
+              <FiLogOut className="w-4 h-4" />
+              Cerrar sesión
+            </button>
+          )}
+        </div>
       </div>
+
+      {/* ===== HEADER MÓVIL ===== */}
+      <div className="md:hidden flex items-center justify-between">
+        {/* Ocupadas eliminado, ahora solo en el mapa */}
+
+        <button
+          onClick={() => setMenuOpen(!menuOpen)}
+          className="p-2 rounded-lg hover:bg-slate-100"
+        >
+          {menuOpen ? <FiX size={20} /> : <FiMenu size={20} />}
+        </button>
+      </div>
+
+      {/* ===== MENÚ MÓVIL ===== */}
+      {menuOpen && (
+        <div className="md:hidden mt-4 border-t pt-4 flex flex-col gap-4">
+          <div className="flex gap-6 text-sm">
+            <div>
+              <span className="text-xs text-slate-500">ID Bodega</span>
+              <div className="font-semibold">{warehouseId}</div>
+            </div>
+            <div>
+              <span className="text-xs text-slate-500">Fecha</span>
+              <div className="font-semibold">{dateLabel}</div>
+            </div>
+          </div>
+          {/* Ocupadas eliminado, ahora solo en el mapa */}
+          {canSearch &&
+            searchValue !== undefined &&
+            onSearchChange &&
+            onSearchSubmit && (
+              <SearchForm
+                value={searchValue}
+                onChange={onSearchChange}
+                onSubmit={onSearchSubmit}
+              />
+            )}
+          {userDisplayName && (
+            <span className="bg-slate-100 px-3 py-2 rounded font-semibold text-sm">
+              {userDisplayName}
+            </span>
+          )}
+          {onLogout && (
+            <button
+              onClick={onLogout}
+              className="bg-red-500 text-white px-4 py-2 rounded flex items-center gap-2"
+            >
+              <FiLogOut />
+              Cerrar sesión
+            </button>
+          )}
+        </div>
+      )}
     </header>
   );
 }

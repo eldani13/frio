@@ -1,4 +1,13 @@
 "use client";
+import React from "react";
+import EstadoBodegaSection from "./BodegaDashboard/EstadoBodegaSection";
+import IngresosSection from "./BodegaDashboard/IngresosSection";
+import OrdenesJefeSection from "./BodegaDashboard/OrdenesJefeSection";
+import DespachadosSection from "./BodegaDashboard/DespachadosSection";
+import ReportesSection from "./BodegaDashboard/ReportesSection";
+
+
+import { FiArchive, FiBox, FiRepeat, FiSearch } from "react-icons/fi";
 const noop = () => {};
 
 // --- USUARIOS Y SESION ---
@@ -148,7 +157,7 @@ const padNumber = (value: number, length: number) =>
 const getDateStamp = (date: Date) =>
   `${date.getFullYear()}${padNumber(date.getMonth() + 1, 2)}${padNumber(
     date.getDate(),
-    2
+    2,
   )}`;
 
 const createAutoId = (prefix: string) => {
@@ -184,8 +193,7 @@ const normalizeSlots = (value: unknown): Slot[] | null => {
     }
 
     const legacyName = typeof record.itemId === "string" ? record.itemId : "";
-    const normalizedName =
-      typeof name === "string" ? name : legacyName ?? "";
+    const normalizedName = typeof name === "string" ? name : (legacyName ?? "");
     const normalizedAutoId =
       typeof autoId === "string"
         ? autoId
@@ -311,7 +319,7 @@ const normalizeOrders = (value: unknown): BodegaOrder[] | null => {
       targetPosition,
       createdAt,
       createdAtMs: normalizedCreatedAtMs,
-      createdBy: isValidRole(createdBy) ? createdBy as Role : "custodio",
+      createdBy: isValidRole(createdBy) ? (createdBy as Role) : "custodio",
     });
   }
 
@@ -352,8 +360,29 @@ const getNextSalidaPosition = (boxes: Box[], reserved?: Set<number>) => {
   return next;
 };
 
-
 export default function BodegaDashboard() {
+  // ...existing code...
+  const [selectedBoxModal, setSelectedBoxModal] = useState<Box | Slot | null>(
+    null,
+  );
+  const [selectedOutboundIdx, setSelectedOutboundIdx] = React.useState(0);
+  // State for editing temperature modal
+  const [editTempModal, setEditTempModal] = useState<{
+    position: number;
+    autoId: string;
+    name: string;
+    temperature: number | null;
+  } | null>(null);
+  // ...existing code...
+  // Modal state for jefe action cards
+  const [orderModalType, setOrderModalType] = React.useState<string | null>(
+    null,
+  );
+  // ...otros hooks y lógica...
+  // Estado para modal de detalle de reportes (debe ir aquí, después de otros hooks)
+  const [reportDetailModal, setReportDetailModal] = useState<null | {
+    type: "ingresos" | "salidas";
+  }>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [isHydrated, setIsHydrated] = useState(false);
   const [dateLabel, setDateLabel] = useState("");
@@ -380,7 +409,7 @@ export default function BodegaDashboard() {
   // Define handleLogin function after useState declarations so it can access loginUser and loginPassword
   const handleLogin = () => {
     const user = USERS.find(
-      (u) => u.username === loginUser && u.password === loginPassword
+      (u) => u.username === loginUser && u.password === loginPassword,
     );
     if (!user) {
       setLoginError("Usuario o contraseña incorrectos.");
@@ -413,14 +442,13 @@ export default function BodegaDashboard() {
   const [alerts, setAlerts] = useState<AlertItem[]>([]);
   const [assignedAlerts, setAssignedAlerts] = useState<AlertAssignment[]>([]);
   const [alertClock, setAlertClock] = useState(() => Date.now());
-  const [statusModal, setStatusModal] = useState<
-    | {
-        zone: ZoneKey;
-        kind: ModalKind;
-      }
-    | null
-  >(null);
-  const [resolveModalAlert, setResolveModalAlert] = useState<AlertItem | null>(null);
+  const [statusModal, setStatusModal] = useState<{
+    zone: ZoneKey;
+    kind: ModalKind;
+  } | null>(null);
+  const [resolveModalAlert, setResolveModalAlert] = useState<AlertItem | null>(
+    null,
+  );
   const [alertsPanelOpen, setAlertsPanelOpen] = useState(false);
   const [assignedAlertsPanelOpen, setAssignedAlertsPanelOpen] = useState(false);
   const [tempFixZone, setTempFixZone] = useState<OrderSource>("ingresos");
@@ -606,31 +634,41 @@ export default function BodegaDashboard() {
     const handleStorage = (event: StorageEvent) => {
       try {
         if (event.key === SLOTS_STORAGE_KEY) {
-          const normalized = normalizeSlots(event.newValue ? JSON.parse(event.newValue) : []);
+          const normalized = normalizeSlots(
+            event.newValue ? JSON.parse(event.newValue) : [],
+          );
           if (normalized) {
             setSlots(normalized);
           }
         }
         if (event.key === INBOUND_STORAGE_KEY) {
-          const normalized = normalizeBoxes(event.newValue ? JSON.parse(event.newValue) : []);
+          const normalized = normalizeBoxes(
+            event.newValue ? JSON.parse(event.newValue) : [],
+          );
           if (normalized) {
             setInboundBoxes(normalized);
           }
         }
         if (event.key === OUTBOUND_STORAGE_KEY) {
-          const normalized = normalizeBoxes(event.newValue ? JSON.parse(event.newValue) : []);
+          const normalized = normalizeBoxes(
+            event.newValue ? JSON.parse(event.newValue) : [],
+          );
           if (normalized) {
             setOutboundBoxes(normalized);
           }
         }
         if (event.key === DISPATCHED_STORAGE_KEY) {
-          const normalized = normalizeBoxes(event.newValue ? JSON.parse(event.newValue) : []);
+          const normalized = normalizeBoxes(
+            event.newValue ? JSON.parse(event.newValue) : [],
+          );
           if (normalized) {
             setDispatchedBoxes(normalized);
           }
         }
         if (event.key === ORDERS_STORAGE_KEY) {
-          const normalized = normalizeOrders(event.newValue ? JSON.parse(event.newValue) : []);
+          const normalized = normalizeOrders(
+            event.newValue ? JSON.parse(event.newValue) : [],
+          );
           if (normalized) {
             setOrders(normalized);
           }
@@ -688,7 +726,7 @@ export default function BodegaDashboard() {
     try {
       localStorage.setItem(
         DISPATCHED_STORAGE_KEY,
-        JSON.stringify(dispatchedBoxes)
+        JSON.stringify(dispatchedBoxes),
       );
     } catch {
       // ignore storage errors
@@ -730,17 +768,18 @@ export default function BodegaDashboard() {
 
   const occupiedCount = useMemo(
     () => slots.filter((slot) => slot.autoId.trim() !== "").length,
-    [slots]
+    [slots],
   );
 
   const selectedSlot = useMemo(
     () => slots.find((slot) => slot.position === selectedPosition) ?? null,
-    [slots, selectedPosition]
+    [slots, selectedPosition],
   );
 
   const freeSlots = useMemo(
-    () => slots.filter((slot) => !slot.autoId.trim()).map((slot) => slot.position),
-    [slots]
+    () =>
+      slots.filter((slot) => !slot.autoId.trim()).map((slot) => slot.position),
+    [slots],
   );
 
   const reservedBodegaTargets = useMemo(() => {
@@ -771,7 +810,7 @@ export default function BodegaDashboard() {
 
   const availableBodegaTargets = useMemo(
     () => freeSlots.filter((position) => !reservedBodegaTargets.has(position)),
-    [freeSlots, reservedBodegaTargets]
+    [freeSlots, reservedBodegaTargets],
   );
 
   const bodegaBoxes = useMemo(
@@ -784,7 +823,7 @@ export default function BodegaDashboard() {
           name: slot.name,
           temperature: slot.temperature ?? 0,
         })),
-    [slots]
+    [slots],
   );
 
   const pendingSourceKeys = useMemo(() => {
@@ -798,30 +837,30 @@ export default function BodegaDashboard() {
   const availableInboundForOrders = useMemo(
     () =>
       inboundBoxes.filter(
-        (box) => !pendingSourceKeys.has(`ingresos:${box.position}`)
+        (box) => !pendingSourceKeys.has(`ingresos:${box.position}`),
       ),
-    [inboundBoxes, pendingSourceKeys]
+    [inboundBoxes, pendingSourceKeys],
   );
 
   const availableBodegaForOrders = useMemo(
     () =>
       bodegaBoxes.filter(
-        (box) => !pendingSourceKeys.has(`bodega:${box.position}`)
+        (box) => !pendingSourceKeys.has(`bodega:${box.position}`),
       ),
-    [bodegaBoxes, pendingSourceKeys]
+    [bodegaBoxes, pendingSourceKeys],
   );
 
   const reviewBodegaList = useMemo(
     () => availableBodegaForOrders,
-    [availableBodegaForOrders]
+    [availableBodegaForOrders],
   );
 
   const availableOutboundForReview = useMemo(
     () =>
       outboundBoxes.filter(
-        (box) => !pendingSourceKeys.has(`salida:${box.position}`)
+        (box) => !pendingSourceKeys.has(`salida:${box.position}`),
       ),
-    [outboundBoxes, pendingSourceKeys]
+    [outboundBoxes, pendingSourceKeys],
   );
 
   const reportData = useMemo(
@@ -839,7 +878,7 @@ export default function BodegaDashboard() {
         fill: "#0ea5e9",
       },
     ],
-    [dispatchedBoxes.length, stats]
+    [dispatchedBoxes.length, stats],
   );
 
   const zoneLabels: Record<ZoneKey, string> = {
@@ -867,18 +906,18 @@ export default function BodegaDashboard() {
 
   const inboundHighBoxes = useMemo(
     () => inboundBoxes.filter((box) => box.temperature > 5),
-    [inboundBoxes]
+    [inboundBoxes],
   );
   const outboundHighBoxes = useMemo(
     () => outboundBoxes.filter((box) => box.temperature > 5),
-    [outboundBoxes]
+    [outboundBoxes],
   );
   const bodegaHighSlots = useMemo(
     () =>
       slots.filter(
-        (slot) => typeof slot.temperature === "number" && slot.temperature > 5
+        (slot) => typeof slot.temperature === "number" && slot.temperature > 5,
       ),
-    [slots]
+    [slots],
   );
 
   const tempFixOptions = useMemo(() => {
@@ -927,7 +966,7 @@ export default function BodegaDashboard() {
 
   const assignedAlertIds = useMemo(
     () => new Set(assignedAlerts.map((assignment) => assignment.alertId)),
-    [assignedAlerts]
+    [assignedAlerts],
   );
 
   const assignedAlertsForOperario = useMemo(
@@ -938,20 +977,18 @@ export default function BodegaDashboard() {
           alert: alerts.find((item) => item.id === assignment.alertId) ?? null,
         }))
         .filter(
-          (
-            item
-          ): item is { assignment: AlertAssignment; alert: AlertItem } =>
-            item.alert !== null
+          (item): item is { assignment: AlertAssignment; alert: AlertItem } =>
+            item.alert !== null,
         ),
-    [alerts, assignedAlerts]
+    [alerts, assignedAlerts],
   );
   const nextAlert = alerts[0] ?? null;
   const overdueOrders = useMemo(
     () =>
       orders.filter(
-        (order) => alertClock - order.createdAtMs >= ALERT_DELAY_MS
+        (order) => alertClock - order.createdAtMs >= ALERT_DELAY_MS,
       ),
-    [alertClock, orders]
+    [alertClock, orders],
   );
 
   const zoneAlertItems = useMemo(() => {
@@ -1072,7 +1109,7 @@ export default function BodegaDashboard() {
       bodegaHighSlots.length > 0;
 
     const overdueOrders = orders.filter(
-      (order) => alertClock - order.createdAtMs >= ALERT_DELAY_MS
+      (order) => alertClock - order.createdAtMs >= ALERT_DELAY_MS,
     );
 
     setAlerts((prev) => {
@@ -1084,15 +1121,15 @@ export default function BodegaDashboard() {
         const tempDetails = [
           ...inboundHighBoxes.map(
             (box) =>
-              `Ingreso ${box.position} · ${box.name} (${box.autoId}) · ${box.temperature} °C`
+              `Ingreso ${box.position} · ${box.name} (${box.autoId}) · ${box.temperature} °C`,
           ),
           ...bodegaHighSlots.map(
             (slot) =>
-              `Bodega ${slot.position} · ${slot.name} (${slot.autoId}) · ${slot.temperature} °C`
+              `Bodega ${slot.position} · ${slot.name} (${slot.autoId}) · ${slot.temperature} °C`,
           ),
           ...outboundHighBoxes.map(
             (box) =>
-              `Salida ${box.position} · ${box.name} (${box.autoId}) · ${box.temperature} °C`
+              `Salida ${box.position} · ${box.name} (${box.autoId}) · ${box.temperature} °C`,
           ),
         ];
         next.push(
@@ -1100,7 +1137,7 @@ export default function BodegaDashboard() {
             id: ALERT_TEMPERATURE_ID,
             title: "Temperatura alta",
             description: `Temperaturas > 5 °C: ${tempDetails.join(" | ")}.`,
-          }
+          },
         );
       }
 
@@ -1130,7 +1167,7 @@ export default function BodegaDashboard() {
             id: alertId,
             title: "Tarea demorada",
             description: `Orden pendiente por mas de 2 minutos: ${orderLabel}. Solicitado por ${order.createdBy} · ${order.createdAt}.`,
-          }
+          },
         );
       }
 
@@ -1159,7 +1196,7 @@ export default function BodegaDashboard() {
     }
     if (
       !availableBodegaForOrders.some(
-        (box) => box.position === bodegaOrderSourcePosition
+        (box) => box.position === bodegaOrderSourcePosition,
       )
     ) {
       setBodegaOrderSourcePosition(availableBodegaForOrders[0].position);
@@ -1173,7 +1210,7 @@ export default function BodegaDashboard() {
     }
     if (
       !availableInboundForOrders.some(
-        (box) => box.position === ingresoOrderSourcePosition
+        (box) => box.position === ingresoOrderSourcePosition,
       )
     ) {
       setIngresoOrderSourcePosition(availableInboundForOrders[0].position);
@@ -1189,10 +1226,7 @@ export default function BodegaDashboard() {
     if (!reviewList.some((box) => box.position === reviewSourcePosition)) {
       setReviewSourcePosition(reviewList[0].position);
     }
-  }, [
-    reviewSourcePosition,
-    reviewBodegaList,
-  ]);
+  }, [reviewSourcePosition, reviewBodegaList]);
 
   useEffect(() => {
     if (reviewSourceZone !== "bodega") {
@@ -1220,7 +1254,7 @@ export default function BodegaDashboard() {
 
   useEffect(() => {
     setSalidaTargetPosition(
-      getNextSalidaPosition(outboundBoxes, reservedSalidaTargets)
+      getNextSalidaPosition(outboundBoxes, reservedSalidaTargets),
     );
   }, [outboundBoxes, reservedSalidaTargets]);
 
@@ -1229,7 +1263,11 @@ export default function BodegaDashboard() {
       setSalidaSourcePosition(1);
       return;
     }
-    if (!availableBodegaForOrders.some((box) => box.position === salidaSourcePosition)) {
+    if (
+      !availableBodegaForOrders.some(
+        (box) => box.position === salidaSourcePosition,
+      )
+    ) {
       setSalidaSourcePosition(availableBodegaForOrders[0].position);
     }
   }, [availableBodegaForOrders, salidaSourcePosition]);
@@ -1273,7 +1311,7 @@ export default function BodegaDashboard() {
 
     const newBox: Box = {
       position: nextPosition,
-      autoId: createAutoId("BOX"),
+      autoId: createAutoId("CAJ"),
       name: ingresoName.trim(),
       temperature: parsedTemp,
     };
@@ -1310,7 +1348,7 @@ export default function BodegaDashboard() {
     }
 
     const box = sourceList.find(
-      (item) => item.position === effectiveSourcePosition
+      (item) => item.position === effectiveSourcePosition,
     );
     if (!box) {
       setMessage("Selecciona una caja valida.");
@@ -1325,7 +1363,7 @@ export default function BodegaDashboard() {
     } else {
       const salidaPosition = getNextSalidaPosition(
         outboundBoxes,
-        reservedSalidaTargets
+        reservedSalidaTargets,
       );
       if (salidaPosition <= 0) {
         setMessage("Ingresa una posicion de salida valida.");
@@ -1353,7 +1391,9 @@ export default function BodegaDashboard() {
     setMessage("Orden creada correctamente.");
     if (role === "jefe") {
       setBodegaOrderSourcePosition(availableBodegaForOrders[0]?.position ?? 1);
-      setIngresoOrderSourcePosition(availableInboundForOrders[0]?.position ?? 1);
+      setIngresoOrderSourcePosition(
+        availableInboundForOrders[0]?.position ?? 1,
+      );
       setBodegaOrderTargetPosition(availableBodegaTargets[0] ?? 1);
       setIngresoOrderTargetPosition(availableBodegaTargets[0] ?? 1);
     }
@@ -1372,7 +1412,7 @@ export default function BodegaDashboard() {
     }
 
     const box = reviewList.find(
-      (item) => item.position === reviewSourcePosition
+      (item) => item.position === reviewSourcePosition,
     );
     if (!box) {
       setMessage("Selecciona una caja valida.");
@@ -1406,21 +1446,21 @@ export default function BodegaDashboard() {
 
     const sourceIsBodega = order.sourceZone === "bodega";
     const boxFromIngreso = inboundBoxes.find(
-      (item) => item.position === order.sourcePosition
+      (item) => item.position === order.sourcePosition,
     );
     const boxFromBodega = slots.find(
-      (item) => item.position === order.sourcePosition
+      (item) => item.position === order.sourcePosition,
     );
 
     if (order.type === "revisar") {
       const existsInIngreso = inboundBoxes.some(
-        (item) => item.position === order.sourcePosition
+        (item) => item.position === order.sourcePosition,
       );
       const existsInBodega = slots.some(
-        (item) => item.position === order.sourcePosition && item.autoId.trim()
+        (item) => item.position === order.sourcePosition && item.autoId.trim(),
       );
       const existsInSalida = outboundBoxes.some(
-        (item) => item.position === order.sourcePosition
+        (item) => item.position === order.sourcePosition,
       );
       if (
         (order.sourceZone === "ingresos" && !existsInIngreso) ||
@@ -1459,14 +1499,14 @@ export default function BodegaDashboard() {
         return;
       }
       const boxAutoId = sourceIsBodega
-        ? boxFromBodega?.autoId ?? ""
-        : boxFromIngreso?.autoId ?? "";
+        ? (boxFromBodega?.autoId ?? "")
+        : (boxFromIngreso?.autoId ?? "");
       const boxName = sourceIsBodega
-        ? boxFromBodega?.name ?? ""
-        : boxFromIngreso?.name ?? "";
+        ? (boxFromBodega?.name ?? "")
+        : (boxFromIngreso?.name ?? "");
       const boxTemp = sourceIsBodega
-        ? boxFromBodega?.temperature ?? 0
-        : boxFromIngreso?.temperature ?? 0;
+        ? (boxFromBodega?.temperature ?? 0)
+        : (boxFromIngreso?.temperature ?? 0);
       setSlots((prev) =>
         prev.map((item) =>
           item.position === target
@@ -1476,8 +1516,8 @@ export default function BodegaDashboard() {
                 name: boxName,
                 temperature: boxTemp,
               }
-            : item
-        )
+            : item,
+        ),
       );
       setStats((prev) => ({
         ...prev,
@@ -1503,14 +1543,14 @@ export default function BodegaDashboard() {
       }
 
       const boxAutoId = sourceIsBodega
-        ? boxFromBodega?.autoId ?? ""
-        : boxFromIngreso?.autoId ?? "";
+        ? (boxFromBodega?.autoId ?? "")
+        : (boxFromIngreso?.autoId ?? "");
       const boxName = sourceIsBodega
-        ? boxFromBodega?.name ?? ""
-        : boxFromIngreso?.name ?? "";
+        ? (boxFromBodega?.name ?? "")
+        : (boxFromIngreso?.name ?? "");
       const boxTemp = sourceIsBodega
-        ? boxFromBodega?.temperature ?? 0
-        : boxFromIngreso?.temperature ?? 0;
+        ? (boxFromBodega?.temperature ?? 0)
+        : (boxFromIngreso?.temperature ?? 0);
 
       setOutboundBoxes((prev) =>
         sortByPosition([
@@ -1521,7 +1561,7 @@ export default function BodegaDashboard() {
             temperature: boxTemp,
           },
           ...prev,
-        ])
+        ]),
       );
       setStats((prev) => ({ ...prev, salidas: prev.salidas + 1 }));
     }
@@ -1531,12 +1571,12 @@ export default function BodegaDashboard() {
         prev.map((item) =>
           item.position === order.sourcePosition
             ? { ...item, autoId: "", name: "", temperature: null }
-            : item
-        )
+            : item,
+        ),
       );
     } else {
       setInboundBoxes((prev) =>
-        prev.filter((item) => item.position !== order.sourcePosition)
+        prev.filter((item) => item.position !== order.sourcePosition),
       );
     }
     setOrders((prev) => prev.filter((item) => item.id !== orderId));
@@ -1551,23 +1591,21 @@ export default function BodegaDashboard() {
     }
 
     const ingreso = inboundBoxes.find(
-      (box) => box.autoId === id || box.name === id
+      (box) => box.autoId === id || box.name === id,
     );
     if (ingreso) {
       setMessage(`El id ${id} esta en ingresos ${ingreso.position}.`);
       return;
     }
 
-    const bodega = slots.find(
-      (slot) => slot.autoId === id || slot.name === id
-    );
+    const bodega = slots.find((slot) => slot.autoId === id || slot.name === id);
     if (bodega) {
       setMessage(`El id ${id} esta en bodega ${bodega.position}.`);
       return;
     }
 
     const salida = outboundBoxes.find(
-      (box) => box.autoId === id || box.name === id
+      (box) => box.autoId === id || box.name === id,
     );
     if (salida) {
       setMessage(`El id ${id} esta en salida ${salida.position}.`);
@@ -1589,7 +1627,9 @@ export default function BodegaDashboard() {
       return;
     }
 
-    setOutboundBoxes((prev) => prev.filter((item) => item.position !== position));
+    setOutboundBoxes((prev) =>
+      prev.filter((item) => item.position !== position),
+    );
     setDispatchedBoxes((prev) => sortByPosition([box, ...prev]));
     setMessage(`Caja en salida ${position} enviada.`);
   };
@@ -1675,8 +1715,8 @@ export default function BodegaDashboard() {
                 createdAt: new Date().toLocaleString("es-CO"),
                 createdAtMs: Date.now(),
               }
-            : order
-        )
+            : order,
+        ),
       );
       handleResolveAlert(alert.id);
       setMessage("Tarea reprogramada y alerta gestionada.");
@@ -1689,7 +1729,7 @@ export default function BodegaDashboard() {
   const handleResolveAlert = (alertId: string) => {
     setAlerts((prev) => prev.filter((alert) => alert.id !== alertId));
     setAssignedAlerts((prev) =>
-      prev.filter((assignment) => assignment.alertId !== alertId)
+      prev.filter((assignment) => assignment.alertId !== alertId),
     );
   };
 
@@ -1722,24 +1762,24 @@ export default function BodegaDashboard() {
           prev.map((box) =>
             box.position === tempFixPosition
               ? { ...box, temperature: parsedTemp }
-              : box
-          )
+              : box,
+          ),
         );
       } else if (tempFixZone === "salida") {
         setOutboundBoxes((prev) =>
           prev.map((box) =>
             box.position === tempFixPosition
               ? { ...box, temperature: parsedTemp }
-              : box
-          )
+              : box,
+          ),
         );
       } else {
         setSlots((prev) =>
           prev.map((slot) =>
             slot.position === tempFixPosition
               ? { ...slot, temperature: parsedTemp }
-              : slot
-          )
+              : slot,
+          ),
         );
       }
 
@@ -1759,8 +1799,8 @@ export default function BodegaDashboard() {
                 createdAt: new Date().toLocaleString("es-CO"),
                 createdAtMs: Date.now(),
               }
-            : order
-        )
+            : order,
+        ),
       );
       setMessage("Tarea reprogramada.");
       handleResolveAlert(resolveModalAlert.id);
@@ -1779,8 +1819,8 @@ export default function BodegaDashboard() {
                   createdAt: new Date().toLocaleString("es-CO"),
                   createdAtMs: Date.now(),
                 }
-              : order
-          )
+              : order,
+          ),
         );
         setMessage("Tarea reprogramada.");
       } else {
@@ -1818,7 +1858,7 @@ export default function BodegaDashboard() {
         { key: "alertas", label: "Gestion de alertas", visible: false },
         { key: "reportes", label: "Reportes", visible: isAdmin },
       ].filter((tab) => tab.visible),
-    [isAdmin, isCustodio, isOperario, isJefe, canUseOrderForm]
+    [isAdmin, isCustodio, isOperario, isJefe, canUseOrderForm],
   );
 
   useEffect(() => {
@@ -1862,6 +1902,22 @@ export default function BodegaDashboard() {
     );
   }
 
+  function handleUpdateBoxTemperature(position: number, newTemp: number) {
+    // Actualiza la temperatura de la caja/slot en el estado correspondiente
+    // Puedes adaptar esto según cómo se gestionen los datos en tu app
+    setSlots((prev) =>
+      prev.map((slot) =>
+        slot.position === position ? { ...slot, temperature: newTemp } : slot,
+      ),
+    );
+    setSelectedBoxModal((prev) =>
+      prev && prev.position === position
+        ? { ...prev, temperature: newTemp }
+        : prev,
+    );
+    setMessage("Temperatura actualizada");
+  }
+
   return (
     <div className="min-h-screen bg-slate-50 px-6 py-10 text-slate-900">
       <main className="mx-auto flex w-full max-w-6xl flex-col gap-8">
@@ -1879,12 +1935,8 @@ export default function BodegaDashboard() {
           onSearchSubmit={handleSearch}
           userDisplayName={session?.displayName}
           onLogout={handleLogout}
-          alertCount={isJefe ? alerts.length : undefined}
-          onAlertsClick={isJefe ? () => setAlertsPanelOpen(true) : undefined}
-          listCount={isOperario ? assignedAlertsForOperario.length : undefined}
-          onListClick={isOperario ? () => setAssignedAlertsPanelOpen(true) : undefined}
+          role={role}
         />
-
         {isAdmin ? (
           <WarehouseSelector
             role={role}
@@ -1917,527 +1969,71 @@ export default function BodegaDashboard() {
         ) : null}
 
         {activeTab === "estado" && canSeeBodega ? (
-          <section className="grid gap-6 xl:grid-cols-[1fr_1.8fr_1fr] 2xl:grid-cols-[1fr_2.1fr_1fr]">
-            <div className="min-w-0 rounded-2xl bg-white p-6 shadow-sm">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <h2 className="text-lg font-semibold text-slate-900">Entrada</h2>
-                <div className="flex flex-wrap items-center gap-2">
-                  {renderStatusButtons("entrada")}
-                  <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
-                    {inboundBoxes.length} cajas
-                  </span>
-                </div>
-              </div>
-              {/* <p className="mt-1 text-sm text-slate-600">
-                Cajas registradas en ingresos.
-              </p> */}
-              <div className="mt-4 grid gap-3">
-                {inboundBoxes.length === 0 ? (
-                  <p className="text-sm text-slate-500">
-                    No hay cajas en ingresos.
-                  </p>
-                ) : (
-                  sortByPosition(inboundBoxes).map((box) => (
-                    <div
-                      key={`estado-ingreso-${box.position}`}
-                      className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700"
-                    >
-                      <p className="font-semibold">Ingreso {box.position}</p>
-                      <p>Id unico: {box.autoId}</p>
-                      <p>Nombre: {box.name}</p>
-                      <p>Temperatura: {box.temperature} °C</p>
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
-
-            <div className="min-w-0 flex flex-col gap-4">
-              <SlotsGrid
-                slots={slots}
-                selectedPosition={selectedPosition}
-                onSelect={handleSelectSlot}
-                headerActions={renderStatusButtons("bodega")}
-              />
-              <SelectedSlotCard
-                slot={selectedSlot}
-                onClose={() => setSelectedPosition(null)}
-                onSave={() => undefined}
-                canEdit={false}
-              />
-            </div>
-
-            <div className="min-w-0 rounded-2xl bg-white p-6 shadow-sm">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <h2 className="text-lg font-semibold text-slate-900">Salida</h2>
-                <div className="flex flex-wrap items-center gap-2">
-                  {renderStatusButtons("salida")}
-                  <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
-                    {outboundBoxes.length} cajas
-                  </span>
-                </div>
-              </div>
-              {/* <p className="mt-1 text-sm text-slate-600">
-                Cajas despachadas por el operario.
-              </p> */}
-              <div className="mt-4 grid gap-3">
-                {outboundBoxes.length === 0 ? (
-                  <p className="text-sm text-slate-500">
-                    No hay cajas en salida.
-                  </p>
-                ) : (
-                  sortByPosition(outboundBoxes).map((box) => (
-                    <div
-                      key={`estado-salida-${box.position}`}
-                      className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700"
-                    >
-                      <p className="font-semibold">Salida {box.position}</p>
-                      <p>Id unico: {box.autoId}</p>
-                      <p>Nombre: {box.name}</p>
-                      <p>Temperatura: {box.temperature} °C</p>
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
-          </section>
+          <EstadoBodegaSection
+            inboundBoxes={inboundBoxes}
+            slots={slots}
+            selectedPosition={selectedPosition}
+            handleSelectSlot={handleSelectSlot}
+            renderStatusButtons={renderStatusButtons}
+            selectedSlot={selectedSlot}
+            setSelectedPosition={setSelectedPosition}
+            outboundBoxes={outboundBoxes}
+            sortByPosition={sortByPosition}
+          />
         ) : null}
 
         {activeTab === "ingresos" ? (
-          isCustodio ? (
-            <section className="grid gap-4 lg:grid-cols-[1.5fr_1fr]">
-              <div className="flex flex-col gap-4">
-                {canUseIngresoForm ? (
-                  <div className="rounded-2xl bg-white p-6 shadow-sm">
-                    <h2 className="text-lg font-semibold text-slate-900">
-                      Ingreso de cajas
-                    </h2>
-                    {/* <p className="mt-1 text-sm text-slate-600">
-                      Registra nuevas cajas en la zona de ingresos.
-                    </p> */}
-                    <div className="mt-4 grid gap-3">
-                      <label className="text-sm font-medium text-slate-600">
-                        Orden de posicion
-                      </label>
-                      <input
-                        value={ingresoPosition}
-                        type="number"
-                        readOnly
-                        className="w-full rounded-lg border border-slate-200 bg-slate-100 px-3 py-2 text-sm text-slate-600"
-                      />
-                      <label className="text-sm font-medium text-slate-600">
-                        Nombre de la caja
-                      </label>
-                      <input
-                        value={ingresoName}
-                        onChange={(event) => setIngresoName(event.target.value)}
-                        className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
-                        placeholder="Ej: Caja banano"
-                      />
-                      <label className="text-sm font-medium text-slate-600">
-                        Temperatura (°C)
-                      </label>
-                      <input
-                        value={ingresoTemp}
-                        onChange={(event) => setIngresoTemp(event.target.value)}
-                        type="number"
-                        className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
-                        placeholder="Ej: -8"
-                      />
-                      <button
-                        type="button"
-                        onClick={handleIngreso}
-                        className="mt-2 rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800"
-                      >
-                        Registrar ingreso
-                      </button>
-                    </div>
-                  </div>
-                ) : null}
-
-                <div className="rounded-2xl bg-white p-6 shadow-sm">
-                  <div className="flex items-center justify-between">
-                    <h2 className="text-lg font-semibold text-slate-900">
-                      Zona de ingresos
-                    </h2>
-                    <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
-                      {inboundBoxes.length} cajas
-                    </span>
-                  </div>
-                  {/* <p className="mt-1 text-sm text-slate-600">
-                    Cajas registradas por el custodio.
-                  </p> */}
-                  <div className="mt-4 grid gap-3">
-                    {inboundBoxes.length === 0 ? (
-                      <p className="text-sm text-slate-500">
-                        No hay cajas en ingresos.
-                      </p>
-                    ) : (
-                      sortByPosition(inboundBoxes).map((box) => (
-                        <div
-                          key={`ingreso-${box.position}`}
-                          className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700"
-                        >
-                          <p className="font-semibold">Ingreso {box.position}</p>
-                          <p>Id unico: {box.autoId}</p>
-                          <p>Nombre: {box.name}</p>
-                          <p>Temperatura: {box.temperature} °C</p>
-                        </div>
-                      ))
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              <div className="rounded-2xl bg-white p-6 shadow-sm">
-                <div className="flex items-center justify-between">
-                  <h2 className="text-lg font-semibold text-slate-900">
-                    Zona de salida
-                  </h2>
-                  <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
-                    {outboundBoxes.length} cajas
-                  </span>
-                </div>
-                {/* <p className="mt-1 text-sm text-slate-600">
-                  Cajas listas para enviar.
-                </p> */}
-                <div className="mt-4 grid gap-3">
-                  {outboundBoxes.length === 0 ? (
-                    <p className="text-sm text-slate-500">
-                      No hay cajas en salida.
-                    </p>
-                  ) : (
-                    sortByPosition(outboundBoxes).map((box) => (
-                      <div
-                        key={`ingreso-salida-${box.position}`}
-                        className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700"
-                      >
-                        <div className="flex items-start justify-between gap-3">
-                          <div>
-                            <p className="font-semibold">Salida {box.position}</p>
-                            <p>Id unico: {box.autoId}</p>
-                            <p>Nombre: {box.name}</p>
-                            <p>Temperatura: {box.temperature} °C</p>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => handleDispatchBox(box.position)}
-                            className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-emerald-500"
-                          >
-                            Enviar
-                          </button>
-                        </div>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </div>
-            </section>
-          ) : (
-            <section className="grid gap-4 lg:grid-cols-3">
-              {isAdmin ? (
-                <div className="rounded-2xl bg-white p-6 shadow-sm">
-                  <div className="flex items-center justify-between">
-                    <h2 className="text-lg font-semibold text-slate-900">
-                      Zona de ingresos
-                    </h2>
-                    <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
-                      {inboundBoxes.length} cajas
-                    </span>
-                  </div>
-                  <p className="mt-1 text-sm text-slate-600">
-                    Cajas registradas por el custodio.
-                  </p>
-                  <div className="mt-4 grid gap-3">
-                    {inboundBoxes.length === 0 ? (
-                      <p className="text-sm text-slate-500">
-                        No hay cajas en ingresos.
-                      </p>
-                    ) : (
-                      sortByPosition(inboundBoxes).map((box) => (
-                        <div
-                          key={`ingreso-${box.position}`}
-                          className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700"
-                        >
-                          <p className="font-semibold">Ingreso {box.position}</p>
-                          <p>Id unico: {box.autoId}</p>
-                          <p>Nombre: {box.name}</p>
-                          <p>Temperatura: {box.temperature} °C</p>
-                        </div>
-                      ))
-                    )}
-                  </div>
-                </div>
-              ) : null}
-            </section>
-          )
+          <IngresosSection
+            isCustodio={isCustodio}
+            canUseIngresoForm={canUseIngresoForm}
+            inboundBoxes={inboundBoxes}
+            outboundBoxes={outboundBoxes}
+            ingresoPosition={ingresoPosition}
+            ingresoName={ingresoName}
+            ingresoTemp={ingresoTemp}
+            setIngresoName={setIngresoName}
+            setIngresoTemp={setIngresoTemp}
+            handleIngreso={handleIngreso}
+            sortByPosition={sortByPosition}
+            handleDispatchBox={handleDispatchBox}
+          />
         ) : null}
 
         {(activeTab === "ordenes" || isJefe) && canUseOrderForm ? (
-          <section className="grid gap-4 lg:grid-cols-2 xl:grid-cols-4">
-            <div className="flex h-full flex-col rounded-2xl bg-white p-6 shadow-sm">
-              <h2 className="text-lg font-semibold text-slate-900">Ingresos</h2>
-              {/* <p className="mt-1 text-sm text-slate-600">
-                Ordena ingresos hacia posiciones de bodega.
-              </p> */}
-              <div className="mt-4 grid flex-1 gap-3">
-                <label className="text-sm font-medium text-slate-600">
-                  Origen
-                </label>
-                <input
-                  value="Ingresos"
-                  readOnly
-                  className="w-full rounded-lg border border-slate-200 bg-slate-100 px-3 py-2 text-sm text-slate-600"
-                />
-                <label className="text-sm font-medium text-slate-600">
-                  Caja en ingresos
-                </label>
-                <select
-                  value={ingresoOrderSourcePosition}
-                  onChange={(event) =>
-                    setIngresoOrderSourcePosition(Number(event.target.value))
-                  }
-                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
-                >
-                  {availableInboundForOrders.length === 0
-                    ? (
-                      <option value={1}>Sin cajas</option>
-                    )
-                    : sortByPosition(availableInboundForOrders).map((box) => (
-                      <option key={box.position} value={box.position}>
-                        {`Ingreso ${box.position} - ${box.name} (${box.autoId})`}
-                      </option>
-                    ))}
-                </select>
-                <label className="text-sm font-medium text-slate-600">
-                  Posicion en bodega
-                </label>
-                <select
-                  value={ingresoOrderTargetPosition}
-                  onChange={(event) =>
-                    setIngresoOrderTargetPosition(Number(event.target.value))
-                  }
-                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
-                >
-                  {availableBodegaTargets.length === 0 ? (
-                    <option value={1}>Sin posiciones libres</option>
-                  ) : (
-                    availableBodegaTargets.map((position) => (
-                      <option key={position} value={position}>
-                        {position}
-                      </option>
-                    ))
-                  )}
-                </select>
-                <button
-                  type="button"
-                  onClick={() =>
-                    handleCreateOrder({
-                      destination: "a_bodega",
-                      sourceZone: "ingresos",
-                      sourcePosition: ingresoOrderSourcePosition,
-                      targetPosition: ingresoOrderTargetPosition,
-                    })
-                  }
-                  className="mt-auto rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-500"
-                >
-                  Crear ingreso
-                </button>
-              </div>
-            </div>
-
-            <div className="flex h-full flex-col rounded-2xl bg-white p-6 shadow-sm">
-              <h2 className="text-lg font-semibold text-slate-900">
-                Bodega a Bodega
-              </h2>
-              {/* <p className="mt-1 text-sm text-slate-600">
-                Movimiento interno de bodega a bodega.
-              </p> */}
-              <div className="mt-4 grid flex-1 gap-3">
-                <label className="text-sm font-medium text-slate-600">
-                  Destino
-                </label>
-                <select
-                  value="a_bodega"
-                  disabled
-                  className="w-full rounded-lg border border-slate-200 bg-slate-100 px-3 py-2 text-sm"
-                >
-                  <option value="a_bodega">Bodega</option>
-                </select>
-                <label className="text-sm font-medium text-slate-600">
-                  Origen
-                </label>
-                <input
-                  value="Bodega"
-                  readOnly
-                  className="w-full rounded-lg border border-slate-200 bg-slate-100 px-3 py-2 text-sm text-slate-600"
-                />
-                <label className="text-sm font-medium text-slate-600">
-                  Caja en bodega
-                </label>
-                <select
-                  value={bodegaOrderSourcePosition}
-                  onChange={(event) =>
-                    setBodegaOrderSourcePosition(Number(event.target.value))
-                  }
-                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
-                >
-                  {availableBodegaForOrders.length === 0
-                    ? (
-                      <option value={1}>Sin cajas</option>
-                    )
-                    : sortByPosition(availableBodegaForOrders).map((box) => (
-                      <option key={box.position} value={box.position}>
-                        {`Bodega ${box.position} - ${box.name} (${box.autoId})`}
-                      </option>
-                    ))}
-                </select>
-                <label className="text-sm font-medium text-slate-600">
-                  Posicion en bodega
-                </label>
-                <select
-                  value={bodegaOrderTargetPosition}
-                  onChange={(event) =>
-                    setBodegaOrderTargetPosition(Number(event.target.value))
-                  }
-                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
-                >
-                  {availableBodegaTargets.length === 0 ? (
-                    <option value={1}>Sin posiciones libres</option>
-                  ) : (
-                    availableBodegaTargets.map((position) => (
-                      <option key={position} value={position}>
-                        {position}
-                      </option>
-                    ))
-                  )}
-                </select>
-                <button
-                  type="button"
-                  onClick={() =>
-                    handleCreateOrder({
-                      destination: "a_bodega",
-                      sourceZone: "bodega",
-                      sourcePosition: bodegaOrderSourcePosition,
-                      targetPosition: bodegaOrderTargetPosition,
-                    })
-                  }
-                  className="mt-auto rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-500"
-                >
-                  Crear orden
-                </button>
-              </div>
-            </div>
-
-            <div className="flex h-full flex-col rounded-2xl bg-white p-6 shadow-sm">
-              <h2 className="text-lg font-semibold text-slate-900">
-                Revisar
-              </h2>
-              {/* <p className="mt-1 text-sm text-slate-600">
-                Crea una tarea para que el operario revise una caja.
-              </p> */}
-              <div className="mt-4 grid flex-1 gap-3">
-                <label className="text-sm font-medium text-slate-600">
-                  Zona
-                </label>
-                <select
-                  value="bodega"
-                  disabled
-                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
-                >
-                  <option value="bodega">Bodega</option>
-                </select>
-                <label className="text-sm font-medium text-slate-600">
-                  Caja
-                </label>
-                <select
-                  value={reviewSourcePosition}
-                  onChange={(event) =>
-                    setReviewSourcePosition(Number(event.target.value))
-                  }
-                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
-                >
-                  {reviewBodegaList.length === 0
-                    ? (
-                      <option value={1}>Sin cajas</option>
-                    )
-                    : sortByPosition(reviewBodegaList).map((box) => (
-                      <option key={box.position} value={box.position}>
-                        {`Bodega ${box.position} - ${box.name} (${box.autoId})`}
-                      </option>
-                    ))}
-                </select>
-                <button
-                  type="button"
-                  onClick={handleCreateReviewOrder}
-                  className="mt-auto rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-500"
-                >
-                  Crear revision
-                </button>
-              </div>
-            </div>
-
-            <div className="flex h-full flex-col rounded-2xl bg-white p-6 shadow-sm">
-              <h2 className="text-lg font-semibold text-slate-900">
-                Crear salida
-              </h2>
-              {/* <p className="mt-1 text-sm text-slate-600">
-                Define la caja en bodega y la posicion final en salida.
-              </p> */}
-              <div className="mt-4 grid flex-1 gap-3">
-                <label className="text-sm font-medium text-slate-600">
-                  Origen
-                </label>
-                <input
-                  value="Bodega"
-                  readOnly
-                  className="w-full rounded-lg border border-slate-200 bg-slate-100 px-3 py-2 text-sm text-slate-600"
-                />
-                <label className="text-sm font-medium text-slate-600">
-                  Caja en bodega
-                </label>
-                <select
-                  value={salidaSourcePosition}
-                  onChange={(event) =>
-                    setSalidaSourcePosition(Number(event.target.value))
-                  }
-                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
-                >
-                  {availableBodegaForOrders.length === 0
-                    ? (
-                      <option value={1}>Sin cajas</option>
-                    )
-                    : sortByPosition(availableBodegaForOrders).map((box) => (
-                      <option key={box.position} value={box.position}>
-                        {`Bodega ${box.position} - ${box.name} (${box.autoId})`}
-                      </option>
-                    ))}
-                </select>
-                <label className="text-sm font-medium text-slate-600">
-                  Posicion en salida
-                </label>
-                <input
-                  value={salidaTargetPosition}
-                  type="number"
-                  readOnly
-                  className="w-full rounded-lg border border-slate-200 bg-slate-100 px-3 py-2 text-sm text-slate-600"
-                />
-                <button
-                  type="button"
-                  onClick={() =>
-                    handleCreateOrder({
-                      destination: "a_salida",
-                      sourceZone: "bodega",
-                      sourcePosition: salidaSourcePosition,
-                    })
-                  }
-                  className="mt-auto rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-500"
-                >
-                  Crear salida
-                </button>
-              </div>
-            </div>
-          </section>
+          <OrdenesJefeSection
+            isJefe={isJefe}
+            inboundBoxes={inboundBoxes}
+            outboundBoxes={outboundBoxes}
+            slots={slots}
+            selectedBoxModal={selectedBoxModal}
+            setSelectedBoxModal={setSelectedBoxModal}
+            editTempModal={editTempModal}
+            setEditTempModal={setEditTempModal}
+            handleUpdateBoxTemperature={handleUpdateBoxTemperature}
+            availableInboundForOrders={availableInboundForOrders}
+            ingresoOrderSourcePosition={ingresoOrderSourcePosition}
+            setIngresoOrderSourcePosition={setIngresoOrderSourcePosition}
+            availableBodegaTargets={availableBodegaTargets}
+            ingresoOrderTargetPosition={ingresoOrderTargetPosition}
+            setIngresoOrderTargetPosition={setIngresoOrderTargetPosition}
+            sortByPosition={sortByPosition}
+            handleCreateOrder={handleCreateOrder}
+            bodegaOrderSourcePosition={bodegaOrderSourcePosition}
+            setBodegaOrderSourcePosition={setBodegaOrderSourcePosition}
+            availableBodegaForOrders={availableBodegaForOrders}
+            bodegaOrderTargetPosition={bodegaOrderTargetPosition}
+            setBodegaOrderTargetPosition={setBodegaOrderTargetPosition}
+            reviewSourcePosition={reviewSourcePosition}
+            setReviewSourcePosition={setReviewSourcePosition}
+            reviewBodegaList={reviewBodegaList}
+            handleCreateReviewOrder={handleCreateReviewOrder}
+            salidaSourcePosition={salidaSourcePosition}
+            setSalidaSourcePosition={setSalidaSourcePosition}
+            salidaTargetPosition={salidaTargetPosition}
+            handleCreateOrderSalida={handleCreateOrder}
+            orderModalType={orderModalType}
+            setOrderModalType={setOrderModalType}
+          />
         ) : null}
 
         {activeTab === "actividades" && isAdmin ? (
@@ -2477,10 +2073,35 @@ export default function BodegaDashboard() {
                           </p>
                           {alert.reason ? (
                             <p className="mt-2 text-xs font-semibold text-slate-500">
-                              No gestionada: {ALERT_REASONS.find((r) => r.value === alert.reason)?.label}
+                              No gestionada:{" "}
+                              {
+                                ALERT_REASONS.find(
+                                  (r) => r.value === alert.reason,
+                                )?.label
+                              }
                             </p>
                           ) : null}
                         </div>
+                        {canManageAlerts ? (
+                          <div className="flex flex-wrap items-center gap-2">
+                            {assignedAlertIds.has(alert.id) ? (
+                              <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-800">
+                                Asignada al operario
+                              </span>
+                            ) : null}
+                            <button
+                              type="button"
+                              onClick={() => handleAssignAlert(alert)}
+                              disabled={
+                                assignedAlertIds.has(alert.id) ||
+                                getAlertKind(alert) === "otro"
+                              }
+                              className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:bg-slate-300"
+                            >
+                              Asignar a operario
+                            </button>
+                          </div>
+                        ) : null}
                       </div>
                     </div>
                   ))
@@ -2526,38 +2147,10 @@ export default function BodegaDashboard() {
         ) : null}
 
         {activeTab === "despachados" && isAdmin ? (
-          <section className="rounded-2xl bg-white p-6 shadow-sm">
-            <div className="flex items-center justify-between">
-              <h2 className="text-lg font-semibold text-slate-900">
-                Despachados
-              </h2>
-              <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
-                {dispatchedBoxes.length} cajas
-              </span>
-            </div>
-            <p className="mt-1 text-sm text-slate-600">
-              Cajas enviadas por el custodio.
-            </p>
-            <div className="mt-4 grid gap-3">
-              {dispatchedBoxes.length === 0 ? (
-                <p className="text-sm text-slate-500">
-                  No hay cajas despachadas.
-                </p>
-              ) : (
-                sortByPosition(dispatchedBoxes).map((box) => (
-                  <div
-                    key={`despachado-${box.position}`}
-                    className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700"
-                  >
-                    <p className="font-semibold">Salida {box.position}</p>
-                    <p>Id unico: {box.autoId}</p>
-                    <p>Nombre: {box.name}</p>
-                    <p>Temperatura: {box.temperature} °C</p>
-                  </div>
-                ))
-              )}
-            </div>
-          </section>
+          <DespachadosSection
+            dispatchedBoxes={dispatchedBoxes}
+            sortByPosition={sortByPosition}
+          />
         ) : null}
 
         {activeTab === "alertas" && (isAdmin || isJefe) ? (
@@ -2599,7 +2192,12 @@ export default function BodegaDashboard() {
                           </p>
                           {alert.reason ? (
                             <p className="mt-2 text-xs font-semibold text-slate-500">
-                              No gestionada: {ALERT_REASONS.find((r) => r.value === alert.reason)?.label}
+                              No gestionada:{" "}
+                              {
+                                ALERT_REASONS.find(
+                                  (r) => r.value === alert.reason,
+                                )?.label
+                              }
                             </p>
                           ) : null}
                         </div>
@@ -2613,7 +2211,10 @@ export default function BodegaDashboard() {
                             <button
                               type="button"
                               onClick={() => handleAssignAlert(alert)}
-                              disabled={assignedAlertIds.has(alert.id) || getAlertKind(alert) === "otro"}
+                              disabled={
+                                assignedAlertIds.has(alert.id) ||
+                                getAlertKind(alert) === "otro"
+                              }
                               className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:bg-slate-300"
                             >
                               Asignar a operario
@@ -2630,73 +2231,17 @@ export default function BodegaDashboard() {
         ) : null}
 
         {activeTab === "reportes" && isAdmin ? (
-          <section className="rounded-2xl bg-white p-6 shadow-sm">
-            <h2 className="text-lg font-semibold text-slate-900">Reportes</h2>
-            <p className="mt-1 text-sm text-slate-600">
-              Aqui podras consultar los reportes de la bodega.
-            </p>
-            <div className="mt-6 grid gap-6 lg:grid-cols-[1.4fr_1fr]">
-              <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
-                <h3 className="text-sm font-semibold text-slate-700">
-                  Totales por tipo
-                </h3>
-                <div className="mt-4 h-56">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={reportData} barSize={32}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="name" tick={{ fontSize: 12 }} />
-                      <YAxis allowDecimals={false} />
-                      <Tooltip />
-                      <Bar dataKey="value" radius={[8, 8, 0, 0]}>
-                        {reportData.map((entry) => (
-                          <Cell key={entry.name} fill={entry.fill} />
-                        ))}
-                      </Bar>
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-              </div>
-              <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
-                <h3 className="text-sm font-semibold text-slate-700">
-                  Distribucion
-                </h3>
-                <div className="mt-4 h-56">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Tooltip />
-                      <Pie
-                        data={reportData}
-                        dataKey="value"
-                        nameKey="name"
-                        innerRadius={45}
-                        outerRadius={85}
-                        paddingAngle={3}
-                      >
-                        {reportData.map((entry) => (
-                          <Cell key={entry.name} fill={entry.fill} />
-                        ))}
-                      </Pie>
-                    </PieChart>
-                  </ResponsiveContainer>
-                </div>
-              </div>
-            </div>
-            <div className="mt-6 grid gap-3 sm:grid-cols-3">
-              {reportData.map((item) => (
-                <div
-                  key={item.name}
-                  className="rounded-2xl border border-slate-100 bg-white p-4"
-                >
-                  <p className="text-xs font-semibold uppercase text-slate-500">
-                    {item.name}
-                  </p>
-                  <p className="mt-2 text-2xl font-semibold text-slate-900">
-                    {item.value}
-                  </p>
-                </div>
-              ))}
-            </div>
-          </section>
+          <ReportesSection
+            reportData={reportData}
+            inboundBoxes={inboundBoxes}
+            outboundBoxes={outboundBoxes}
+            dispatchedBoxes={dispatchedBoxes}
+            orders={orders}
+            slots={slots}
+            sortByPosition={sortByPosition}
+            reportDetailModal={reportDetailModal}
+            setReportDetailModal={setReportDetailModal}
+          />
         ) : null}
 
         {alertsPanelOpen ? (
@@ -2743,45 +2288,64 @@ export default function BodegaDashboard() {
                     No hay alertas activas.
                   </p>
                 ) : (
-                  alerts.map((alert) => (
-                    <div
-                      key={alert.id}
-                      className="rounded-xl border border-slate-200 bg-slate-50 p-4"
-                    >
-                      <div className="flex flex-wrap items-start justify-between gap-3">
-                        <div>
-                          <p className="text-sm font-semibold text-slate-900">
-                            {alert.title}
+                  <div
+                    key={alerts[0].id}
+                    className="rounded-xl border border-slate-200 bg-slate-50 p-4"
+                  >
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-semibold text-slate-900">
+                          {alerts[0].title}
+                        </p>
+                        <p className="mt-1 text-sm text-slate-600">
+                          {alerts[0].description}
+                        </p>
+                        {alerts[0].reason ? (
+                          <p className="mt-2 text-xs font-semibold text-slate-500">
+                            No gestionada:{" "}
+                            {
+                              ALERT_REASONS.find(
+                                (r) => r.value === alerts[0].reason,
+                              )?.label
+                            }
                           </p>
-                          <p className="mt-1 text-sm text-slate-600">
-                            {alert.description}
-                          </p>
-                          {alert.reason ? (
-                            <p className="mt-2 text-xs font-semibold text-slate-500">
-                              No gestionada: {ALERT_REASONS.find((r) => r.value === alert.reason)?.label}
-                            </p>
-                          ) : null}
-                        </div>
-                        {canManageAlerts ? (
-                          <div className="flex flex-wrap items-center gap-2">
-                            {assignedAlertIds.has(alert.id) ? (
-                              <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-800">
-                                Asignada al operario
-                              </span>
-                            ) : null}
-                            <button
-                              type="button"
-                              onClick={() => handleAssignAlert(alert)}
-                              disabled={assignedAlertIds.has(alert.id) || getAlertKind(alert) === "otro"}
-                              className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:bg-slate-300"
-                            >
-                              Asignar a operario
-                            </button>
-                          </div>
                         ) : null}
                       </div>
+                      {/* Si es un reporte de fallo, mostrar botón Marchando */}
+                      {alerts[0].id.startsWith(ALERT_REPORT_PREFIX) ? (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setAlerts((prev) =>
+                              prev.filter((a) => a.id !== alerts[0].id),
+                            )
+                          }
+                          className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-emerald-500"
+                        >
+                          Solucionado
+                        </button>
+                      ) : canManageAlerts ? (
+                        <div className="flex flex-wrap items-center gap-2">
+                          {assignedAlertIds.has(alerts[0].id) ? (
+                            <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-800">
+                              Asignada al operario
+                            </span>
+                          ) : null}
+                          <button
+                            type="button"
+                            onClick={() => handleAssignAlert(alerts[0])}
+                            disabled={
+                              assignedAlertIds.has(alerts[0].id) ||
+                              getAlertKind(alerts[0]) === "otro"
+                            }
+                            className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:bg-slate-300"
+                          >
+                            Asignar a operario
+                          </button>
+                        </div>
+                      ) : null}
                     </div>
-                  ))
+                  </div>
                 )}
               </div>
             </div>
@@ -2844,7 +2408,8 @@ export default function BodegaDashboard() {
                             {alert.description}
                           </p>
                           <p className="mt-2 text-xs font-semibold text-slate-500">
-                            Asignada por {assignment.assignedBy} · {assignment.assignedAt}
+                            Asignada por {assignment.assignedBy} ·{" "}
+                            {assignment.assignedAt}
                           </p>
                         </div>
                         <div className="flex flex-wrap gap-2">
@@ -2853,7 +2418,9 @@ export default function BodegaDashboard() {
                             onClick={() => handleExecuteAssignedAlert(alert)}
                             className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-emerald-500"
                           >
-                            {assignment.kind === "reporte" ? "Reprogramar" : "Ejecutar"}
+                            {assignment.kind === "reporte"
+                              ? "Reprogramar"
+                              : "Ejecutar"}
                           </button>
                         </div>
                       </div>
@@ -2867,54 +2434,71 @@ export default function BodegaDashboard() {
 
         {statusModal ? (
           <div
-            className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4"
+            className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-2 sm:p-4"
             role="dialog"
             aria-modal="true"
             onClick={() => setStatusModal(null)}
           >
             <div
-              className="w-full max-w-2xl rounded-2xl bg-white p-6 shadow-xl"
+              className="w-full max-w-lg sm:max-w-2xl rounded-3xl bg-white p-0 shadow-2xl border border-blue-100 relative overflow-hidden"
               onClick={(event) => event.stopPropagation()}
             >
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-[0.25em] text-slate-400">
-                    {statusModal.kind === "alertas"
-                      ? "Alertas"
-                      : "Lista de tareas"}
-                  </p>
-                  <h3 className="mt-2 text-2xl font-semibold text-slate-900">
-                    {zoneLabels[statusModal.zone]}
-                  </h3>
-                  <p className="mt-1 text-sm text-slate-600">
-                    {statusModal.kind === "alertas"
-                      ? "Detalles de alertas activas en esta zona."
-                      : "Tareas pendientes relacionadas con esta zona."}
-                  </p>
+              {/* Header sticky con icono */}
+              <div className="sticky top-0 z-10 flex items-center justify-between gap-3 bg-blue-50/80 px-6 py-4 border-b border-blue-100">
+                <div className="flex items-center gap-3">
+                  <span className={`inline-flex items-center justify-center w-10 h-10 rounded-full ${statusModal.kind === 'alertas' ? 'bg-red-100' : 'bg-amber-100'}`}>
+                    {statusModal.kind === 'alertas' ? (
+                      <svg className="w-6 h-6 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                    ) : (
+                      <svg className="w-6 h-6 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17v-2a4 4 0 118 0v2M12 9v2m0 4h.01" /></svg>
+                    )}
+                  </span>
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-[0.25em] text-slate-400">
+                      {statusModal.kind === "alertas" ? "Alertas" : "Lista de tareas"}
+                    </p>
+                    <h3 className="mt-1 text-xl sm:text-2xl font-bold text-slate-900">
+                      {zoneLabels[statusModal.zone]}
+                    </h3>
+                    <p className="mt-1 text-xs sm:text-sm text-slate-600">
+                      {statusModal.kind === "alertas"
+                        ? "Detalles de alertas activas en esta zona."
+                        : "Tareas pendientes relacionadas con esta zona."}
+                    </p>
+                  </div>
                 </div>
                 <button
                   type="button"
                   onClick={() => setStatusModal(null)}
-                  className="rounded-full border border-slate-200 px-3 py-1 text-sm font-semibold text-slate-600 transition hover:bg-slate-50"
+                  className="rounded-full border border-slate-200 px-3 py-1 text-sm font-semibold text-slate-600 transition hover:bg-slate-100 hover:text-blue-700"
                 >
                   Cerrar
                 </button>
               </div>
-              <div className="mt-6 grid gap-3">
+              {/* Lista de items */}
+              <div className="p-6 grid gap-4 max-h-[60vh] overflow-y-auto bg-white">
                 {(statusModal.kind === "alertas"
                   ? zoneAlertItems[statusModal.zone]
                   : zoneTaskItems[statusModal.zone]
-                ).map((item) => (
-                  <div
-                    key={item.id}
-                    className="rounded-xl border border-slate-200 bg-slate-50 p-4"
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <p className="text-sm font-semibold text-slate-900">
+                ).length === 0 ? (
+                  <div className="text-center text-slate-400 py-8">
+                    <svg className="mx-auto w-12 h-12 text-slate-200" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                    <p className="mt-2 text-base font-semibold">No hay elementos para mostrar.</p>
+                  </div>
+                ) : (
+                  (statusModal.kind === "alertas"
+                    ? zoneAlertItems[statusModal.zone]
+                    : zoneTaskItems[statusModal.zone]
+                  ).map((item) => (
+                    <div
+                      key={item.id}
+                      className="rounded-xl border border-slate-200 bg-slate-50 p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 shadow-sm hover:shadow-md transition"
+                    >
+                      <div className="flex-1 min-w-0">
+                        <p className="text-base font-semibold text-slate-900 truncate">
                           {item.title}
                         </p>
-                        <p className="mt-1 text-sm text-slate-600">
+                        <p className="mt-1 text-sm text-slate-600 truncate">
                           {item.description}
                         </p>
                         {item.meta ? (
@@ -2924,8 +2508,8 @@ export default function BodegaDashboard() {
                         ) : null}
                       </div>
                     </div>
-                  </div>
-                ))}
+                  ))
+                )}
               </div>
             </div>
           </div>
@@ -2973,7 +2557,8 @@ export default function BodegaDashboard() {
                       <select
                         value={`${tempFixZone}:${tempFixPosition}`}
                         onChange={(event) => {
-                          const [zone, position] = event.target.value.split(":");
+                          const [zone, position] =
+                            event.target.value.split(":");
                           setTempFixZone(zone as OrderSource);
                           setTempFixPosition(Number(position));
                         }}
@@ -2999,7 +2584,9 @@ export default function BodegaDashboard() {
                       </label>
                       <input
                         value={tempFixValue}
-                        onChange={(event) => setTempFixValue(event.target.value)}
+                        onChange={(event) =>
+                          setTempFixValue(event.target.value)
+                        }
                         type="number"
                         className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
                         placeholder="Ej: -5"
