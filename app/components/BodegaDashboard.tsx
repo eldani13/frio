@@ -1,10 +1,15 @@
 "use client";
 import React from "react";
+import { useBodegaHistory } from "./BodegaDashboard/BodegaHistoryContext";
 import EstadoBodegaSection from "./BodegaDashboard/EstadoBodegaSection";
 import IngresosSection from "./BodegaDashboard/IngresosSection";
 import OrdenesJefeSection from "./BodegaDashboard/OrdenesJefeSection";
 import DespachadosSection from "./BodegaDashboard/DespachadosSection";
 import ReportesSection from "./BodegaDashboard/ReportesSection";
+import { AiTwotoneAppstore } from "react-icons/ai";
+import { SlGraph } from "react-icons/sl";
+
+
 
 
 import { FiArchive, FiBox, FiRepeat, FiSearch } from "react-icons/fi";
@@ -381,7 +386,7 @@ export default function BodegaDashboard() {
   // ...otros hooks y lógica...
   // Estado para modal de detalle de reportes (debe ir aquí, después de otros hooks)
   const [reportDetailModal, setReportDetailModal] = useState<null | {
-    type: "ingresos" | "salidas";
+    type: "ingresos" | "salidas" | "movimientos" | "despachados";
   }>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [isHydrated, setIsHydrated] = useState(false);
@@ -912,13 +917,19 @@ export default function BodegaDashboard() {
     () => outboundBoxes.filter((box) => box.temperature > 5),
     [outboundBoxes],
   );
-  const bodegaHighSlots = useMemo(
-    () =>
-      slots.filter(
-        (slot) => typeof slot.temperature === "number" && slot.temperature > 5,
-      ),
-    [slots],
-  );
+  // Filtrar slots de bodega con temperatura alta, excluyendo solucionadas por operario
+  const bodegaHighSlots = React.useMemo(() => {
+    let solvedPositions: number[] = [];
+    if (typeof window !== 'undefined') {
+      try {
+        const solved = window.localStorage.getItem('alertas_operario_solved');
+        solvedPositions = solved ? JSON.parse(solved) : [];
+      } catch { solvedPositions = []; }
+    }
+    return slots.filter(
+      (slot) => typeof slot.temperature === "number" && slot.temperature > 5 && !solvedPositions.includes(slot.position)
+    );
+  }, [slots]);
 
   const tempFixOptions = useMemo(() => {
     const options: Array<{
@@ -1290,6 +1301,8 @@ export default function BodegaDashboard() {
     setSelectedPosition(position);
   };
 
+  const { addIngreso, addSalida, movimientosBodega, addMovimientoBodega } = useBodegaHistory();
+
   const handleIngreso = () => {
     if (role !== "custodio") {
       setMessage("Solo el custodio registra ingresos.");
@@ -1318,6 +1331,7 @@ export default function BodegaDashboard() {
 
     setInboundBoxes((prev) => sortByPosition([newBox, ...prev]));
     setStats((prev) => ({ ...prev, ingresos: prev.ingresos + 1 }));
+    addIngreso(newBox);
     setIngresoName("");
     setIngresoTemp("");
     setMessage(`Caja registrada en ingresos ${nextPosition}.`);
@@ -1388,6 +1402,12 @@ export default function BodegaDashboard() {
     };
 
     setOrders((prev) => [newOrder, ...prev]);
+    if (newOrder.type === "a_salida" && newOrder.sourceZone === "bodega") {
+      addSalida(newOrder);
+    }
+    if (newOrder.type === "a_bodega") {
+      addMovimientoBodega(newOrder);
+    }
     setMessage("Orden creada correctamente.");
     if (role === "jefe") {
       setBodegaOrderSourcePosition(availableBodegaForOrders[0]?.position ?? 1);
@@ -1948,22 +1968,36 @@ export default function BodegaDashboard() {
         ) : null}
 
         {!isJefe && tabs.length > 1 ? (
-          <section className="rounded-2xl bg-white p-2 shadow-sm">
+          <section className="rounded-2xl bg-linear-to-r from-slate-50 to-white border border-slate-200 p-3 shadow-sm">
             <div className="flex flex-wrap gap-2">
-              {tabs.map((tab) => (
-                <button
-                  key={tab.key}
-                  type="button"
-                  onClick={() => setActiveTab(tab.key as typeof activeTab)}
-                  className={`rounded-xl px-4 py-2 text-sm font-semibold transition ${
-                    activeTab === tab.key
-                      ? "bg-slate-900 text-white"
-                      : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-                  }`}
-                >
-                  {tab.label}
-                </button>
-              ))}
+              {tabs.map((tab) => {
+                let icon = null;
+                if (tab.key === "estado") icon = <span className="mr-2"><AiTwotoneAppstore /></span>;
+                if (tab.key === "ingresos") icon = <span className="mr-2">📦</span>;
+                if (tab.key === "ordenes") icon = <span className="mr-2">📝</span>;
+                if (tab.key === "solicitudes") icon = <span className="mr-2">⏳</span>;
+                if (tab.key === "reportes") icon = <span className="mr-2"><SlGraph /></span>;
+                // Puedes cambiar los iconos por react-icons si prefieres
+                return (
+                  <button
+                    key={tab.key}
+                    type="button"
+                    onClick={() => setActiveTab(tab.key as typeof activeTab)}
+                    className={`relative flex items-center gap-1 rounded-xl px-4 py-2 text-sm font-semibold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 ${
+                      activeTab === tab.key
+                        ? "bg-slate-900 text-white shadow-md scale-105"
+                        : "bg-slate-100 text-slate-700 hover:bg-slate-200"
+                    }`}
+                    style={{ minWidth: 120 }}
+                  >
+                    {icon}
+                    <span>{tab.label}</span>
+                    {activeTab === tab.key && (
+                      <span className="absolute left-2 right-2 -bottom-1 h-1 rounded-b-xl bg-emerald-400/80 animate-fadeIn" />
+                    )}
+                  </button>
+                );
+              })}
             </div>
           </section>
         ) : null}

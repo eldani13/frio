@@ -146,7 +146,7 @@ export default function EstadoBodegaSection(props: Props) {
                   <div>
                     Temp:{" "}
                     {typeof box.temperature === "number"
-                      ? <span className={isHighTemp ? "text-red-600 font-bold" : undefined}>
+                      ? <span className={isHighTemp ? "text-green-700 font-bold" : undefined}>
                           {box.temperature} °C
                         </span>
                       : "Sin temperatura"}
@@ -190,15 +190,21 @@ export default function EstadoBodegaSection(props: Props) {
               No hay cajas en salida.
             </p>
           ) : (
-            sortByPosition(outboundBoxes).map((box) => (
+            sortByPosition(outboundBoxes).slice(0, 4).map((box) => (
               <div
-                key={`estado-salida-${box.position}`}
-                className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700"
+                key={box.position}
+                className="rounded-xl border border-pink-200 bg-white p-2 text-xs text-pink-700 w-full"
               >
-                <p className="font-semibold">Salida {box.position}</p>
-                <p>Id unico: {box.autoId}</p>
-                <p>Nombre: {box.name}</p>
-                <p>Temperatura: {box.temperature} °C</p>
+                <div className="font-semibold">
+                  {box.name || "Sin nombre"}
+                </div>
+                <div>Id: {box.autoId}</div>
+                <div>
+                  Temp:{" "}
+                  {typeof box.temperature === "number"
+                    ? `${box.temperature} °C`
+                    : "Sin temperatura"}
+                </div>
               </div>
             ))
           )}

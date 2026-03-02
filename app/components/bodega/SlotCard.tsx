@@ -1,5 +1,6 @@
 import type { SlotCardProps } from "../../interfaces/bodega/SlotCard";
-import { FiPlus } from "react-icons/fi";
+import { FiPlus, FiBox } from "react-icons/fi";
+import { MdInventory2 } from "react-icons/md";
 
 export default function SlotCard({ slot, isSelected, onSelect }: SlotCardProps) {
   const isOccupied = slot.autoId && slot.autoId.trim() !== "";
@@ -8,7 +9,7 @@ export default function SlotCard({ slot, isSelected, onSelect }: SlotCardProps) 
     <button
       type="button"
       onClick={() => onSelect(slot.position)}
-      className={`relative flex flex-col items-center justify-center rounded-[22px] border border-slate-200 p-0 transition w-full h-[110px] sm:h-[110px] shadow-sm ${
+      className={`relative flex flex-col items-center justify-center rounded-[22px] border border-slate-200 p-2 transition w-full h-27.5 sm:h-27.5 shadow-sm ${
         isOccupied ? "bg-cyan-100" : "bg-white"
       } ${
         isSelected ? "ring-2 ring-emerald-300" : ""
@@ -22,17 +23,22 @@ export default function SlotCard({ slot, isSelected, onSelect }: SlotCardProps) 
 
       {/* Contenido central */}
       {isOccupied ? (
-        <div className="flex flex-col items-center justify-center w-full h-full">
-          {/* Círculo punteado con icono */}
-          <div className="flex items-center justify-center mb-2">
-            <div className="border-2 border-cyan-400 border-dashed rounded-full w-9 h-9 flex items-center justify-center">
-              <FiPlus className="w-5 h-5 text-cyan-400" />
-            </div>
+        <>
+          <div className="mb-1">
+            <FiBox className="w-4 h-4 sm:w-6 sm:h-6 text-cyan-400" />
           </div>
-          {/* Nombre y autoId */}
-          <div className="font-semibold text-[13px] text-center truncate w-full text-slate-900">{slot.name || "Sin nombre"}</div>
-          <div className="text-[12px] mt-1 text-center truncate w-full text-slate-500">{slot.autoId}</div>
-        </div>
+          <div className="font-semibold text-[clamp(0.65rem,1vw,0.85rem)] text-center truncate w-full">
+            {slot.name || "Sin nombre"}
+          </div>
+          <div className="text-[clamp(0.7rem,1.5vw,0.85rem)] mt-1 text-center truncate w-full">
+            {slot.autoId}
+          </div>
+          <div className="mt-2 text-[clamp(0.7rem,1.5vw,0.85rem)] font-medium bg-cyan-200 rounded-full px-1.5 sm:px-3 py-0.5 inline-block">
+            {typeof slot.temperature === "number"
+              ? `${slot.temperature} °C`
+              : "Sin temperatura"}
+          </div>
+        </>
       ) : (
         <div className="flex flex-col items-center justify-center w-full h-full">
           {/* Círculo punteado con + */}
@@ -44,11 +50,7 @@ export default function SlotCard({ slot, isSelected, onSelect }: SlotCardProps) 
       )}
       
 
-      {/* Indicador de ocupada/vacía */}
-      <span className={`absolute bottom-3 right-3 w-3 h-3 rounded-full border border-white shadow ${
-        isOccupied ? "bg-cyan-400" : "bg-slate-300"
-      }`}></span>
-      
+     
     </button>
     
   );

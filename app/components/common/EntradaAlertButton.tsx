@@ -33,65 +33,59 @@ export default function EntradaAlertButton({ boxes, threshold = 5, className }: 
       </button>
       {showModal && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-2 sm:p-4"
+          className="fixed inset-0 z-50 flex items-center justify-center backdrop-blur-sm bg-black/10 animate-fade-in p-2 sm:p-4"
           role="dialog"
           aria-modal="true"
           onClick={() => setShowModal(false)}
         >
           <div
-            className="w-full max-w-lg sm:max-w-2xl rounded-3xl bg-white p-0 shadow-2xl border border-blue-100 relative overflow-hidden"
+            className="w-full max-w-lg sm:max-w-xl rounded-3xl border border-blue-100 bg-white/90 shadow-2xl backdrop-blur-lg relative overflow-hidden animate-fade-in-up"
             onClick={event => event.stopPropagation()}
+            style={{ fontFamily: '"Space Grotesk", "Work Sans", sans-serif' }}
           >
-            <div className="sticky top-0 z-10 flex items-center justify-between gap-3 bg-blue-50/80 px-6 py-4 border-b border-blue-100">
-              <div className="flex items-center gap-3">
-                <span className="inline-flex items-center justify-center w-10 h-10 rounded-full bg-red-100">
-                  <FiAlertTriangle className="w-6 h-6 text-red-500" />
-                </span>
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-[0.25em] text-slate-400">
-                    Alertas
-                  </p>
-                  <h3 className="mt-1 text-xl sm:text-2xl font-bold text-slate-900">
-                    Entrada
-                  </h3>
-                  <p className="mt-1 text-xs sm:text-sm text-slate-600">
-                    Detalles de alertas activas en esta zona.
-                  </p>
-                </div>
-              </div>
+            {/* Header con gradiente y botón cerrar flotante */}
+            <div className="flex flex-col items-center justify-center pt-8 pb-4 px-8 border-b border-blue-100 bg-gradient-to-r from-blue-50 to-white rounded-t-3xl relative">
+              <span className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-red-100 shadow animate-pulse mb-2">
+                <FiAlertTriangle className="w-8 h-8 text-red-500" />
+              </span>
+              <h2 className="text-2xl font-extrabold text-red-700 drop-shadow mb-1 tracking-tight">Alertas de Entrada</h2>
+              <p className="text-sm text-slate-500 font-medium text-center">Estas son las alertas de temperatura activas en la zona de entrada.</p>
               <button
-                type="button"
+                className="absolute top-4 right-4 text-slate-400 hover:text-red-500 text-2xl font-bold focus:outline-none transition-colors"
                 onClick={() => setShowModal(false)}
-                className="rounded-full border border-slate-200 px-3 py-1 text-sm font-semibold text-slate-600 transition hover:bg-slate-100 hover:text-blue-700"
+                aria-label="Cerrar"
               >
-                Cerrar
+                <svg width="28" height="28" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 6 6 18" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 6l12 12" /></svg>
               </button>
             </div>
-            <div className="p-6 grid gap-4 max-h-[60vh] overflow-y-auto bg-white">
+            {/* Lista de alertas */}
+            <div className="px-8 py-6 min-h-30 flex flex-col items-center max-h-[60vh] overflow-y-auto bg-white/80">
               {alerts.length === 0 ? (
-                <div className="text-center text-slate-400 py-8">
-                  <svg className="mx-auto w-12 h-12 text-slate-200" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                  <p className="mt-2 text-base font-semibold">No hay elementos para mostrar.</p>
+                <div className="flex flex-col items-center justify-center py-8">
+                  <svg className="w-16 h-16 text-slate-200 mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                  <p className="text-slate-400 text-lg font-semibold text-center">No hay alertas activas</p>
+                  <p className="text-slate-400 text-sm text-center mt-1">Cuando haya una alerta, aparecerá aquí.</p>
                 </div>
               ) : (
-                alerts.map(item => (
-                  <div
-                    key={item.position}
-                    className="rounded-xl border border-slate-200 bg-slate-50 p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 shadow-sm hover:shadow-md transition"
-                  >
-                    <div className="flex-1 min-w-0">
-                      <p className="text-base font-semibold text-slate-900 truncate">
-                        {item.name}
-                      </p>
-                      <p className="mt-1 text-sm text-slate-600 truncate">
-                        Id: {item.autoId}
-                      </p>
-                      <p className="mt-2 text-xs font-semibold text-red-600">
-                        Temp: {item.temperature} °C
-                      </p>
-                    </div>
-                  </div>
-                ))
+                <ul className="mt-2 w-full space-y-3">
+                  {alerts.map(item => (
+                    <li key={item.position} className="bg-gradient-to-r from-red-50 to-white border border-red-200 rounded-xl px-5 py-4 text-red-800 flex items-center gap-4 shadow-sm hover:shadow-md transition-all">
+                      <span className="inline-flex items-center justify-center w-10 h-10 rounded-full bg-red-100">
+                        <FiAlertTriangle className="w-6 h-6 text-red-500" />
+                      </span>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="font-bold text-base text-red-700 truncate">{item.name}</span>
+                          <span className="ml-2 text-xs text-slate-700 bg-slate-100 rounded px-2 py-0.5">Id: {item.autoId}</span>
+                        </div>
+                        {typeof item.temperature === 'number' && (
+                          <span className="inline-block text-xs font-semibold text-white bg-red-500 rounded px-2 py-0.5 animate-pulse shadow">{item.temperature} °C</span>
+                        )}
+                        <div className="text-xs text-slate-500 mt-1">Alerta de temperatura alta</div>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
               )}
             </div>
           </div>
