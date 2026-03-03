@@ -1,13 +1,55 @@
 import type { RequestsQueueProps } from "../../interfaces/bodega/RequestsQueue";
-import { FiMapPin, FiBox, FiUser, FiCalendar, FiPackage, FiArrowRight, FiAlertCircle, FiPhoneCall } from "react-icons/fi";
+import {
+  FiMapPin,
+  FiBox,
+  FiUser,
+  FiCalendar,
+  FiPackage,
+  FiArrowRight,
+  FiAlertCircle,
+  FiPhoneCall,
+} from "react-icons/fi";
 import type { BodegaOrder, OrderType } from "../../interfaces/bodega";
 import { IoCloseOutline } from "react-icons/io5";
-
 
 const TYPE_LABELS: Record<OrderType, string> = {
   a_bodega: "A bodega",
   a_salida: "A salida",
   revisar: "Revisar",
+};
+
+const STATUS_STYLES: Record<
+  "ingreso" | "bodega" | "salida" | "revisar",
+  { bg: string; border: string; text: string; icon: string; label: string }
+> = {
+  ingreso: {
+    bg: "bg-emerald-50",
+    border: "border-emerald-200",
+    text: "text-emerald-700",
+    icon: "text-emerald-500",
+    label: "text-emerald-500",
+  },
+  bodega: {
+    bg: "bg-blue-50",
+    border: "border-blue-200",
+    text: "text-blue-700",
+    icon: "text-blue-500",
+    label: "text-blue-500",
+  },
+  salida: {
+    bg: "bg-pink-50",
+    border: "border-pink-200",
+    text: "text-pink-700",
+    icon: "text-pink-500",
+    label: "text-pink-500",
+  },
+  revisar: {
+    bg: "bg-yellow-50",
+    border: "border-yellow-200",
+    text: "text-yellow-700",
+    icon: "text-yellow-500",
+    label: "text-yellow-600",
+  },
 };
 
 const formatOrderDetails = (order: BodegaOrder): string => {
@@ -32,6 +74,8 @@ const orderTimestamp = (order: BodegaOrder) =>
 
 import React, { useState } from "react";
 
+const SLOTS_STORAGE_KEY = "bodegaSlotsV1";
+
 export default function RequestsQueue({
   requests,
   canExecute,
@@ -40,25 +84,182 @@ export default function RequestsQueue({
 }: RequestsQueueProps) {
   const [showAlertModal, setShowAlertModal] = useState(false);
   const [alertasOperario, setAlertasOperario] = useState<any[]>([]);
+  const [showSolveModal, setShowSolveModal] = useState(false);
+  const [alertaSeleccionada, setAlertaSeleccionada] = useState<any | null>(
+    null,
+  );
+  const [editTempModal, setEditTempModal] = useState<any | null>(null);
+  const [editTempLoading, setEditTempLoading] = useState(false);
+  const [showCallModal, setShowCallModal] = useState(false);
 
-  React.useEffect(() => {
-    if (showAlertModal && typeof window !== 'undefined') {
-      try {
-        const stored = window.localStorage.getItem('alertas_operario');
-        if (stored) {
-          setAlertasOperario(JSON.parse(stored));
-        } else {
-          setAlertasOperario([]);
-        }
-      } catch {
+  const loadAlertasOperario = React.useCallback(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const stored = window.localStorage.getItem("alertas_operario");
+      const solvedRaw = window.localStorage.getItem("alertas_operario_solved");
+      const solved = solvedRaw ? JSON.parse(solvedRaw) : [];
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        const filtered = Array.isArray(parsed)
+          ? parsed.filter(
+              (a) =>
+                !solved.includes(a?.position) &&
+                !(typeof a?.position === "string" && solved.includes(Number(a.position))),
+            )
+          : [];
+        setAlertasOperario(filtered);
+        window.localStorage.setItem(
+          "alertas_operario",
+          JSON.stringify(filtered),
+        );
+      } else {
         setAlertasOperario([]);
       }
+    } catch {
+      setAlertasOperario([]);
     }
-  }, [showAlertModal]);
+  }, []);
+
+  React.useEffect(() => {
+    loadAlertasOperario();
+  }, [loadAlertasOperario]);
+
+  React.useEffect(() => {
+    if (!showAlertModal) return;
+    loadAlertasOperario();
+  }, [showAlertModal, loadAlertasOperario]);
+
+  React.useEffect(() => {
+    const handler = (e: StorageEvent) => {
+      if (e.key === "alertas_operario" || e.key === "alertas_operario_solved") {
+        loadAlertasOperario();
+      }
+    };
+    if (typeof window !== "undefined") {
+      window.addEventListener("storage", handler);
+    }
+    return () => {
+      if (typeof window !== "undefined") {
+        window.removeEventListener("storage", handler);
+      }
+    };
+  }, [loadAlertasOperario]);
   const orderedRequests = [...requests].sort(
-    (a, b) => orderTimestamp(a) - orderTimestamp(b)
+    (a, b) => orderTimestamp(a) - orderTimestamp(b),
   );
   const nextRequest = orderedRequests[0];
+  const originStatus: keyof typeof STATUS_STYLES = nextRequest
+    ? (() => {
+        const zone = (nextRequest.sourceZone || "").toString().toLowerCase();
+        if (zone === "bodega") return "bodega";
+        if (zone === "salida") return "salida";
+        if (zone === "ingreso" || zone === "ingresos") return "ingreso";
+        return "ingreso";
+      })()
+    : "ingreso";
+  const destinationStatus: keyof typeof STATUS_STYLES = nextRequest
+    ? nextRequest.type === "a_bodega"
+      ? "bodega"
+      : nextRequest.type === "a_salida"
+        ? "salida"
+        : nextRequest.type === "revisar"
+          ? "revisar"
+          : "ingreso"
+    : "ingreso";
+  const originStyle = STATUS_STYLES[originStatus];
+  const destinationStyle = STATUS_STYLES[destinationStatus];
+
+  const handleUpdateAlertTemperature = (position: number, newTemp: number) => {
+    setAlertasOperario((prev: any[]) => {
+      const updated = prev.map((a) =>
+        a.position === position ? { ...a, temperature: newTemp } : a,
+      );
+      if (typeof window !== "undefined") {
+        window.localStorage.setItem(
+          "alertas_operario",
+          JSON.stringify(updated),
+        );
+      }
+      return updated;
+    });
+    setAlertaSeleccionada((prev: any) => {
+      if (!prev) return prev;
+      return prev.alerta.position === position
+        ? { ...prev, alerta: { ...prev.alerta, temperature: newTemp } }
+        : prev;
+    });
+
+    // Sincronizar con slots para que jefe/administrador vean la temperatura actualizada
+    if (typeof window !== "undefined") {
+      try {
+        const storedSlots = window.localStorage.getItem(SLOTS_STORAGE_KEY);
+        if (!storedSlots) return;
+        const parsed = JSON.parse(storedSlots);
+        if (!Array.isArray(parsed)) return;
+        const updatedSlots = parsed.map((slot: any) =>
+          slot && typeof slot === "object" && slot.position === position
+            ? { ...slot, temperature: newTemp }
+            : slot,
+        );
+        window.localStorage.setItem(
+          SLOTS_STORAGE_KEY,
+          JSON.stringify(updatedSlots),
+        );
+        try {
+          window.dispatchEvent(
+            new StorageEvent("storage", {
+              key: SLOTS_STORAGE_KEY,
+              newValue: JSON.stringify(updatedSlots),
+              storageArea: window.localStorage,
+            }),
+          );
+        } catch {
+          // ignore dispatch issues
+        }
+        window.localStorage.setItem(
+          "slots_temperature_event",
+          JSON.stringify({
+            position,
+            temperature: newTemp,
+            timestamp: Date.now(),
+          }),
+        );
+      } catch {
+        // ignore storage errors
+      }
+    }
+  };
+
+  const markAlertSolved = (alerta: any, idx: number) => {
+    const nuevasAlertas = alertasOperario.filter((_, i) => i !== idx);
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(
+        "alertas_operario",
+        JSON.stringify(nuevasAlertas),
+      );
+      let solved: any[] = [];
+      try {
+        const prev = window.localStorage.getItem("alertas_operario_solved");
+        solved = prev ? JSON.parse(prev) : [];
+      } catch {
+        solved = [];
+      }
+      if (!solved.includes(alerta.position)) {
+        solved.push(alerta.position);
+        window.localStorage.setItem(
+          "alertas_operario_solved",
+          JSON.stringify(solved),
+        );
+      }
+      window.localStorage.setItem(
+        "alerta_solved_event",
+        JSON.stringify({ position: alerta.position, timestamp: Date.now() }),
+      );
+    }
+    setAlertasOperario(nuevasAlertas);
+    setShowSolveModal(false);
+    setAlertaSeleccionada(null);
+  };
 
   return (
     <div>
@@ -67,14 +268,19 @@ export default function RequestsQueue({
         <div className="fixed inset-0 z-50 flex items-center justify-center backdrop-blur-sm bg-black/10 animate-fade-in">
           <div className="bg-white rounded-3xl shadow-2xl p-0 max-w-lg w-full relative animate-fade-in-up border border-red-100">
             {/* Header */}
-            <div className="flex flex-col items-center justify-center pt-8 pb-4 px-8 border-b border-red-100 bg-gradient-to-r from-red-50 to-white rounded-t-3xl">
+            <div className="flex flex-col items-center justify-center pt-8 pb-4 px-8 border-b border-red-100 bg-linear-to-r from-red-50 to-white rounded-t-3xl">
               <span className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-red-100 shadow animate-pulse mb-2">
                 <FiAlertCircle className="w-9 h-9 text-red-500" />
               </span>
-              <h2 className="text-2xl font-extrabold text-red-700 drop-shadow mb-1">Alertas asignadas</h2>
-              <p className="text-sm text-slate-500 font-medium text-center">Estas son las alertas de temperatura que tienes asignadas actualmente.</p>
+              <h2 className="text-2xl font-extrabold text-red-700 drop-shadow mb-1">
+                Alertas asignadas
+              </h2>
+              <p className="text-sm text-slate-500 font-medium text-center">
+                Estas son las alertas de temperatura que tienes asignadas
+                actualmente.
+              </p>
               <button
-                className="absolute top-4 right-4 text-slate-400 hover:text-red-500 text-2xl font-bold focus:outline-none transition-colors"
+                className="absolute top-4 right-4 text-slate-400 text-2xl font-bold focus:outline-none transition-colors"
                 onClick={() => setShowAlertModal(false)}
                 aria-label="Cerrar"
               >
@@ -84,49 +290,61 @@ export default function RequestsQueue({
             <div className="px-8 py-6 min-h-30 flex flex-col items-center">
               {alertasOperario.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-8">
-                  <svg className="w-16 h-16 text-slate-200 mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                  <p className="text-slate-400 text-lg font-semibold text-center">No hay alertas asignadas</p>
-                  <p className="text-slate-400 text-sm text-center mt-1">Cuando se te asigne una alerta, aparecerá aquí.</p>
+                  <svg
+                    className="w-16 h-16 text-slate-200 mb-3"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                    />
+                  </svg>
+                  <p className="text-slate-400 text-lg font-semibold text-center">
+                    No hay alertas asignadas
+                  </p>
+                  <p className="text-slate-400 text-sm text-center mt-1">
+                    Cuando se te asigne una alerta, aparecerá aquí.
+                  </p>
                 </div>
               ) : (
                 <ul className="mt-2 w-full space-y-3">
                   {alertasOperario.map((alerta, idx) => (
-                    <li key={idx} className="bg-linear-to-r from-red-50 to-white border border-red-200 rounded-xl px-5 py-4 text-red-800 flex items-center gap-4 shadow-sm hover:shadow-md transition-all">
+                    <li
+                      key={idx}
+                      className="bg-linear-to-r from-red-50 to-white border border-red-200 rounded-xl px-5 py-4 text-red-800 flex items-center gap-4 shadow-sm hover:shadow-md transition-all"
+                    >
                       <span className="inline-flex items-center justify-center w-10 h-10 rounded-full bg-red-100">
                         <FiAlertCircle className="w-6 h-6 text-red-500" />
                       </span>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-1">
-                          <span className="font-bold text-base text-red-700">Alerta {alerta.position}</span>
+                          <span className="font-bold text-base text-red-700">
+                            Alerta {alerta.position}
+                          </span>
                           {alerta.name && (
-                            <span className="ml-2 text-xs text-slate-700 bg-slate-100 rounded px-2 py-0.5">{alerta.name}</span>
+                            <span className="ml-2 text-xs text-slate-700 bg-slate-100 rounded px-2 py-0.5">
+                              {alerta.name}
+                            </span>
                           )}
                         </div>
-                        {typeof alerta.temperature === 'number' && (
-                          <span className="inline-block text-xs font-semibold text-white bg-red-500 rounded px-2 py-0.5 animate-pulse shadow">{alerta.temperature} °C</span>
+                        {typeof alerta.temperature === "number" && (
+                          <span className="inline-block text-xs font-semibold text-white bg-red-500 rounded px-2 py-0.5 animate-pulse shadow">
+                            {alerta.temperature} °C
+                          </span>
                         )}
-                        <div className="text-xs text-slate-500 mt-1">Alerta de temperatura alta</div>
+                        <div className="text-xs text-slate-500 mt-1">
+                          Alerta de temperatura alta
+                        </div>
                       </div>
                       <button
                         className="ml-2 px-3 py-1 rounded-lg bg-green-500 hover:bg-green-600 text-white text-xs font-bold shadow transition-all focus:outline-none focus:ring-2 focus:ring-green-300"
                         onClick={() => {
-                          let nuevasAlertas = alertasOperario.filter((a, i) => i !== idx);
-                          if (typeof window !== 'undefined') {
-                            window.localStorage.setItem('alertas_operario', JSON.stringify(nuevasAlertas));
-                            // Guardar la posición solucionada en alertas_operario_solved
-                            let solved = [];
-                            try {
-                              const prev = window.localStorage.getItem('alertas_operario_solved');
-                              solved = prev ? JSON.parse(prev) : [];
-                            } catch { solved = []; }
-                            if (!solved.includes(alerta.position)) {
-                              solved.push(alerta.position);
-                              window.localStorage.setItem('alertas_operario_solved', JSON.stringify(solved));
-                            }
-                            // Notificar a otros componentes (como el jefe) que una alerta fue solucionada
-                            window.localStorage.setItem('alerta_solved_event', JSON.stringify({ position: alerta.position, timestamp: Date.now() }));
-                          }
-                          setAlertasOperario(nuevasAlertas);
+                          setAlertaSeleccionada({ alerta, idx });
+                          setShowSolveModal(true);
                         }}
                         title="Marcar como solucionada"
                       >
@@ -140,7 +358,7 @@ export default function RequestsQueue({
             {/* Close button for mobile UX */}
             <div className="flex justify-center pb-6 pt-2 px-8">
               <button
-                className="w-full sm:w-auto rounded-xl bg-red-500 hover:bg-red-600 text-white font-bold text-lg py-3 px-8 shadow transition-all focus:outline-none focus:ring-2 focus:ring-red-300"
+                className="w-full sm:w-auto rounded-xl bg-red-500 text-white font-bold text-lg py-3 px-8 shadow transition-all focus:outline-none focus:ring-2 focus:ring-red-300"
                 onClick={() => setShowAlertModal(false)}
               >
                 Cerrar
@@ -155,7 +373,7 @@ export default function RequestsQueue({
           <button
             type="button"
             disabled={!nextRequest}
-            onClick={e => {
+            onClick={(e) => {
               if (!nextRequest) return;
               const btn = e.currentTarget;
               btn.classList.add("zoom-out");
@@ -167,16 +385,16 @@ export default function RequestsQueue({
             className="rounded-2xl bg-white p-6 sm:p-8 shadow-sm w-full border border-emerald-200 transition-transform duration-150 hover:shadow-lg focus:shadow-lg active:shadow-lg hover:scale-[0.98] active:scale-[0.95]"
             style={{ outline: "none" }}
           >
-            <div className="flex items-center justify-between mb-6">
-              <span className="px-6 py-2 rounded-xl bg-emerald-600 text-white font-semibold text-lg flex items-center gap-2">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
+              <span className="px-6 py-2 rounded-xl bg-emerald-600 text-white font-semibold text-lg flex items-center gap-2 w-full sm:w-auto justify-center sm:justify-start">
                 <FiBox className="w-5 h-5" />
                 {nextRequest ? TYPE_LABELS[nextRequest.type] : "A bodega"}
               </span>
-              <div className="flex items-center gap-3">
-                <span className="px-4 py-1 rounded-xl border border-yellow-300 bg-yellow-50 text-yellow-700 font-semibold text-base flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2 sm:gap-3 w-full sm:w-auto justify-start sm:justify-end">
+                <span className="px-4 py-1 rounded-xl border border-yellow-300 bg-yellow-50 text-yellow-700 font-semibold text-base flex items-center gap-2 w-full sm:w-auto justify-center sm:justify-start">
                   <FiAlertCircle className="w-5 h-5" /> Pendiente
                 </span>
-                <span className="px-3 py-1 rounded-full bg-emerald-100 text-emerald-700 font-bold text-base border border-emerald-200">
+                <span className="px-3 py-1 rounded-full bg-emerald-100 text-emerald-700 font-bold text-base border border-emerald-200 w-full sm:w-auto text-center">
                   {requests.length} tareas
                 </span>
               </div>
@@ -190,48 +408,86 @@ export default function RequestsQueue({
             ) : (
               <div className="bg-white rounded-2xl  p-4 sm:p-8">
                 <div className="flex flex-col items-center">
-                  <span className="text-slate-500 font-semibold text-lg mb-4">Transferencia de:</span>
-                  <div className="flex items-center justify-center gap-6 w-full">
+                  <span className="text-slate-500 font-semibold text-lg mb-4">
+                    Transferencia de:
+                  </span>
+                  <div className="flex flex-col sm:flex-row items-center justify-center gap-4 sm:gap-6 w-full">
                     {/* Origen */}
-                    <div className="flex flex-col items-center bg-red-100 border border-red-200 rounded-2xl px-8 py-6 w-64">
-                      <FiMapPin className="w-8 h-8 text-red-400 mb-2" />
-                      <span className="text-xs text-red-400 mb-1">ORIGEN</span>
-                      <span className="text-2xl font-bold text-red-700">{nextRequest.sourceZone === "bodega" ? "Bodega" : nextRequest.sourceZone === "salida" ? "Salida" : "Ingreso"} {nextRequest.sourcePosition}</span>
+                    <div
+                      className={`flex flex-col items-center rounded-2xl px-6 sm:px-8 py-5 sm:py-6 w-full sm:w-64 max-w-md border ${originStyle.bg} ${originStyle.border}`}
+                    >
+                      <FiMapPin className={`w-8 h-8 mb-2 ${originStyle.icon}`} />
+                      <span className={`text-xs mb-1 ${originStyle.label}`}>
+                        ORIGEN
+                      </span>
+                      <span className={`text-2xl font-bold ${originStyle.text}`}>
+                        {nextRequest.sourceZone === "bodega"
+                          ? "Bodega"
+                          : nextRequest.sourceZone === "salida"
+                            ? "Salida"
+                            : "Ingreso"}{" "}
+                        {nextRequest.sourcePosition}
+                      </span>
                     </div>
                     {/* Flecha */}
-                    <FiArrowRight className="w-10 h-10 text-slate-300" />
+                    <FiArrowRight className="w-8 h-8 sm:w-10 sm:h-10 text-slate-300" />
                     {/* Destino */}
-                    <div className="flex flex-col items-center bg-emerald-50 border border-emerald-200 rounded-2xl px-8 py-6 w-64">
-                      <FiBox className="w-8 h-8 text-emerald-400 mb-2" />
-                      <span className="text-xs text-emerald-400 mb-1">DESTINO</span>
-                      <span className="text-2xl font-bold text-emerald-700">{
-                        nextRequest.type === "a_bodega"
+                    <div
+                      className={`flex flex-col items-center rounded-2xl px-6 sm:px-8 py-5 sm:py-6 w-full sm:w-64 max-w-md border ${destinationStyle.bg} ${destinationStyle.border}`}
+                    >
+                      <FiBox
+                        className={`w-8 h-8 mb-2 ${destinationStyle.icon}`}
+                      />
+                      <span
+                        className={`text-xs mb-1 ${destinationStyle.label}`}
+                      >
+                        DESTINO
+                      </span>
+                      <span
+                        className={`text-2xl font-bold ${destinationStyle.text}`}
+                      >
+                        {nextRequest.type === "a_bodega"
                           ? `bodega ${nextRequest.targetPosition}`
                           : nextRequest.type === "a_salida"
                             ? `salida ${nextRequest.targetPosition}`
-                            : nextRequest.targetPosition && String(nextRequest.targetPosition).trim() !== "" && nextRequest.targetPosition !== undefined && nextRequest.targetPosition !== null
+                            : nextRequest.targetPosition &&
+                                String(nextRequest.targetPosition).trim() !== "" &&
+                                nextRequest.targetPosition !== undefined &&
+                                nextRequest.targetPosition !== null
                               ? `revisar ${nextRequest.targetPosition}`
-                              : "revisar"
-                      }</span>
+                              : "revisar"}
+                      </span>
                     </div>
                   </div>
                   <hr className="my-8 border-slate-200 w-full" />
                   {/* Detalles */}
-                  <div className="flex flex-wrap justify-center gap-8 w-full mb-6">
-                    <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap justify-center gap-4 sm:gap-8 w-full mb-6">
+                    <div className="flex items-center gap-1 sm:gap-2 text-center sm:text-left">
                       <FiUser className="w-5 h-5 text-slate-400" />
-                      <span className="text-xs text-slate-500">Solicitado por</span>
-                      <span className="font-semibold text-slate-700">{nextRequest.createdBy}</span>
+                      <span className="text-xs text-slate-500">
+                        Solicitado por
+                      </span>
+                      <span className="font-semibold text-slate-700">
+                        {nextRequest.createdBy}
+                      </span>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-1 sm:gap-2 text-center sm:text-left">
                       <FiCalendar className="w-5 h-5 text-slate-400" />
-                      <span className="text-xs text-slate-500">Fecha y hora</span>
-                      <span className="font-semibold text-slate-700">{nextRequest.createdAt}</span>
+                      <span className="text-xs text-slate-500">
+                        Fecha y hora
+                      </span>
+                      <span className="font-semibold text-slate-700">
+                        {nextRequest.createdAt}
+                      </span>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-1 sm:gap-2 text-center sm:text-left">
                       <FiPackage className="w-5 h-5 text-slate-400" />
-                      <span className="text-xs text-slate-500">ID de solicitud</span>
-                      <span className="font-semibold text-slate-700">{nextRequest.id}</span>
+                      <span className="text-xs text-slate-500">
+                        ID de solicitud
+                      </span>
+                      <span className="font-semibold text-slate-700">
+                        {nextRequest.id}
+                      </span>
                     </div>
                   </div>
                 </div>
@@ -242,14 +498,22 @@ export default function RequestsQueue({
         <div className="mt-8 flex flex-col sm:flex-row gap-4 w-full">
           <button
             type="button"
-            className="flex-1 flex items-center justify-center gap-2 rounded-2xl bg-red-100 hover:bg-red-200 text-red-700 font-bold text-lg py-4 shadow transition-all border-2 border-red-200 focus:outline-none focus:ring-2 focus:ring-red-300"
+            className={`flex-1 flex items-center justify-center gap-2 rounded-2xl font-bold text-lg py-4 shadow transition-all border-2 focus:outline-none focus:ring-2
+              ${alertasOperario.length > 0
+                ? "bg-red-100 hover:bg-red-200 text-red-700 border-red-200 focus:ring-red-300"
+                : "bg-slate-100 text-slate-400 border-slate-200 focus:ring-slate-300 cursor-not-allowed"}
+            `}
             style={{ minWidth: 0 }}
-            onClick={() => setShowAlertModal(true)}
+            onClick={() => alertasOperario.length > 0 && setShowAlertModal(true)}
+            disabled={alertasOperario.length === 0}
           >
             <FiAlertCircle className="w-6 h-6" />
             Alertas
             {alertasOperario.length > 0 && (
-              <span className="ml-2 px-2 py-0.5 rounded-full bg-red-500 text-white text-base font-bold animate-pulse" style={{minWidth: 28, textAlign: 'center'}}>
+              <span
+                className="ml-2 px-2 py-0.5 rounded-full bg-red-500 text-white text-base font-bold animate-pulse"
+                style={{ minWidth: 28, textAlign: "center" }}
+              >
                 {alertasOperario.length}
               </span>
             )}
@@ -259,14 +523,18 @@ export default function RequestsQueue({
             className="flex-1 flex items-center justify-center gap-2 rounded-2xl bg-yellow-100 hover:bg-yellow-200 text-yellow-700 font-bold text-lg py-4 shadow transition-all border-2 border-yellow-200 focus:outline-none focus:ring-2 focus:ring-yellow-300"
             style={{ minWidth: 0 }}
             onClick={() => {
-              if (typeof window !== 'undefined') {
+              if (typeof window !== "undefined") {
                 const llamada = {
                   timestamp: Date.now(),
-                  from: 'operario',
-                  message: 'Llamado del operario',
+                  from: "operario",
+                  message: "Llamado del operario",
                 };
-                window.localStorage.setItem('llamada_jefe', JSON.stringify(llamada));
+                window.localStorage.setItem(
+                  "llamada_jefe",
+                  JSON.stringify(llamada),
+                );
               }
+              setShowCallModal(true);
             }}
           >
             <FiPhoneCall className="w-6 h-6" />
@@ -274,6 +542,454 @@ export default function RequestsQueue({
           </button>
         </div>
       </div>
+
+      {/* Modal de confirmación de llamado al jefe */}
+      {showCallModal && (
+        <div
+          className="fixed inset-0 z-70 flex items-center justify-center backdrop-blur-sm bg-black/15 animate-fade-in p-2 sm:p-4"
+          role="dialog"
+          aria-modal="true"
+          onClick={() => setShowCallModal(false)}
+        >
+          <div
+            className="w-full max-w-lg sm:max-w-xl rounded-3xl border border-blue-100 bg-white/90 shadow-2xl backdrop-blur-lg relative overflow-hidden animate-fade-in-up"
+            onClick={(e) => e.stopPropagation()}
+            style={{ fontFamily: '"Space Grotesk", "Work Sans", sans-serif' }}
+          >
+            <div className="flex flex-col items-center justify-center pt-8 pb-4 px-8 border-b border-blue-100 bg-linear-to-r from-blue-50 to-white rounded-t-3xl relative">
+              <span className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-blue-100 shadow mb-2">
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  className="w-8 h-8 text-blue-500"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+                  />
+                </svg>
+              </span>
+              <h2 className="text-2xl font-extrabold text-blue-700 drop-shadow mb-1 tracking-tight">
+                Llamado enviado
+              </h2>
+              <p className="text-sm text-slate-600 font-medium text-center">
+                El jefe ya fue notificado. Pronto atenderá el llamado.
+              </p>
+              <button
+                type="button"
+                onClick={() => setShowCallModal(false)}
+                className="absolute top-4 right-4 text-slate-400 hover:text-blue-500 text-2xl font-bold focus:outline-none transition-colors"
+                aria-label="Cerrar"
+              >
+                <svg width="28" height="28" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 6 6 18" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div className="px-8 py-8 flex flex-col items-center bg-white/85 w-full">
+              <div className="text-base sm:text-lg font-semibold text-slate-800 text-center">
+                Por favor espera instrucciones o la llegada del jefe.
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de acciones al solucionar */}
+      {showAlertModal && showSolveModal && alertaSeleccionada && (
+        <div
+          className="fixed inset-0 z-60 flex items-center justify-center backdrop-blur-sm bg-black/25 animate-fade-in"
+          role="dialog"
+          aria-modal="true"
+        >
+          <div
+            className="w-full max-w-lg sm:max-w-xl rounded-3xl border border-red-100 bg-white/90 shadow-2xl backdrop-blur-lg relative overflow-hidden animate-fade-in-up"
+            onClick={(e) => e.stopPropagation()}
+            style={{ fontFamily: '"Space Grotesk", "Work Sans", sans-serif' }}
+          >
+            <div className="flex flex-col items-center justify-center pt-8 pb-4 px-8 border-b border-red-100 bg-linear-to-r from-red-50 to-white rounded-t-3xl relative">
+              <span className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-red-100 shadow animate-pulse mb-2">
+                <FiAlertCircle className="w-9 h-9 text-red-500" />
+              </span>
+              <h3 className="text-2xl font-extrabold text-red-700 drop-shadow mb-1 tracking-tight">
+                Alerta {alertaSeleccionada.alerta.position}
+              </h3>
+              <p className="text-sm text-slate-500 font-medium text-center">
+                Selecciona la acción para esta alerta.
+              </p>
+              <button
+                type="button"
+                onClick={() => setShowSolveModal(false)}
+                className="absolute top-4 right-4 text-slate-400 hover:text-red-500 text-2xl font-bold focus:outline-none transition-colors"
+                aria-label="Cerrar"
+              >
+                <svg
+                  width="28"
+                  height="28"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M18 6 6 18"
+                  />
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M6 6l12 12"
+                  />
+                </svg>
+              </button>
+            </div>
+
+            <div className="px-8 py-6 min-h-30 flex flex-col items-center max-h-[60vh] overflow-y-auto bg-white/85 w-full">
+              <div className="w-full space-y-2 text-sm text-slate-700 mb-4">
+                <div className="flex items-center gap-2">
+                  <span className="font-semibold text-slate-600">Nombre:</span>
+                  {alertaSeleccionada.alerta.name && (
+                    <span className="inline-block px-2 py-1 rounded bg-slate-100 text-slate-700 text-xs">
+                      {alertaSeleccionada.alerta.name}
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="font-semibold text-slate-600">
+                    Id único:
+                  </span>
+                  <span className="truncate">
+                    {alertaSeleccionada.alerta.autoId || "N/A"}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="font-semibold text-slate-600">
+                    Temperatura:
+                  </span>
+                  {typeof alertaSeleccionada.alerta.temperature ===
+                    "number" && (
+                    <span className="inline-block px-2 py-1 rounded bg-red-100 text-red-700 font-semibold text-xs">
+                      {alertaSeleccionada.alerta.temperature} °C
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex flex-col sm:flex-row gap-2 mt-4 w-full">
+                <button
+                  type="button"
+                  className="flex-1 rounded-xl bg-blue-700 px-4 py-2 text-base font-bold text-white shadow-lg transition hover:bg-blue-800 active:scale-95 focus:outline-none focus:ring-2 focus:ring-blue-300"
+                  onClick={() =>
+                    setEditTempModal({
+                      position: alertaSeleccionada.alerta.position,
+                      autoId: alertaSeleccionada.alerta.autoId,
+                      name: alertaSeleccionada.alerta.name,
+                      temperature: alertaSeleccionada.alerta.temperature,
+                    })
+                  }
+                >
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    className="w-5 h-5 inline-block mr-1 -mt-1"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M17 17a5 5 0 01-10 0c0-2.5 2-4.5 5-4.5s5 2 5 4.5z"
+                    />
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M12 3v10"
+                    />
+                  </svg>
+                  Actualizar temperatura
+                </button>
+                <button
+                  type="button"
+                  className="flex-1 rounded-xl bg-slate-200 px-4 py-2 text-base font-semibold text-slate-700 shadow transition hover:bg-slate-300"
+                  onClick={() => setShowSolveModal(false)}
+                >
+                  Cerrar
+                </button>
+              </div>
+              <div className="flex justify-end w-full mt-6">
+                <span className="text-xs text-slate-500">
+                  Al actualizar temperatura se marcará como solucionada.
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal para editar temperatura (operario) */}
+      {editTempModal && (
+        <div
+          className="fixed inset-0 z-100 flex items-center justify-center p-2 bg-black/40 backdrop-blur-sm"
+          role="dialog"
+          aria-modal="true"
+          onClick={() => setEditTempModal(null)}
+        >
+          <div
+            className="w-full max-w-xs rounded-2xl border border-blue-100 bg-white/95 shadow-xl relative overflow-hidden animate-fade-in-up"
+            onClick={(e) => e.stopPropagation()}
+            style={{ fontFamily: '"Space Grotesk", "Work Sans", sans-serif' }}
+          >
+            <div className="flex flex-col items-center justify-center pt-5 pb-2 px-4 border-b border-blue-100 bg-linear-to-r from-blue-50 to-white rounded-t-2xl relative">
+              <span className="inline-flex items-center justify-center w-9 h-9 rounded-full bg-blue-100 mb-1">
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  className="w-5 h-5 text-blue-500"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+                  />
+                </svg>
+              </span>
+              <h2 className="text-lg font-bold text-blue-700 mb-0.5 tracking-tight">
+                Editar temperatura
+              </h2>
+              <button
+                type="button"
+                onClick={() => setEditTempModal(null)}
+                className="absolute top-2 right-2 text-slate-400 hover:text-blue-500 text-xl font-bold focus:outline-none transition-colors"
+                aria-label="Cerrar"
+              >
+                <svg
+                  width="22"
+                  height="22"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M18 6 6 18"
+                  />
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M6 6l12 12"
+                  />
+                </svg>
+              </button>
+            </div>
+            <div className="px-4 py-4 flex flex-col items-center max-h-[60vh] overflow-y-auto bg-white/90 w-full">
+              <div className="w-full space-y-1 text-xs text-slate-700 mb-2">
+                <div className="flex items-center gap-1">
+                  <span className="font-semibold text-slate-600">Caja:</span>
+                  <span className="truncate">
+                    {editTempModal.name || "Sin nombre"}
+                  </span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <span className="font-semibold text-slate-600">Id:</span>
+                  <span className="truncate">
+                    {editTempModal.autoId || "N/A"}
+                  </span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <span className="font-semibold text-slate-600">Pos:</span>
+                  <span>{editTempModal.position}</span>
+                </div>
+              </div>
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  const formData = new FormData(e.currentTarget);
+                  const temp = Number(formData.get("temp"));
+                  if (!isNaN(temp)) {
+                    handleUpdateAlertTemperature(editTempModal.position, temp);
+                    if (alertaSeleccionada) {
+                      markAlertSolved(
+                        alertaSeleccionada.alerta,
+                        alertaSeleccionada.idx,
+                      );
+                    }
+                    setEditTempModal(null);
+                  }
+                }}
+                className="flex flex-col gap-1 w-full"
+              >
+                <label className="text-xs font-medium text-slate-700 mb-1 flex items-center gap-1">
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    className="w-4 h-4 text-blue-400"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M17 17a5 5 0 01-10 0c0-2.5 2-4.5 5-4.5s5 2 5 4.5z"
+                    />
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M12 3v10"
+                    />
+                  </svg>
+                  Temperatura (°C)
+                </label>
+                <div className="flex gap-1 items-center w-full">
+                  <input
+                    name="temp"
+                    id="temp-input-operario"
+                    defaultValue={editTempModal.temperature ?? ""}
+                    type="number"
+                    step="any"
+                    inputMode="decimal"
+                    className="w-full flex-1 rounded-lg border border-blue-200 px-2 py-1 text-sm font-semibold text-blue-900 shadow-sm focus:ring-2 focus:ring-blue-300 outline-none transition"
+                    placeholder="Solo por imagen"
+                    readOnly
+                  />
+                  <button
+                    type="button"
+                    className="flex items-center justify-center gap-1 rounded-lg bg-blue-50 px-2 py-1 text-xs font-semibold text-blue-700 border border-blue-200 hover:bg-blue-100 transition"
+                    style={{ minWidth: 0, minHeight: 32 }}
+                    onClick={() =>
+                      document
+                        .getElementById("temp-image-upload-operario")
+                        ?.click()
+                    }
+                  >
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      className="w-3 h-3 mr-1 text-blue-500"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5-5m0 0l5 5m-5-5v12"
+                      />
+                    </svg>
+                    Subir imagen
+                  </button>
+                </div>
+                <input
+                  id="temp-image-upload-operario"
+                  type="file"
+                  accept="image/*"
+                  style={{ display: "none" }}
+                  onChange={async (e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    const fd = new FormData();
+                    fd.append("image", file);
+                    const tempInput = document.getElementById(
+                      "temp-input-operario",
+                    ) as HTMLInputElement | null;
+                    if (tempInput)
+                      tempInput.classList.add("ring-2", "ring-blue-400");
+                    setEditTempLoading(true);
+                    try {
+                      const res = await fetch(
+                        "https://asistencia-dos.onrender.com/api/image/analyze",
+                        {
+                          method: "POST",
+                          body: fd,
+                        },
+                      );
+                      const data = await res.json();
+                      if (
+                        data.numbersDetected &&
+                        data.numbersDetected.length > 0
+                      ) {
+                        let tempValue = data.numbersDetected[0];
+                        tempValue = tempValue.replace(",", ".");
+                        if (tempInput) tempInput.value = tempValue;
+                      } else {
+                        alert("No se detecto temperatura en la imagen.");
+                      }
+                    } catch {
+                      alert("Error al analizar la imagen.");
+                    }
+                    setEditTempLoading(false);
+                    if (tempInput) {
+                      setTimeout(
+                        () =>
+                          tempInput.classList.remove("ring-2", "ring-blue-400"),
+                        1200,
+                      );
+                    }
+                    e.target.value = "";
+                  }}
+                />
+                {editTempLoading && (
+                  <div className="flex items-center gap-1 mt-1 text-blue-500 text-xs">
+                    <svg
+                      className="animate-spin w-4 h-4"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                    >
+                      <circle
+                        cx="12"
+                        cy="12"
+                        r="10"
+                        stroke="currentColor"
+                        strokeWidth="4"
+                        fill="none"
+                      />
+                      <path
+                        d="M12 2a10 10 0 0110 10"
+                        stroke="currentColor"
+                        strokeWidth="4"
+                        strokeLinecap="round"
+                      />
+                    </svg>
+                    Analizando imagen...
+                  </div>
+                )}
+                <div className="flex gap-1 mt-2 w-full">
+                  <button
+                    type="submit"
+                    className="flex-1 rounded-lg bg-green-100 px-2 py-1 text-xs font-semibold text-green-700 shadow-sm transition hover:bg-green-200"
+                  >
+                    Guardar
+                  </button>
+                  <button
+                    type="button"
+                    className="flex-1 rounded-lg bg-pink-100 px-2 py-1 text-xs font-semibold text-pink-700 shadow-sm transition hover:bg-pink-200"
+                    onClick={() => setEditTempModal(null)}
+                  >
+                    Cancelar
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -5,7 +5,7 @@ export type Slot = {
 	temperature: number | null;
 };
 
-export type Role = "custodio" | "administrador" | "operario" | "jefe";
+export type Role = "custodio" | "administrador" | "operario" | "jefe" | "cliente";
 
 export type Box = {
 	position: number;

@@ -1,27 +1,28 @@
 import type { SlotCardProps } from "../../interfaces/bodega/SlotCard";
-import { FiPlus, FiBox } from "react-icons/fi";
-import { MdInventory2 } from "react-icons/md";
+import { FiBox } from "react-icons/fi";
 
-export default function SlotCard({ slot, isSelected, onSelect }: SlotCardProps) {
+export default function SlotCard({
+  slot,
+  isSelected,
+  onSelect,
+}: SlotCardProps) {
   const isOccupied = slot.autoId && slot.autoId.trim() !== "";
 
   return (
     <button
       type="button"
-      onClick={() => onSelect(slot.position)}
-      className={`relative flex flex-col items-center justify-center rounded-[22px] border border-slate-200 p-2 transition w-full h-27.5 sm:h-27.5 shadow-sm ${
-        isOccupied ? "bg-cyan-100" : "bg-white"
-      } ${
-        isSelected ? "ring-2 ring-emerald-300" : ""
-      }`}
-      style={{ minHeight: 110, maxWidth: 170 }}
+      onClick={() => isOccupied && onSelect(slot.position)}
+      className={`relative flex flex-col items-center justify-center rounded-3xl border border-slate-300 p-2 sm:p-4 transition ${
+        isOccupied
+          ? "bg-cyan-100 text-slate-900 cursor-pointer hover:ring-2 hover:ring-cyan-400"
+          : "bg-slate-50 text-slate-400 cursor-default"
+      } ${isSelected ? "ring-2 ring-emerald-300" : ""}`}
+      style={{ minHeight: 90, maxWidth: 140, width: "100%" }}
     >
-      {/* Número de posición */}
-      <span className="absolute top-2 left-2 text-[12px] font-semibold text-slate-500">
+      <span className="absolute top-1 left-1 text-[9px] font-semibold rounded-full px-1 py-0.5  text-slate-600">
         {slot.position}
       </span>
 
-      {/* Contenido central */}
       {isOccupied ? (
         <>
           <div className="mb-1">
@@ -40,18 +41,13 @@ export default function SlotCard({ slot, isSelected, onSelect }: SlotCardProps) 
           </div>
         </>
       ) : (
-        <div className="flex flex-col items-center justify-center w-full h-full">
-          {/* Círculo punteado con + */}
-          <div className="border-2 border-dashed border-slate-300 rounded-full w-9 h-9 flex items-center justify-center">
-            <span className="text-[20px] text-slate-400">+</span>
+        <div className="flex flex-col items-center gap-1">
+          <div className="border-2 border-dashed border-slate-300 rounded-3xl w-7 h-7 sm:w-9 sm:h-9 flex items-center justify-center">
+            <span className="text-base sm:text-lg">+</span>
           </div>
-          <div className="text-[14px] mt-2 text-slate-400 font-medium">Vacía</div>
+          <div className="text-[clamp(0.7rem,1.5vw,0.85rem)] mt-1">Vacía</div>
         </div>
       )}
-      
-
-     
     </button>
-    
   );
 }

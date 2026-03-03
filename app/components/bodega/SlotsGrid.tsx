@@ -20,14 +20,14 @@ export default function SlotsGrid({
 }: ExtendedSlotsGridProps) {
   return (
     <div className="flex-1 rounded-2xl bg-white p-2 sm:p-4 shadow-md border border-blue-200 w-full">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3 relative">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3 relative mb-3 sm:mb-4">
         <h2 className="text-sm sm:text-lg font-semibold text-slate-900 mb-2 sm:mb-4 flex items-center gap-1 sm:gap-2">
           <span className="inline-block">
             <FiArchive className="w-4 h-4 sm:w-5 sm:h-5 text-cyan-400" />
           </span>
           Mapa de Bodega
         </h2>
-        <div className="flex items-center gap-2 sm:gap-3 ml-auto relative z-10">
+        <div className="flex items-center gap-2 sm:gap-3 sm:ml-auto relative z-10 mt-1 sm:mt-0">
           {headerActions ? <div>{headerActions}</div> : null}
           {(role === "administrador" || role === "jefe") && typeof occupiedCount === "number" && typeof totalSlots === "number" && (
             <div className="flex items-center gap-2 bg-blue-50 border border-blue-200 rounded-lg px-3 py-1 shadow text-xs font-semibold text-blue-900">
@@ -38,7 +38,7 @@ export default function SlotsGrid({
         </div>
       </div>
 
-      <div className="grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 gap-2 sm:gap-4">
         {slots.map((slot) => (
           <SlotCard
             key={slot.position}

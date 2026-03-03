@@ -1,12 +1,13 @@
 import { FiArchive, FiLogOut, FiMenu, FiX } from "react-icons/fi";
 import { useState } from "react";
 import type { HeaderProps } from "../../interfaces/bodega/Header";
+import type { Role } from "../../interfaces/bodega";
 import SearchForm from "./SearchForm";
 
 interface ExtendedHeaderProps extends HeaderProps {
   userDisplayName?: string;
   onLogout?: () => void;
-  role?: "administrador" | "jefe" | "custodio" | "operario";
+  role?: Role;
 }
 
 export default function Header({

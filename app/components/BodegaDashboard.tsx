@@ -54,6 +54,12 @@ const USERS: UserAccount[] = [
     role: "operario",
     displayName: "Operario",
   },
+  {
+    username: "cliente",
+    password: "cliente123",
+    role: "cliente",
+    displayName: "Cliente",
+  },
 ];
 
 import { useEffect, useMemo, useState } from "react";
@@ -112,6 +118,7 @@ type AlertItem = {
   description: string;
   reason?: AlertReason;
   sourceOrderId?: string;
+  meta?: string;
 };
 
 type AlertAssignment = {
@@ -144,7 +151,6 @@ const ALERT_REASONS: Array<{ value: AlertReason; label: string }> = [
   { value: "no_pude", label: "No pude" },
 ];
 const ALERT_DELAY_MS = 2 * 60 * 1000;
-const ALERT_TEMPERATURE_ID = "alerta-temperatura-5";
 const ALERT_ORDER_PREFIX = "alerta-orden-";
 const ALERT_REPORT_PREFIX = "alerta-fallo-";
 
@@ -225,7 +231,8 @@ const isValidRole = (value: unknown): value is Role =>
   value === "custodio" ||
   value === "administrador" ||
   value === "operario" ||
-  value === "jefe";
+  value === "jefe" ||
+  value === "cliente";
 
 const normalizeBoxes = (value: unknown): Box[] | null => {
   if (!Array.isArray(value)) {
@@ -386,7 +393,7 @@ export default function BodegaDashboard() {
   // ...otros hooks y lógica...
   // Estado para modal de detalle de reportes (debe ir aquí, después de otros hooks)
   const [reportDetailModal, setReportDetailModal] = useState<null | {
-    type: "ingresos" | "salidas" | "movimientos" | "despachados";
+    type: "ingresos" | "salidas" | "movimientos" | "despachados" | "alertas";
   }>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [isHydrated, setIsHydrated] = useState(false);
@@ -868,6 +875,15 @@ export default function BodegaDashboard() {
     [outboundBoxes, pendingSourceKeys],
   );
 
+  const {
+    addIngreso,
+    addSalida,
+    movimientosBodega,
+    addMovimientoBodega,
+    alertas,
+    addAlerta,
+  } = useBodegaHistory();
+
   const reportData = useMemo(
     () => [
       { name: "Ingresos", value: stats.ingresos, fill: "#38bdf8" },
@@ -882,8 +898,13 @@ export default function BodegaDashboard() {
         value: dispatchedBoxes.length,
         fill: "#0ea5e9",
       },
+      {
+        name: "Alertas",
+        value: alertas.length,
+        fill: "#ef4444",
+      },
     ],
-    [dispatchedBoxes.length, stats],
+    [alertas.length, dispatchedBoxes.length, stats],
   );
 
   const zoneLabels: Record<ZoneKey, string> = {
@@ -965,8 +986,10 @@ export default function BodegaDashboard() {
     return options;
   }, [bodegaHighSlots, inboundHighBoxes, outboundHighBoxes]);
 
+  const isTemperatureAlert = (alertId: string) => alertId.startsWith("alerta-temp-");
+
   const getAlertKind = (alert: AlertItem) => {
-    if (alert.id === ALERT_TEMPERATURE_ID) {
+    if (isTemperatureAlert(alert.id)) {
       return "temperatura";
     }
     if (alert.id.startsWith(ALERT_REPORT_PREFIX)) {
@@ -1113,92 +1136,114 @@ export default function BodegaDashboard() {
     );
   };
 
-  useEffect(() => {
-    const hasHighTemp =
-      inboundHighBoxes.length > 0 ||
-      outboundHighBoxes.length > 0 ||
-      bodegaHighSlots.length > 0;
+  const computedAlerts = useMemo(() => {
+    const tempAlerts: AlertItem[] = [];
+
+    inboundHighBoxes.forEach((box) => {
+      tempAlerts.push({
+        id: `alerta-temp-entrada-${box.position}-${box.autoId}`,
+        title: `Temperatura alta en ingreso ${box.position}`,
+        description: `Caja ${box.name} · ${box.autoId} · ${box.temperature} °C.`,
+      });
+    });
+
+    bodegaHighSlots.forEach((slot) => {
+      tempAlerts.push({
+        id: `alerta-temp-bodega-${slot.position}-${slot.autoId}`,
+        title: `Temperatura alta en bodega ${slot.position}`,
+        description: `Caja ${slot.name} · ${slot.autoId} · ${slot.temperature ?? "-"} °C.`,
+      });
+    });
+
+    outboundHighBoxes.forEach((box) => {
+      tempAlerts.push({
+        id: `alerta-temp-salida-${box.position}-${box.autoId}`,
+        title: `Temperatura alta en salida ${box.position}`,
+        description: `Caja ${box.name} · ${box.autoId} · ${box.temperature} °C.`,
+      });
+    });
 
     const overdueOrders = orders.filter(
       (order) => alertClock - order.createdAtMs >= ALERT_DELAY_MS,
     );
 
-    setAlerts((prev) => {
-      const previousById = new Map(prev.map((alert) => [alert.id, alert]));
-      const next: AlertItem[] = [];
+    const next: AlertItem[] = [...tempAlerts];
 
-      if (hasHighTemp) {
-        const existing = previousById.get(ALERT_TEMPERATURE_ID);
-        const tempDetails = [
-          ...inboundHighBoxes.map(
-            (box) =>
-              `Ingreso ${box.position} · ${box.name} (${box.autoId}) · ${box.temperature} °C`,
-          ),
-          ...bodegaHighSlots.map(
-            (slot) =>
-              `Bodega ${slot.position} · ${slot.name} (${slot.autoId}) · ${slot.temperature} °C`,
-          ),
-          ...outboundHighBoxes.map(
-            (box) =>
-              `Salida ${box.position} · ${box.name} (${box.autoId}) · ${box.temperature} °C`,
-          ),
-        ];
-        next.push(
-          existing ?? {
-            id: ALERT_TEMPERATURE_ID,
-            title: "Temperatura alta",
-            description: `Temperaturas > 5 °C: ${tempDetails.join(" | ")}.`,
-          },
+    for (const order of overdueOrders) {
+      const alertId = `${ALERT_ORDER_PREFIX}${order.id}`;
+      const orderTarget = order.targetPosition ?? null;
+      const sourceLabel =
+        order.sourceZone === "bodega"
+          ? "Bodega"
+          : order.sourceZone === "salida"
+            ? "Salida"
+            : "Ingreso";
+      const orderLabel =
+        order.type === "revisar"
+          ? `Revisar ${sourceLabel} ${order.sourcePosition}`
+          : order.type === "a_bodega"
+            ? `Ingreso ${order.sourcePosition} -> Bodega ${orderTarget ?? "-"}`
+            : `${sourceLabel} ${order.sourcePosition} -> Salida ${orderTarget ?? "-"}`;
+
+      next.push({
+        id: alertId,
+        title: "Tarea demorada",
+        description: `Orden pendiente por mas de 2 minutos: ${orderLabel}. Solicitado por ${order.createdBy} · ${order.createdAt}.`,
+      });
+    }
+
+    alerts
+      .filter((alert) => alert.id.startsWith(ALERT_REPORT_PREFIX))
+      .forEach((alert) => {
+        if (!next.some((item) => item.id === alert.id)) {
+          next.push(alert);
+        }
+      });
+
+    const previousIds = new Set(alerts.map((alert) => alert.id));
+    const createdAtMs = Date.now();
+    const createdAt = new Date(createdAtMs).toLocaleString("es-CO");
+    const newAlertsToPersist = next
+      .filter((alert) => !previousIds.has(alert.id))
+      .map((alert) => ({
+        id: alert.id,
+        title: alert.title,
+        description: alert.description,
+        createdAt,
+        createdAtMs,
+        meta: alert.meta,
+      }));
+
+    const changed =
+      next.length !== alerts.length ||
+      next.some((alert, idx) => {
+        const prevItem = alerts[idx];
+        if (!prevItem) return true;
+        return (
+          prevItem.id !== alert.id ||
+          prevItem.title !== alert.title ||
+          prevItem.description !== alert.description ||
+          prevItem.meta !== alert.meta
         );
-      }
+      });
 
-      for (const order of overdueOrders) {
-        const alertId = `${ALERT_ORDER_PREFIX}${order.id}`;
-        const existing = previousById.get(alertId);
-        const orderTarget = order.targetPosition ?? null;
-        const sourceLabel =
-          order.sourceZone === "bodega"
-            ? "Bodega"
-            : order.sourceZone === "salida"
-              ? "Salida"
-              : "Ingreso";
-        const orderLabel =
-          order.type === "revisar"
-            ? `Revisar ${sourceLabel} ${order.sourcePosition}`
-            : order.type === "a_bodega"
-              ? `Ingreso ${order.sourcePosition} -> Bodega ${
-                  orderTarget ?? "-"
-                }`
-              : `${sourceLabel} ${order.sourcePosition} -> Salida ${
-                  orderTarget ?? "-"
-                }`;
-
-        next.push(
-          existing ?? {
-            id: alertId,
-            title: "Tarea demorada",
-            description: `Orden pendiente por mas de 2 minutos: ${orderLabel}. Solicitado por ${order.createdBy} · ${order.createdAt}.`,
-          },
-        );
-      }
-
-      prev
-        .filter((alert) => alert.id.startsWith(ALERT_REPORT_PREFIX))
-        .forEach((alert) => {
-          if (!next.some((item) => item.id === alert.id)) {
-            next.push(alert);
-          }
-        });
-
-      return next;
-    });
+    return { nextAlerts: next, newAlertsToPersist, changed };
   }, [
     alertClock,
+    alerts,
     bodegaHighSlots,
     inboundHighBoxes,
     outboundHighBoxes,
     orders,
   ]);
+
+  useEffect(() => {
+    if (!computedAlerts.changed && computedAlerts.newAlertsToPersist.length === 0) {
+      return;
+    }
+    setAlerts(computedAlerts.nextAlerts);
+    computedAlerts.newAlertsToPersist.forEach(addAlerta);
+  }, [addAlerta, computedAlerts]);
 
   useEffect(() => {
     if (availableBodegaForOrders.length === 0) {
@@ -1289,6 +1334,7 @@ export default function BodegaDashboard() {
   const isOperario = role === "operario";
   const isCustodio = role === "custodio";
   const isJefe = role === "jefe";
+  const isCliente = role === "cliente";
   const canManageAlerts = isJefe;
 
   const canSeeBodega = isAdmin || isOperario;
@@ -1300,8 +1346,6 @@ export default function BodegaDashboard() {
   const handleSelectSlot = (position: number) => {
     setSelectedPosition(position);
   };
-
-  const { addIngreso, addSalida, movimientosBodega, addMovimientoBodega } = useBodegaHistory();
 
   const handleIngreso = () => {
     if (role !== "custodio") {
@@ -1755,11 +1799,20 @@ export default function BodegaDashboard() {
 
   const openResolveModal = (alert: AlertItem) => {
     setResolveModalAlert(alert);
-    if (alert.id === ALERT_TEMPERATURE_ID) {
-      const first = tempFixOptions[0];
-      if (first) {
-        setTempFixZone(first.zone);
-        setTempFixPosition(first.position);
+    if (isTemperatureAlert(alert.id)) {
+      const location = alert.id.match(/^alerta-temp-(entrada|bodega|salida)-(\d+)/);
+      if (location) {
+        const [, zoneLabel, positionStr] = location;
+        const zone: OrderSource =
+          zoneLabel === "entrada" ? "ingresos" : zoneLabel === "salida" ? "salida" : "bodega";
+        setTempFixZone(zone);
+        setTempFixPosition(Number(positionStr));
+      } else {
+        const first = tempFixOptions[0];
+        if (first) {
+          setTempFixZone(first.zone);
+          setTempFixPosition(first.position);
+        }
       }
       setTempFixValue("");
     }
@@ -1770,7 +1823,7 @@ export default function BodegaDashboard() {
       return;
     }
 
-    if (resolveModalAlert.id === ALERT_TEMPERATURE_ID) {
+    if (isTemperatureAlert(resolveModalAlert.id)) {
       const parsedTemp = Number(tempFixValue);
       if (!Number.isFinite(parsedTemp)) {
         setMessage("Ingresa una temperatura valida.");
@@ -1876,9 +1929,9 @@ export default function BodegaDashboard() {
           visible: isOperario,
         },
         { key: "alertas", label: "Gestion de alertas", visible: false },
-        { key: "reportes", label: "Reportes", visible: isAdmin },
+        { key: "reportes", label: "Reportes", visible: isAdmin || isCliente },
       ].filter((tab) => tab.visible),
-    [isAdmin, isCustodio, isOperario, isJefe, canUseOrderForm],
+    [isAdmin, isCliente, isCustodio, isOperario, isJefe, canUseOrderForm],
   );
 
   useEffect(() => {
@@ -2264,7 +2317,7 @@ export default function BodegaDashboard() {
           </section>
         ) : null}
 
-        {activeTab === "reportes" && isAdmin ? (
+        {activeTab === "reportes" && (isAdmin || isCliente) ? (
           <ReportesSection
             reportData={reportData}
             inboundBoxes={inboundBoxes}
@@ -2582,7 +2635,7 @@ export default function BodegaDashboard() {
               </div>
 
               <div className="mt-6 grid gap-4">
-                {resolveModalAlert.id === ALERT_TEMPERATURE_ID ? (
+                {isTemperatureAlert(resolveModalAlert.id) ? (
                   <>
                     <div>
                       <label className="text-sm font-medium text-slate-600">
