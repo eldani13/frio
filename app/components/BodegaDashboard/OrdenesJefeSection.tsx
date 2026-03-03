@@ -350,68 +350,12 @@ export default function OrdenesJefeSection(props: {
                       <span>{typeof selectedBoxModal.temperature === "number" ? `${selectedBoxModal.temperature} °C` : "Sin temperatura"}</span>
                     </div>
                   </div>
-                  <div className="flex flex-col sm:flex-row gap-2 mt-4 w-full">
-                    <button
-                      type="button"
-                      className="flex-1 rounded-xl bg-blue-700 px-4 py-2 text-base font-bold text-white shadow-lg transition hover:bg-blue-800 active:scale-95 focus:outline-none focus:ring-2 focus:ring-blue-300"
-                      onClick={() =>
-                        setEditTempModal({
-                          position: selectedBoxModal.position,
-                          autoId: selectedBoxModal.autoId,
-                          name: selectedBoxModal.name,
-                          temperature: selectedBoxModal.temperature,
-                        })
-                      }
-                    >
-                      <svg
-                        xmlns="http://www.w3.org/2000/svg"
-                        className="w-5 h-5 inline-block mr-1 -mt-1"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                        stroke="currentColor"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M17 17a5 5 0 01-10 0c0-2.5 2-4.5 5-4.5s5 2 5 4.5z"
-                        />
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M12 3v10"
-                        />
-                      </svg>
-                      Actualizar temperatura
-                    </button>
-                    <button
-                      type="button"
-                      className="flex-1 rounded-xl bg-slate-200 px-4 py-2 text-base font-semibold text-slate-700 shadow transition hover:bg-slate-300"
-                      onClick={() => setSelectedBoxModal(null)}
-                    >
-                      <svg
-                        xmlns="http://www.w3.org/2000/svg"
-                        className="w-5 h-5 inline-block mr-1 -mt-1"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                        stroke="currentColor"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M6 18L18 6M6 6l12 12"
-                        />
-                      </svg>
-                      Cerrar
-                    </button>
-                  </div>
+                 
                 </div>
                 {/* Modal para editar temperatura */}
                 {editTempModal && (
                   <div
-                    className="fixed inset-0 z-[100] flex items-center justify-center p-2 bg-black/40 backdrop-blur-sm"
+                    className="fixed inset-0 z-100 flex items-center justify-center p-2 bg-black/40 backdrop-blur-sm"
                     role="dialog"
                     aria-modal="true"
                     onClick={() => setEditTempModal(null)}
@@ -422,7 +366,7 @@ export default function OrdenesJefeSection(props: {
                       style={{ fontFamily: '"Space Grotesk", "Work Sans", sans-serif' }}
                     >
                       {/* Header minimalista */}
-                      <div className="flex flex-col items-center justify-center pt-5 pb-2 px-4 border-b border-blue-100 bg-gradient-to-r from-blue-50 to-white rounded-t-2xl relative">
+                      <div className="flex flex-col items-center justify-center pt-5 pb-2 px-4 border-b border-blue-100 bg-linear-to-r from-blue-50 to-white rounded-t-2xl relative">
                         <span className="inline-flex items-center justify-center w-9 h-9 rounded-full bg-blue-100 mb-1">
                           <svg
                             xmlns="http://www.w3.org/2000/svg"
@@ -829,182 +773,184 @@ export default function OrdenesJefeSection(props: {
             </div>
             {/* Mapa de Bodega section center */}
             <div className="flex-1 rounded-2xl bg-white p-2 sm:p-4 shadow-md border border-blue-200 w-full relative">
-              <h2 className="text-sm sm:text-lg font-semibold text-slate-900 mb-2 sm:mb-4 flex items-center gap-1 sm:gap-2">
-                <span className="inline-block">
-                  <FiArchive className="w-4 h-4 sm:w-5 sm:h-5 text-cyan-400" />
-                </span>
-                Mapa de Bodega
-              </h2>
-              {/* Indicadores de alertas y ocupadas para jefe */}
-              <div className="absolute top-2 right-2 flex items-center gap-2 z-10">
-                {bodegaHighTempAlerts.length > 0 && (
-                  <button
-                    className="flex items-center px-2 py-0.5 rounded-full bg-[#e6003a] hover:bg-[#c20030] transition text-white relative shadow focus:outline-none min-h-6 min-w-6"
-                    style={{ fontSize: "12px", height: "24px" }}
-                    title="Ver alertas de temperatura en bodega"
-                    onClick={() => setShowAlertModal(true)}
-                  >
-                    <FiAlertTriangle className="w-4 h-4 mr-1" />
-                    <span className="text-[11px] font-semibold leading-none">
-                      {bodegaHighTempAlerts.length}
-                    </span>
-                  </button>
-                )}
-                {/* Botón de llamados solo si hay llamada_jefe */}
-                {typeof window !== 'undefined' && window.localStorage.getItem('llamada_jefe') && (
-                  <>
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-2 sm:mb-4">
+                <h2 className="text-sm sm:text-lg font-semibold text-slate-900 flex items-center gap-1 sm:gap-2">
+                  <span className="inline-block">
+                    <FiArchive className="w-4 h-4 sm:w-5 sm:h-5 text-cyan-400" />
+                  </span>
+                  Mapa de Bodega
+                </h2>
+                {/* Indicadores de alertas y ocupadas para jefe */}
+                <div className="flex items-center gap-2 sm:justify-end sm:ml-auto">
+                  {bodegaHighTempAlerts.length > 0 && (
                     <button
-                      className="flex items-center px-2 py-0.5 rounded-full bg-yellow-200 hover:bg-yellow-300 transition text-blue-900 relative shadow focus:outline-none min-h-6 min-w-6"
+                      className="flex items-center px-2 py-0.5 rounded-full bg-[#e6003a] hover:bg-[#c20030] transition text-white relative shadow focus:outline-none min-h-6 min-w-6"
                       style={{ fontSize: "12px", height: "24px" }}
-                      title="Ver llamados"
-                      onClick={() => setShowLlamadosModal(true)}
+                      title="Ver alertas de temperatura en bodega"
+                      onClick={() => setShowAlertModal(true)}
                     >
-                      <RiUserReceivedLine />
+                      <FiAlertTriangle className="w-4 h-4 mr-1" />
+                      <span className="text-[11px] font-semibold leading-none">
+                        {bodegaHighTempAlerts.length}
+                      </span>
                     </button>
-                    {showLlamadosModal && (
-                      <div
-                        className="fixed inset-0 z-50 flex items-center justify-center backdrop-blur-sm bg-black/10 animate-fade-in p-2 sm:p-4"
-                        role="dialog"
-                        aria-modal="true"
-                        onClick={() => setShowLlamadosModal(false)}
+                  )}
+                  {/* Botón de llamados solo si hay llamada_jefe */}
+                  {typeof window !== 'undefined' && window.localStorage.getItem('llamada_jefe') && (
+                    <>
+                      <button
+                        className="flex items-center px-2 py-0.5 rounded-full bg-yellow-200 hover:bg-yellow-300 transition text-blue-900 relative shadow focus:outline-none min-h-6 min-w-6"
+                        style={{ fontSize: "12px", height: "24px" }}
+                        title="Ver llamados"
+                        onClick={() => setShowLlamadosModal(true)}
                       >
+                        <RiUserReceivedLine />
+                      </button>
+                      {showLlamadosModal && (
                         <div
-                          className="w-full max-w-lg sm:max-w-xl rounded-3xl border border-yellow-100 bg-white/90 shadow-2xl backdrop-blur-lg relative overflow-hidden animate-fade-in-up"
-                          onClick={e => e.stopPropagation()}
-                          style={{ fontFamily: '"Space Grotesk", "Work Sans", sans-serif' }}
+                          className="fixed inset-0 z-50 flex items-center justify-center backdrop-blur-sm bg-black/10 animate-fade-in p-2 sm:p-4"
+                          role="dialog"
+                          aria-modal="true"
+                          onClick={() => setShowLlamadosModal(false)}
                         >
-                          {/* Header con gradiente y botón cerrar flotante */}
-                          <div className="flex flex-col items-center justify-center pt-8 pb-4 px-8 border-b border-yellow-100 bg-gradient-to-r from-yellow-50 to-white rounded-t-3xl relative">
-                            <span className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-yellow-100 shadow mb-2 animate-pulse">
-                              <RiUserReceivedLine className="w-8 h-8 text-yellow-500" />
-                            </span>
-                            <h2 className="text-2xl font-extrabold text-yellow-700 drop-shadow mb-1 tracking-tight">Llamados para el jefe</h2>
-                            <p className="text-sm text-slate-500 font-medium text-center">Estos son los llamados activos para el jefe.</p>
-                            <button
-                              className="absolute top-4 right-4 text-slate-400 hover:text-yellow-500 text-2xl font-bold focus:outline-none transition-colors"
-                              onClick={() => setShowLlamadosModal(false)}
-                              aria-label="Cerrar"
-                            >
-                              <svg width="28" height="28" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 6 6 18" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 6l12 12" /></svg>
-                            </button>
-                          </div>
-                          {/* Lista de llamados */}
-                          <div className="px-8 py-6 min-h-30 flex flex-col items-center max-h-[60vh] overflow-y-auto bg-white/80">
-                            {(() => {
-                              let llamados = [];
-                              try {
-                                const raw = typeof window !== 'undefined' && window.localStorage.getItem('llamada_jefe');
-                                if (raw) {
-                                  const parsed = JSON.parse(raw);
-                                  if (Array.isArray(parsed)) {
-                                    llamados = parsed;
-                                  } else if (parsed && typeof parsed === 'object') {
-                                    llamados = [parsed];
+                          <div
+                            className="w-full max-w-lg sm:max-w-xl rounded-3xl border border-yellow-100 bg-white/90 shadow-2xl backdrop-blur-lg relative overflow-hidden animate-fade-in-up"
+                            onClick={e => e.stopPropagation()}
+                            style={{ fontFamily: '"Space Grotesk", "Work Sans", sans-serif' }}
+                          >
+                            {/* Header con gradiente y botón cerrar flotante */}
+                            <div className="flex flex-col items-center justify-center pt-8 pb-4 px-8 border-b border-yellow-100 bg-gradient-to-r from-yellow-50 to-white rounded-t-3xl relative">
+                              <span className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-yellow-100 shadow mb-2 animate-pulse">
+                                <RiUserReceivedLine className="w-8 h-8 text-yellow-500" />
+                              </span>
+                              <h2 className="text-2xl font-extrabold text-yellow-700 drop-shadow mb-1 tracking-tight">Llamados para el jefe</h2>
+                              <p className="text-sm text-slate-500 font-medium text-center">Estos son los llamados activos para el jefe.</p>
+                              <button
+                                className="absolute top-4 right-4 text-slate-400 hover:text-yellow-500 text-2xl font-bold focus:outline-none transition-colors"
+                                onClick={() => setShowLlamadosModal(false)}
+                                aria-label="Cerrar"
+                              >
+                                <svg width="28" height="28" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 6 6 18" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 6l12 12" /></svg>
+                              </button>
+                            </div>
+                            {/* Lista de llamados */}
+                            <div className="px-8 py-6 min-h-30 flex flex-col items-center max-h-[60vh] overflow-y-auto bg-white/80">
+                              {(() => {
+                                let llamados = [];
+                                try {
+                                  const raw = typeof window !== 'undefined' && window.localStorage.getItem('llamada_jefe');
+                                  if (raw) {
+                                    const parsed = JSON.parse(raw);
+                                    if (Array.isArray(parsed)) {
+                                      llamados = parsed;
+                                    } else if (parsed && typeof parsed === 'object') {
+                                      llamados = [parsed];
+                                    }
                                   }
+                                } catch {
+                                  llamados = [];
                                 }
-                              } catch {
-                                llamados = [];
-                              }
-                              if (!Array.isArray(llamados) || llamados.length === 0) {
-                                return (
-                                  <div className="flex flex-col items-center justify-center py-8">
-                                    <span className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-yellow-100 mb-2">
-                                      <RiUserReceivedLine className="w-8 h-8 text-yellow-400" />
-                                    </span>
-                                    <div className="text-center text-slate-400 text-lg font-semibold">No hay llamados activos</div>
-                                    <div className="text-slate-400 text-sm text-center mt-1">Cuando haya un llamado, aparecerá aquí.</div>
-                                  </div>
-                                );
-                              }
-                              return (
-                                <ul className="mt-2 w-full space-y-3">
-                                  {llamados.map((llamado, idx) => (
-                                    <li
-                                      key={idx}
-                                      className="bg-gradient-to-r from-yellow-50 to-white border border-yellow-200 rounded-xl px-5 py-4 text-yellow-800 flex items-center gap-4 shadow-sm hover:shadow-md transition-all"
-                                    >
-                                      <span className="inline-flex items-center justify-center w-10 h-10 rounded-full bg-yellow-100">
-                                        <RiUserReceivedLine className="w-6 h-6 text-yellow-500" />
+                                if (!Array.isArray(llamados) || llamados.length === 0) {
+                                  return (
+                                    <div className="flex flex-col items-center justify-center py-8">
+                                      <span className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-yellow-100 mb-2">
+                                        <RiUserReceivedLine className="w-8 h-8 text-yellow-400" />
                                       </span>
-                                      <div className="flex-1 min-w-0">
-                                        <div className="flex items-center gap-2 mb-1">
-                                          <span className="font-bold text-base text-yellow-700 truncate">{llamado.message || llamado.titulo || 'Llamado'}</span>
-                                          {llamado.from && (
-                                            <span className="ml-2 text-xs text-yellow-700 bg-yellow-50 rounded px-2 py-0.5 border border-yellow-200">{llamado.from}</span>
-                                          )}
-                                        </div>
-                                        {llamado.descripcion && (
-                                          <div className="text-xs text-yellow-800 whitespace-pre-line mb-1">{llamado.descripcion}</div>
-                                        )}
-                                        {llamado.timestamp && (
-                                          <div className="text-xs text-yellow-700 flex items-center gap-1 mt-1">
-                                            <svg className="w-4 h-4 inline-block text-yellow-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                                            {new Date(llamado.timestamp).toLocaleDateString('es-CL', { day: '2-digit', month: '2-digit', year: 'numeric' })}, {new Date(llamado.timestamp).toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' })}
+                                      <div className="text-center text-slate-400 text-lg font-semibold">No hay llamados activos</div>
+                                      <div className="text-slate-400 text-sm text-center mt-1">Cuando haya un llamado, aparecerá aquí.</div>
+                                    </div>
+                                  );
+                                }
+                                return (
+                                  <ul className="mt-2 w-full space-y-3">
+                                    {llamados.map((llamado, idx) => (
+                                      <li
+                                        key={idx}
+                                        className="bg-gradient-to-r from-yellow-50 to-white border border-yellow-200 rounded-xl px-5 py-4 text-yellow-800 flex items-center gap-4 shadow-sm hover:shadow-md transition-all"
+                                      >
+                                        <span className="inline-flex items-center justify-center w-10 h-10 rounded-full bg-yellow-100">
+                                          <RiUserReceivedLine className="w-6 h-6 text-yellow-500" />
+                                        </span>
+                                        <div className="flex-1 min-w-0">
+                                          <div className="flex items-center gap-2 mb-1">
+                                            <span className="font-bold text-base text-yellow-700 truncate">{llamado.message || llamado.titulo || 'Llamado'}</span>
+                                            {llamado.from && (
+                                              <span className="ml-2 text-xs text-yellow-700 bg-yellow-50 rounded px-2 py-0.5 border border-yellow-200">{llamado.from}</span>
+                                            )}
                                           </div>
-                                        )}
-                                        <div className="flex flex-row items-center gap-2 mt-2">
-                                          <button
-                                            type="button"
-                                            className="rounded-lg bg-green-500 hover:bg-green-600 text-white text-xs font-semibold px-4 py-1.5 shadow transition focus:outline-none focus:ring-2 focus:ring-green-400"
-                                            onClick={() => {
-                                              if (typeof window === 'undefined') return;
-                                              try {
-                                                const raw = window.localStorage.getItem('llamada_jefe');
-                                                if (!raw) return;
-                                                let llamados = [];
-                                                const parsed = JSON.parse(raw);
-                                                if (Array.isArray(parsed)) {
-                                                  llamados = parsed;
-                                                } else if (parsed && typeof parsed === 'object') {
-                                                  llamados = [parsed];
-                                                }
-                                                // Eliminar el llamado por índice
-                                                llamados.splice(idx, 1);
-                                                // Guardar el nuevo array
-                                                if (llamados.length === 0) {
-                                                  window.localStorage.removeItem('llamada_jefe');
-                                                } else if (llamados.length === 1) {
-                                                  window.localStorage.setItem('llamada_jefe', JSON.stringify(llamados[0]));
-                                                } else {
-                                                  window.localStorage.setItem('llamada_jefe', JSON.stringify(llamados));
-                                                }
-                                                // Forzar re-render
-                                                window.dispatchEvent(new Event('storage'));
-                                                // Cerrar el modal si ya no quedan llamados
-                                                setTimeout(() => {
-                                                  const check = window.localStorage.getItem('llamada_jefe');
-                                                  if (!check) {
-                                                    if (typeof setShowLlamadosModal === 'function') setShowLlamadosModal(false);
+                                          {llamado.descripcion && (
+                                            <div className="text-xs text-yellow-800 whitespace-pre-line mb-1">{llamado.descripcion}</div>
+                                          )}
+                                          {llamado.timestamp && (
+                                            <div className="text-xs text-yellow-700 flex items-center gap-1 mt-1">
+                                              <svg className="w-4 h-4 inline-block text-yellow-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                                              {new Date(llamado.timestamp).toLocaleDateString('es-CL', { day: '2-digit', month: '2-digit', year: 'numeric' })}, {new Date(llamado.timestamp).toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' })}
+                                            </div>
+                                          )}
+                                          <div className="flex flex-row items-center gap-2 mt-2">
+                                            <button
+                                              type="button"
+                                              className="rounded-lg bg-green-500 hover:bg-green-600 text-white text-xs font-semibold px-4 py-1.5 shadow transition focus:outline-none focus:ring-2 focus:ring-green-400"
+                                              onClick={() => {
+                                                if (typeof window === 'undefined') return;
+                                                try {
+                                                  const raw = window.localStorage.getItem('llamada_jefe');
+                                                  if (!raw) return;
+                                                  let llamados = [];
+                                                  const parsed = JSON.parse(raw);
+                                                  if (Array.isArray(parsed)) {
+                                                    llamados = parsed;
+                                                  } else if (parsed && typeof parsed === 'object') {
+                                                    llamados = [parsed];
                                                   }
-                                                }, 100);
-                                              } catch (e) {
-                                                // opcional: mostrar error
-                                              }
-                                            }}
-                                          >
-                                            Solucionar
-                                          </button>
+                                                  // Eliminar el llamado por índice
+                                                  llamados.splice(idx, 1);
+                                                  // Guardar el nuevo array
+                                                  if (llamados.length === 0) {
+                                                    window.localStorage.removeItem('llamada_jefe');
+                                                  } else if (llamados.length === 1) {
+                                                    window.localStorage.setItem('llamada_jefe', JSON.stringify(llamados[0]));
+                                                  } else {
+                                                    window.localStorage.setItem('llamada_jefe', JSON.stringify(llamados));
+                                                  }
+                                                  // Forzar re-render
+                                                  window.dispatchEvent(new Event('storage'));
+                                                  // Cerrar el modal si ya no quedan llamados
+                                                  setTimeout(() => {
+                                                    const check = window.localStorage.getItem('llamada_jefe');
+                                                    if (!check) {
+                                                      if (typeof setShowLlamadosModal === 'function') setShowLlamadosModal(false);
+                                                    }
+                                                  }, 100);
+                                                } catch (e) {
+                                                  // opcional: mostrar error
+                                                }
+                                              }}
+                                            >
+                                              Solucionar
+                                            </button>
+                                          </div>
                                         </div>
-                                      </div>
-                                    </li>
-                                  ))}
-                                </ul>
-                              );
-                            })()}
+                                      </li>
+                                    ))}
+                                  </ul>
+                                );
+                              })()}
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    )}
-                  </>
-                )}
-                <div className="flex items-center gap-2 bg-blue-50 border border-blue-200 rounded-lg px-3 py-1 shadow text-xs font-semibold text-blue-900">
-                  <FiArchive className="w-4 h-4 text-blue-500" />
-                  Ocupadas:{" "}
-                  {
-                    slots.filter((s) => s.autoId && s.autoId.trim() !== "")
-                      .length
-                  }{" "}
-                  / {slots.length}
+                      )}
+                    </>
+                  )}
+                  <div className="flex items-center gap-2 bg-blue-50 border border-blue-200 rounded-lg px-3 py-1 shadow text-xs font-semibold text-blue-900">
+                    <FiArchive className="w-4 h-4 text-blue-500" />
+                    Ocupadas:{" "}
+                    {
+                      slots.filter((s) => s.autoId && s.autoId.trim() !== "")
+                        .length
+                    }{" "}
+                    / {slots.length}
+                  </div>
                 </div>
               </div>
               {/* Modal de alertas de temperatura alta en bodega */}
@@ -1224,7 +1170,7 @@ export default function OrdenesJefeSection(props: {
                   </div>
                 </div>
               )}
-              <div className="grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-4">
+              <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-4">
                 {slots.slice(0, 12).map((slot, idx) => {
                   const isOccupied = slot.autoId && slot.autoId.trim() !== "";
                   return (
@@ -1284,7 +1230,7 @@ export default function OrdenesJefeSection(props: {
               </div>
             </div>
             {/* Salida division right */}
-            <div className="flex flex-col items-start rounded-3xl border border-pink-200 bg-pink-50 p-4 sm:p-6 min-h-30 w-full max-w-xs lg:max-w-60">
+            <div className="flex flex-col items-start rounded-3xl border border-pink-200 bg-pink-50 p-4 sm:p-6 min-h-30 w-full max-w-full sm:max-w-xs lg:max-w-60">
               <h3 className="text-base sm:text-lg font-semibold text-pink-600 mb-2 flex items-center gap-2">
                 <span className="inline-block">
                   <FiBox className="w-5 h-5 text-pink-400" />

@@ -1,32 +1,151 @@
 "use client";
-import React, { createContext, useContext, useState } from "react";
+import React, { createContext, useCallback, useContext, useEffect, useState } from "react";
 import type { Box, BodegaOrder } from "../../interfaces/bodega";
 
-interface BodegaHistoryContextType {
+const HISTORY_STORAGE_KEY = "bodegaHistoryV1";
+
+type AlertHistoryEntry = {
+  id: string;
+  title: string;
+  description: string;
+  createdAt: string;
+  createdAtMs: number;
+  meta?: string;
+};
+
+type HistoryState = {
   ingresos: Box[];
   salidas: BodegaOrder[];
   movimientosBodega: BodegaOrder[];
+  alertas: AlertHistoryEntry[];
+};
+
+const defaultHistory: HistoryState = {
+  ingresos: [],
+  salidas: [],
+  movimientosBodega: [],
+  alertas: [],
+};
+
+interface BodegaHistoryContextType extends HistoryState {
   addIngreso: (box: Box) => void;
   addSalida: (order: BodegaOrder) => void;
   addMovimientoBodega: (order: BodegaOrder) => void;
+  addAlerta: (alert: AlertHistoryEntry) => void;
 }
 
 const BodegaHistoryContext = createContext<BodegaHistoryContextType | undefined>(undefined);
 
+const loadHistory = (): HistoryState => {
+  if (typeof window === "undefined") return defaultHistory;
+  try {
+    const raw = window.localStorage.getItem(HISTORY_STORAGE_KEY);
+    if (!raw) return defaultHistory;
+    const parsed = JSON.parse(raw);
+    return {
+      ingresos: Array.isArray(parsed?.ingresos) ? parsed.ingresos : [],
+      salidas: Array.isArray(parsed?.salidas) ? parsed.salidas : [],
+      movimientosBodega: Array.isArray(parsed?.movimientosBodega)
+        ? parsed.movimientosBodega
+        : [],
+      alertas: Array.isArray(parsed?.alertas) ? parsed.alertas : [],
+    } satisfies HistoryState;
+  } catch {
+    return defaultHistory;
+  }
+};
+
 export const BodegaHistoryProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [ingresos, setIngresos] = useState<Box[]>([]);
-  const [salidas, setSalidas] = useState<BodegaOrder[]>([]);
-  const [movimientosBodega, setMovimientosBodega] = useState<BodegaOrder[]>([]);
+  const [history, setHistory] = useState<HistoryState>(() => loadHistory());
 
-  const addIngreso = (box: Box) => setIngresos((prev) => [...prev, box]);
-  const addSalida = (order: BodegaOrder) => setSalidas((prev) => [...prev, order]);
-  const addMovimientoBodega = (order: BodegaOrder) => setMovimientosBodega((prev) => [...prev, order]);
+  const persist = useCallback((updater: (prev: HistoryState) => HistoryState) => {
+    setHistory((prev) => {
+      const next = updater(prev);
+      if (typeof window !== "undefined") {
+        try {
+          window.localStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(next));
+        } catch {
+          // ignore storage errors
+        }
+      }
+      return next;
+    });
+  }, []);
 
-  return (
-    <BodegaHistoryContext.Provider value={{ ingresos, salidas, movimientosBodega, addIngreso, addSalida, addMovimientoBodega }}>
-      {children}
-    </BodegaHistoryContext.Provider>
+  const addIngreso = useCallback(
+    (box: Box) => {
+      persist((prev) => ({ ...prev, ingresos: [...prev.ingresos, box] }));
+    },
+    [persist],
   );
+
+  const addSalida = useCallback(
+    (order: BodegaOrder) => {
+      persist((prev) => ({ ...prev, salidas: [...prev.salidas, order] }));
+    },
+    [persist],
+  );
+
+  const addMovimientoBodega = useCallback(
+    (order: BodegaOrder) => {
+      persist((prev) => ({ ...prev, movimientosBodega: [...prev.movimientosBodega, order] }));
+    },
+    [persist],
+  );
+
+  const addAlerta = useCallback(
+    (alert: AlertHistoryEntry) => {
+      persist((prev) => {
+        const exists = prev.alertas.some(
+          (item) => item.id === alert.id && item.createdAtMs === alert.createdAtMs,
+        );
+        if (exists) return prev;
+        return { ...prev, alertas: [...prev.alertas, alert] };
+      });
+    },
+    [persist],
+  );
+
+  // Mantener sincronizado entre pestañas
+  useEffect(() => {
+    const handler = (event: StorageEvent) => {
+      if (event.key === HISTORY_STORAGE_KEY && event.newValue) {
+        try {
+          const parsed = JSON.parse(event.newValue);
+          setHistory({
+            ingresos: Array.isArray(parsed?.ingresos) ? parsed.ingresos : [],
+            salidas: Array.isArray(parsed?.salidas) ? parsed.salidas : [],
+            movimientosBodega: Array.isArray(parsed?.movimientosBodega)
+              ? parsed.movimientosBodega
+              : [],
+            alertas: Array.isArray(parsed?.alertas) ? parsed.alertas : [],
+          });
+        } catch {
+          // ignore parse errors
+        }
+      }
+    };
+
+    if (typeof window !== "undefined") {
+      window.addEventListener("storage", handler);
+    }
+
+    return () => {
+      if (typeof window !== "undefined") {
+        window.removeEventListener("storage", handler);
+      }
+    };
+  }, []);
+
+  const value: BodegaHistoryContextType = {
+    ...history,
+    addIngreso,
+    addSalida,
+    addMovimientoBodega,
+    addAlerta,
+  };
+
+  return <BodegaHistoryContext.Provider value={value}>{children}</BodegaHistoryContext.Provider>;
 };
 
 export const useBodegaHistory = () => {

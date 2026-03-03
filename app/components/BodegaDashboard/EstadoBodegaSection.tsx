@@ -176,7 +176,7 @@ export default function EstadoBodegaSection(props: Props) {
         />
       </div>
 
-      <div className="flex flex-col items-start rounded-3xl border border-pink-200 bg-pink-50 p-4 sm:p-6 min-h-30 w-full max-w-xs lg:max-w-60">
+      <div className="flex flex-col items-start rounded-3xl border border-pink-200 bg-pink-50 p-4 sm:p-6 min-h-30 w-full max-w-full sm:max-w-xs lg:max-w-60">
         <h3 className="text-base sm:text-lg font-semibold text-pink-600 mb-2 flex items-center gap-2">
           <span className="inline-block">
             <FiBox className="w-5 h-5 text-pink-400" />
