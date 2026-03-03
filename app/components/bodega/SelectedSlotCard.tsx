@@ -57,6 +57,9 @@ export default function SelectedSlotCard({
               <span className="font-semibold">Nombre:</span> {slot.name || "—"}
             </p>
             <p>
+              <span className="font-semibold">Cliente:</span> {slot.client || "—"}
+            </p>
+            <p>
               <span className="font-semibold">Temperatura:</span> {slot.temperature !== null ? `${slot.temperature} °C` : "—"}
             </p>
           </div>

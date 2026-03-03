@@ -39,6 +39,10 @@ interface ReportesSectionProps {
       type: "ingresos" | "salidas" | "movimientos" | "despachados" | "alertas";
     } | null,
   ) => void;
+  isCliente?: boolean;
+  clientId?: string;
+  clientFilterId?: string;
+  onClientChange?: (id: string) => void;
 }
 
 const ReportesSection: React.FC<ReportesSectionProps> = ({
@@ -51,8 +55,50 @@ const ReportesSection: React.FC<ReportesSectionProps> = ({
   sortByPosition,
   reportDetailModal,
   setReportDetailModal,
+  isCliente = false,
+  clientId,
+  clientFilterId,
+  onClientChange,
 }) => {
   const { ingresos, salidas, movimientosBodega, alertas } = useBodegaHistory();
+
+  const activeClientId = isCliente ? clientFilterId || clientId : clientId;
+  const clientOptions = ["cliente1", "cliente2", "cliente3"];
+
+  const clientAutoIds = React.useMemo(() => {
+    if (!isCliente || !activeClientId) return new Set<string>();
+    const ids = new Set<string>();
+    [inboundBoxes, outboundBoxes, dispatchedBoxes, slots].forEach((list) => {
+      list.forEach((item) => {
+        if (item.client === activeClientId && item.autoId) ids.add(item.autoId);
+      });
+    });
+    return ids;
+  }, [activeClientId, dispatchedBoxes, inboundBoxes, isCliente, outboundBoxes, slots]);
+
+  const filterBoxes = (items: Box[]) =>
+    isCliente && activeClientId
+      ? items.filter((item) => item.client === activeClientId)
+      : items;
+
+  const orderMatchesClient = (order: BodegaOrder) => {
+    if (!isCliente || !activeClientId) return true;
+    if (order.client) return order.client === activeClientId;
+    const findByZone = (zone: "ingresos" | "bodega" | "salida", position: number) => {
+      if (zone === "ingresos") return inboundBoxes.find((b) => b.position === position);
+      if (zone === "salida") return outboundBoxes.find((b) => b.position === position);
+      return slots.find((s) => s.position === position);
+    };
+    const source = findByZone(order.sourceZone, order.sourcePosition);
+    if (source?.client === activeClientId) return true;
+    if (order.targetPosition) {
+      const targetSlot = slots.find((s) => s.position === order.targetPosition);
+      if (targetSlot?.client === activeClientId) return true;
+      const targetOut = outboundBoxes.find((b) => b.position === order.targetPosition);
+      if (targetOut?.client === activeClientId) return true;
+    }
+    return false;
+  };
 
   const pieData = reportData.filter((item) => item.value > 0);
   const RADIAN = Math.PI / 180;
@@ -104,22 +150,61 @@ const ReportesSection: React.FC<ReportesSectionProps> = ({
   };
 
   // Para mantener compatibilidad, si el historial está vacío, usar los props locales
-  const globalIngresos = ingresos.length > 0 ? ingresos : inboundBoxes;
-  const globalSalidas =
-    salidas.length > 0
-      ? salidas
-      : orders.filter(
-          (order) => order.type === "a_salida" && order.sourceZone === "bodega",
-        );
+  const filteredIngresosHistory = filterBoxes(ingresos);
+  const filteredSalidasHistory = isCliente ? salidas.filter(orderMatchesClient) : salidas;
+  const filteredMovimientosHistory = isCliente
+    ? movimientosBodega.filter(orderMatchesClient)
+    : movimientosBodega;
+  const filteredAlertHistory = isCliente
+    ? alertas.filter((alert) => {
+        if (!activeClientId || clientAutoIds.size === 0) return false;
+        const haystack = `${alert.id} ${alert.description ?? ""} ${alert.meta ?? ""}`;
+        for (const id of clientAutoIds) {
+          if (haystack.includes(id)) return true;
+        }
+        return false;
+      })
+    : alertas;
 
-  const alertHistory = alertas;
+  const globalIngresos =
+    filteredIngresosHistory.length > 0 ? filteredIngresosHistory : inboundBoxes;
+  const globalSalidas =
+    filteredSalidasHistory.length > 0
+      ? filteredSalidasHistory
+      : orders.filter((order) => order.type === "a_salida" && order.sourceZone === "bodega");
+
+  const alertHistory = filteredAlertHistory;
 
   return (
     <section className="rounded-2xl bg-white p-6 shadow-sm">
-      <h2 className="text-lg font-semibold text-slate-900">Reportes</h2>
-      <p className="mt-1 text-sm text-slate-600">
-        Aqui podras consultar los reportes de la bodega.
-      </p>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 className="text-lg font-semibold text-slate-900">Reportes</h2>
+          <p className="mt-1 text-sm text-slate-600">
+            Aqui podras consultar los reportes de la bodega.
+          </p>
+        </div>
+        {isCliente ? (
+          <div className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50/70 px-3 py-2 shadow-inner">
+            <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+              Cliente
+            </span>
+            <div className="flex items-center gap-2 rounded-xl bg-white px-3 py-1 shadow-sm ring-1 ring-slate-200">
+              <select
+                value={activeClientId ?? "cliente1"}
+                onChange={(event) => onClientChange?.(event.target.value)}
+                className="cursor-pointer bg-transparent text-sm font-semibold text-slate-800 focus:outline-none"
+              >
+                {clientOptions.map((option) => (
+                  <option key={option} value={option}>
+                    {option.replace("cliente", "Cliente ")}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+        ) : null}
+      </div>
       <div className="mt-6 grid gap-8 lg:grid-cols-[1.4fr_1fr]">
         <div className="rounded-3xl border border-slate-200 bg-linear-to-br from-slate-50 to-white p-6 shadow-sm flex flex-col">
           <div className="flex items-center justify-between mb-2">
@@ -252,10 +337,9 @@ const ReportesSection: React.FC<ReportesSectionProps> = ({
             Movimientos a bodega
           </span>
           <span className="mt-1 text-2xl font-bold text-slate-900">
-            {movimientosBodega.length > 0
-              ? movimientosBodega.length
-              : (reportData.find((item) => item.name === "Movimientos a bodega")
-                  ?.value ?? 0)}
+            {filteredMovimientosHistory.length > 0
+              ? filteredMovimientosHistory.length
+              : (reportData.find((item) => item.name === "Movimientos a bodega")?.value ?? 0)}
           </span>
         </button>
         <button
@@ -366,6 +450,9 @@ const ReportesSection: React.FC<ReportesSectionProps> = ({
                               {box.name}
                             </span>
                             <span className="text-xs text-slate-500">
+                              Cliente: {box.client || "—"}
+                            </span>
+                            <span className="text-xs text-slate-500">
                               Temp: {box.temperature} °C
                             </span>
                             <span className="text-xs text-slate-400">
@@ -398,6 +485,11 @@ const ReportesSection: React.FC<ReportesSectionProps> = ({
                               slots.find(
                                 (s) => s.position === order.sourcePosition,
                               );
+
+                            const detailName = box?.name ?? order.boxName ?? "";
+                            const detailClient = box?.client ?? order.client ?? "";
+                            const detailAutoId = box?.autoId ?? order.autoId ?? "";
+                            const detailTemp = box?.temperature;
                             return (
                               <li
                                 key={order.id}
@@ -421,13 +513,14 @@ const ReportesSection: React.FC<ReportesSectionProps> = ({
                                 <span className="text-xs text-slate-500">
                                   Destino: {order.targetPosition ?? "-"}
                                 </span>
-                                {box ? (
-                                  <>
-                                    <span className="text-xs text-slate-400">
-                                      {box.name} | Temp: {box.temperature} °C |
-                                      ID: {box.autoId}
-                                    </span>
-                                  </>
+                                {detailName || detailClient || detailAutoId ? (
+                                  <span className="text-xs text-slate-400">
+                                    {detailName || "Caja"} | Cliente: {detailClient || "—"}
+                                    {detailTemp !== undefined && detailTemp !== null
+                                      ? ` | Temp: ${detailTemp} °C`
+                                      : ""}
+                                    {detailAutoId ? ` | ID: ${detailAutoId}` : ""}
+                                  </span>
                                 ) : (
                                   <span className="text-xs text-rose-500 font-bold">
                                     Detalles de caja no encontrados.
@@ -441,7 +534,7 @@ const ReportesSection: React.FC<ReportesSectionProps> = ({
                     })()
                   : reportDetailModal.type === "movimientos"
                     ? (() => {
-                        if (movimientosBodega.length === 0) {
+                        if (filteredMovimientosHistory.length === 0) {
                           return (
                             <p className="text-base text-slate-500 text-center py-8">
                               No hay movimientos registrados.
@@ -450,7 +543,7 @@ const ReportesSection: React.FC<ReportesSectionProps> = ({
                         }
                         return (
                           <ul className="grid gap-3 md:grid-cols-2">
-                            {movimientosBodega.map((order) => {
+                            {filteredMovimientosHistory.map((order) => {
                               const box =
                                 slots.find(
                                   (s) => s.position === order.targetPosition,
@@ -458,6 +551,11 @@ const ReportesSection: React.FC<ReportesSectionProps> = ({
                                 slots.find(
                                   (s) => s.position === order.sourcePosition,
                                 );
+
+                              const detailName = box?.name ?? order.boxName ?? "";
+                              const detailClient = box?.client ?? order.client ?? "";
+                              const detailAutoId = box?.autoId ?? order.autoId ?? "";
+                              const detailTemp = box?.temperature;
                               return (
                                 <li
                                   key={order.id}
@@ -482,13 +580,14 @@ const ReportesSection: React.FC<ReportesSectionProps> = ({
                                   <span className="text-xs text-slate-500">
                                     Destino: {order.targetPosition ?? "-"}
                                   </span>
-                                  {box ? (
-                                    <>
-                                      <span className="text-xs text-slate-400">
-                                        {box.name} | Temp: {box.temperature} °C
-                                        | ID: {box.autoId}
-                                      </span>
-                                    </>
+                                  {detailName || detailClient || detailAutoId ? (
+                                    <span className="text-xs text-slate-400">
+                                      {detailName || "Caja"} | Cliente: {detailClient || "—"}
+                                      {detailTemp !== undefined && detailTemp !== null
+                                        ? ` | Temp: ${detailTemp} °C`
+                                        : ""}
+                                      {detailAutoId ? ` | ID: ${detailAutoId}` : ""}
+                                    </span>
                                   ) : (
                                     <span className="text-xs text-rose-500 font-bold">
                                       Detalles de caja no encontrados.
@@ -556,6 +655,9 @@ const ReportesSection: React.FC<ReportesSectionProps> = ({
                                   </span>
                                   <span className="text-slate-900 font-medium">
                                     {box.name}
+                                  </span>
+                                  <span className="text-xs text-slate-500">
+                                    Cliente: {box.client || "—"}
                                   </span>
                                   <span className="text-xs text-slate-500">
                                     Temp: {box.temperature} °C

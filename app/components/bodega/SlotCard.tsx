@@ -34,6 +34,9 @@ export default function SlotCard({
           <div className="text-[clamp(0.7rem,1.5vw,0.85rem)] mt-1 text-center truncate w-full">
             {slot.autoId}
           </div>
+          {/* <div className="text-[clamp(0.68rem,1.4vw,0.8rem)] text-center truncate w-full text-slate-600">
+            Cliente: {slot.client || "—"}
+          </div> */}
           <div className="mt-2 text-[clamp(0.7rem,1.5vw,0.85rem)] font-medium bg-cyan-200 rounded-full px-1.5 sm:px-3 py-0.5 inline-block">
             {typeof slot.temperature === "number"
               ? `${slot.temperature} °C`

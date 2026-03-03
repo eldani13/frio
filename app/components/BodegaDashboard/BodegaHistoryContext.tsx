@@ -2,7 +2,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useState } from "react";
 import type { Box, BodegaOrder } from "../../interfaces/bodega";
 
-const HISTORY_STORAGE_KEY = "bodegaHistoryV1";
+const HISTORY_STORAGE_KEY = "bodegaHistoryV2";
 
 type AlertHistoryEntry = {
   id: string;
@@ -42,13 +42,44 @@ const loadHistory = (): HistoryState => {
     const raw = window.localStorage.getItem(HISTORY_STORAGE_KEY);
     if (!raw) return defaultHistory;
     const parsed = JSON.parse(raw);
+    const ingresos = Array.isArray(parsed?.ingresos)
+      ? parsed.ingresos.map((box: any) => ({
+          ...box,
+          client:
+            typeof box?.client === "string"
+              ? box.client
+              : typeof box?.customer === "string"
+                ? box.customer
+                : "cliente1",
+        }))
+      : [];
+    const salidas = Array.isArray(parsed?.salidas)
+      ? parsed.salidas.map((order: any) => ({
+          ...order,
+          client: typeof order?.client === "string" ? order.client : undefined,
+          autoId: typeof order?.autoId === "string" ? order.autoId : undefined,
+          boxName: typeof order?.boxName === "string" ? order.boxName : undefined,
+        }))
+      : [];
+    const movimientosBodega = Array.isArray(parsed?.movimientosBodega)
+      ? parsed.movimientosBodega.map((order: any) => ({
+          ...order,
+          client: typeof order?.client === "string" ? order.client : undefined,
+          autoId: typeof order?.autoId === "string" ? order.autoId : undefined,
+          boxName: typeof order?.boxName === "string" ? order.boxName : undefined,
+        }))
+      : [];
+    const alertas = Array.isArray(parsed?.alertas)
+      ? parsed.alertas.map((alert: any) => ({
+          ...alert,
+          meta: typeof alert?.meta === "string" ? alert.meta : alert?.meta,
+        }))
+      : [];
     return {
-      ingresos: Array.isArray(parsed?.ingresos) ? parsed.ingresos : [],
-      salidas: Array.isArray(parsed?.salidas) ? parsed.salidas : [],
-      movimientosBodega: Array.isArray(parsed?.movimientosBodega)
-        ? parsed.movimientosBodega
-        : [],
-      alertas: Array.isArray(parsed?.alertas) ? parsed.alertas : [],
+      ingresos,
+      salidas,
+      movimientosBodega,
+      alertas,
     } satisfies HistoryState;
   } catch {
     return defaultHistory;
@@ -112,13 +143,44 @@ export const BodegaHistoryProvider: React.FC<{ children: React.ReactNode }> = ({
       if (event.key === HISTORY_STORAGE_KEY && event.newValue) {
         try {
           const parsed = JSON.parse(event.newValue);
+          const ingresos = Array.isArray(parsed?.ingresos)
+            ? parsed.ingresos.map((box: any) => ({
+                ...box,
+                client:
+                  typeof box?.client === "string"
+                    ? box.client
+                    : typeof box?.customer === "string"
+                      ? box.customer
+                      : "cliente1",
+              }))
+            : [];
+          const salidas = Array.isArray(parsed?.salidas)
+            ? parsed.salidas.map((order: any) => ({
+                ...order,
+                client: typeof order?.client === "string" ? order.client : undefined,
+                autoId: typeof order?.autoId === "string" ? order.autoId : undefined,
+                boxName: typeof order?.boxName === "string" ? order.boxName : undefined,
+              }))
+            : [];
+          const movimientosBodega = Array.isArray(parsed?.movimientosBodega)
+            ? parsed.movimientosBodega.map((order: any) => ({
+                ...order,
+                client: typeof order?.client === "string" ? order.client : undefined,
+                autoId: typeof order?.autoId === "string" ? order.autoId : undefined,
+                boxName: typeof order?.boxName === "string" ? order.boxName : undefined,
+              }))
+            : [];
+          const alertas = Array.isArray(parsed?.alertas)
+            ? parsed.alertas.map((alert: any) => ({
+                ...alert,
+                meta: typeof alert?.meta === "string" ? alert.meta : alert?.meta,
+              }))
+            : [];
           setHistory({
-            ingresos: Array.isArray(parsed?.ingresos) ? parsed.ingresos : [],
-            salidas: Array.isArray(parsed?.salidas) ? parsed.salidas : [],
-            movimientosBodega: Array.isArray(parsed?.movimientosBodega)
-              ? parsed.movimientosBodega
-              : [],
-            alertas: Array.isArray(parsed?.alertas) ? parsed.alertas : [],
+            ingresos,
+            salidas,
+            movimientosBodega,
+            alertas,
           });
         } catch {
           // ignore parse errors
