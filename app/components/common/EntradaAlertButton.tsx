@@ -6,6 +6,7 @@ export interface EntradaAlert {
   autoId: string;
   temperature: number;
   position: number;
+  client?: string;
 }
 
 interface EntradaAlertProps {
@@ -78,6 +79,9 @@ export default function EntradaAlertButton({ boxes, threshold = 5, className }: 
                           <span className="font-bold text-base text-red-700 truncate">{item.name}</span>
                           <span className="ml-2 text-xs text-slate-700 bg-slate-100 rounded px-2 py-0.5">Id: {item.autoId}</span>
                         </div>
+                        {item.client ? (
+                          <div className="text-[11px] text-slate-600 mb-1">Cliente: {item.client}</div>
+                        ) : null}
                         {typeof item.temperature === 'number' && (
                           <span className="inline-block text-xs font-semibold text-white bg-red-500 rounded px-2 py-0.5 animate-pulse shadow">{item.temperature} °C</span>
                         )}

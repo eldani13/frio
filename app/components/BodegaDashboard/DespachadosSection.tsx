@@ -31,6 +31,7 @@ const DespachadosSection: React.FC<DespachadosSectionProps> = ({
             <p>Id unico: {box.autoId}</p>
             <p>Nombre: {box.name}</p>
             <p>Temperatura: {box.temperature} °C</p>
+            <p>Cliente: {box.client || "—"}</p>
           </div>
         ))
       )}

@@ -3,6 +3,7 @@ export type Slot = {
 	autoId: string;
 	name: string;
 	temperature: number | null;
+	client: string;
 };
 
 export type Role = "custodio" | "administrador" | "operario" | "jefe" | "cliente";
@@ -12,6 +13,7 @@ export type Box = {
 	autoId: string;
 	name: string;
 	temperature: number;
+	client: string;
 };
 
 export type OrderType = "a_bodega" | "a_salida" | "revisar";
@@ -27,4 +29,7 @@ export type BodegaOrder = {
 	createdAt: string;
 	createdAtMs: number;
 	createdBy: Role;
+	client?: string;
+	autoId?: string;
+	boxName?: string;
 };

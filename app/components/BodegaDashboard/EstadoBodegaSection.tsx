@@ -40,6 +40,7 @@ export default function EstadoBodegaSection(props: Props) {
       autoId: box.autoId,
       temperature: box.temperature,
       position: box.position,
+      client: box.client,
     }));
 
   const [showAlertModal, setShowAlertModal] = useState(false);
@@ -115,6 +116,9 @@ export default function EstadoBodegaSection(props: Props) {
                               <p className="mt-1 text-sm text-slate-600 truncate">
                                 Id: {item.autoId}
                               </p>
+                              <p className="mt-1 text-xs text-slate-600 truncate">
+                                Cliente: {item.client || "—"}
+                              </p>
                               <p className="mt-2 text-xs font-semibold text-red-600">
                                 Temp: {item.temperature} °C
                               </p>
@@ -143,6 +147,7 @@ export default function EstadoBodegaSection(props: Props) {
                     {box.name || "Sin nombre"}
                   </div>
                   <div>Id: {box.autoId}</div>
+                  <div>Cliente: {box.client || "—"}</div>
                   <div>
                     Temp:{" "}
                     {typeof box.temperature === "number"
@@ -199,6 +204,7 @@ export default function EstadoBodegaSection(props: Props) {
                   {box.name || "Sin nombre"}
                 </div>
                 <div>Id: {box.autoId}</div>
+                <div>Cliente: {box.client || "—"}</div>
                 <div>
                   Temp:{" "}
                   {typeof box.temperature === "number"

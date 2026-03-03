@@ -21,12 +21,14 @@ type UserAccount = {
   password: string;
   role: Role;
   displayName: string;
+  clientId?: string;
 };
 
 type Session = {
   username: string;
   role: Role;
   displayName: string;
+  clientId?: string;
 };
 
 const USERS: UserAccount[] = [
@@ -59,6 +61,7 @@ const USERS: UserAccount[] = [
     password: "cliente123",
     role: "cliente",
     displayName: "Cliente",
+    clientId: "cliente1",
   },
 ];
 
@@ -160,6 +163,7 @@ const createInitialSlots = (): Slot[] =>
     autoId: "",
     name: "",
     temperature: null,
+    client: "",
   }));
 
 const padNumber = (value: number, length: number) =>
@@ -199,6 +203,7 @@ const normalizeSlots = (value: unknown): Slot[] | null => {
     const autoId = record.autoId;
     const name = record.name;
     const temperature = record.temperature;
+    const client = record.client;
     if (typeof position !== "number") {
       return null;
     }
@@ -215,12 +220,19 @@ const normalizeSlots = (value: unknown): Slot[] | null => {
       typeof temperature === "number" || temperature === null
         ? temperature
         : null;
+    const normalizedClient =
+      typeof client === "string"
+        ? client
+        : typeof record.customer === "string"
+          ? record.customer
+          : "";
 
     slots.push({
       position,
       autoId: normalizedAutoId,
       name: normalizedName,
       temperature: normalizedTemp,
+      client: normalizedClient,
     });
   }
 
@@ -247,6 +259,7 @@ const normalizeBoxes = (value: unknown): Box[] | null => {
     const record = item as Record<string, unknown>;
     const position = record.position;
     const temperature = record.temperature;
+    const client = record.client;
     if (typeof position !== "number" || typeof temperature !== "number") {
       return null;
     }
@@ -265,6 +278,12 @@ const normalizeBoxes = (value: unknown): Box[] | null => {
       autoId,
       name: name ?? "",
       temperature,
+      client:
+        typeof client === "string"
+          ? client
+          : typeof record.customer === "string"
+            ? record.customer
+            : "cliente1",
     });
   }
 
@@ -431,6 +450,7 @@ export default function BodegaDashboard() {
       username: user.username,
       role: user.role,
       displayName: user.displayName,
+      clientId: user.clientId,
     };
     setSession(newSession);
     setLoginError("");
@@ -470,6 +490,8 @@ export default function BodegaDashboard() {
   const [ingresoPosition, setIngresoPosition] = useState<number>(1);
   const [ingresoName, setIngresoName] = useState<string>("");
   const [ingresoTemp, setIngresoTemp] = useState<string>("");
+  const [ingresoClient, setIngresoClient] = useState<string>("cliente1");
+  const [clientFilterId, setClientFilterId] = useState<string>("cliente1");
 
   const [bodegaOrderSourcePosition, setBodegaOrderSourcePosition] =
     useState<number>(1);
@@ -834,6 +856,7 @@ export default function BodegaDashboard() {
           autoId: slot.autoId,
           name: slot.name,
           temperature: slot.temperature ?? 0,
+          client: slot.client,
         })),
     [slots],
   );
@@ -876,36 +899,16 @@ export default function BodegaDashboard() {
   );
 
   const {
+    ingresos: historyIngresos,
+    salidas: historySalidas,
+    movimientosBodega: historyMovimientos,
+    alertas,
     addIngreso,
     addSalida,
-    movimientosBodega,
     addMovimientoBodega,
-    alertas,
     addAlerta,
   } = useBodegaHistory();
 
-  const reportData = useMemo(
-    () => [
-      { name: "Ingresos", value: stats.ingresos, fill: "#38bdf8" },
-      { name: "Salidas", value: stats.salidas, fill: "#f97316" },
-      {
-        name: "Movimientos a bodega",
-        value: stats.movimientosBodega,
-        fill: "#22c55e",
-      },
-      {
-        name: "Despachados",
-        value: dispatchedBoxes.length,
-        fill: "#0ea5e9",
-      },
-      {
-        name: "Alertas",
-        value: alertas.length,
-        fill: "#ef4444",
-      },
-    ],
-    [alertas.length, dispatchedBoxes.length, stats],
-  );
 
   const zoneLabels: Record<ZoneKey, string> = {
     entrada: "Entrada",
@@ -1329,12 +1332,20 @@ export default function BodegaDashboard() {
   }, [availableBodegaForOrders, salidaSourcePosition]);
 
   // role ahora se deriva de session
+  useEffect(() => {
+    if (session?.clientId) {
+      setClientFilterId(session.clientId);
+    }
+  }, [session?.clientId]);
+
   const role = session?.role ?? "custodio";
   const isAdmin = role === "administrador";
   const isOperario = role === "operario";
   const isCustodio = role === "custodio";
   const isJefe = role === "jefe";
   const isCliente = role === "cliente";
+  const clientId = session?.clientId ?? null;
+  const effectiveClientId = isCliente ? clientFilterId || clientId || "cliente1" : clientId;
   const canManageAlerts = isJefe;
 
   const canSeeBodega = isAdmin || isOperario;
@@ -1342,6 +1353,107 @@ export default function BodegaDashboard() {
   const canUseOrderForm = isJefe;
   const canSeeOrders = isAdmin || isOperario;
   const canUseSearch = isAdmin;
+
+  const filterByClient = <T extends { client?: string }>(items: T[]) =>
+    isCliente && effectiveClientId
+      ? items.filter((item) => item.client === effectiveClientId)
+      : items;
+
+  const orderMatchesClientLoose = (order: BodegaOrder) => {
+    if (!isCliente || !effectiveClientId) return true;
+    if (order.client) return order.client === effectiveClientId;
+    const findByZone = (zone: OrderSource, position: number) => {
+      if (zone === "ingresos") return inboundBoxes.find((b) => b.position === position);
+      if (zone === "salida") return outboundBoxes.find((b) => b.position === position);
+      return slots.find((s) => s.position === position);
+    };
+    const source = findByZone(order.sourceZone, order.sourcePosition);
+    if (source?.client === effectiveClientId) return true;
+    if (order.targetPosition) {
+      const targetSlot = slots.find((s) => s.position === order.targetPosition);
+      if (targetSlot?.client === effectiveClientId) return true;
+      const targetOut = outboundBoxes.find((b) => b.position === order.targetPosition);
+      if (targetOut?.client === effectiveClientId) return true;
+    }
+    return false;
+  };
+
+  const inboundClient = filterByClient(inboundBoxes);
+  const outboundClient = filterByClient(outboundBoxes);
+  const dispatchedClient = filterByClient(dispatchedBoxes);
+  const slotsClient = filterByClient(slots);
+
+  const ordersClient = isCliente ? orders.filter(orderMatchesClientLoose) : orders;
+
+  const historyIngresosClient = isCliente ? filterByClient(historyIngresos) : historyIngresos;
+  const historySalidasClient = isCliente
+    ? historySalidas.filter(orderMatchesClientLoose)
+    : historySalidas;
+  const historyMovimientosClient = isCliente
+    ? historyMovimientos.filter(orderMatchesClientLoose)
+    : historyMovimientos;
+
+  const clientAutoIds = useMemo(() => {
+    if (!isCliente || !effectiveClientId) return new Set<string>();
+    const ids = new Set<string>();
+    [inboundClient, outboundClient, slotsClient, dispatchedClient].forEach(
+      (list) => {
+        list.forEach((item) => {
+          if (item.autoId) ids.add(item.autoId);
+        });
+      },
+    );
+    return ids;
+  }, [dispatchedClient, effectiveClientId, inboundClient, isCliente, outboundClient, slotsClient]);
+
+  const filteredAlertItems = useMemo(() => {
+    if (!isCliente || !effectiveClientId) return computedAlerts.nextAlerts;
+    if (clientAutoIds.size === 0) return [];
+    return computedAlerts.nextAlerts.filter((alert) => {
+      const haystack = `${alert.id} ${alert.description ?? ""} ${alert.meta ?? ""}`;
+      for (const id of clientAutoIds) {
+        if (haystack.includes(id)) return true;
+      }
+      return false;
+    });
+  }, [clientAutoIds, computedAlerts.nextAlerts, effectiveClientId, isCliente]);
+
+  const ingresosCount = isCliente ? historyIngresosClient.length : stats.ingresos;
+  const salidasCount = isCliente ? historySalidasClient.length : stats.salidas;
+  const movimientosCount = isCliente
+    ? historyMovimientosClient.filter((order) => order.type === "a_bodega").length
+    : stats.movimientosBodega;
+  const despachadosCount = isCliente ? dispatchedClient.length : dispatchedBoxes.length;
+  const alertasCount = isCliente ? filteredAlertItems.length : alertas.length;
+
+  const reportData = useMemo(
+    () => [
+      { name: "Ingresos", value: ingresosCount, fill: "#38bdf8" },
+      { name: "Salidas", value: salidasCount, fill: "#f97316" },
+      {
+        name: "Movimientos a bodega",
+        value: movimientosCount,
+        fill: "#22c55e",
+      },
+      {
+        name: "Despachados",
+        value: despachadosCount,
+        fill: "#0ea5e9",
+      },
+      {
+        name: "Alertas",
+        value: alertasCount,
+        fill: "#ef4444",
+      },
+    ],
+    [
+      alertasCount,
+      despachadosCount,
+      ingresosCount,
+      movimientosCount,
+      salidasCount,
+    ],
+  );
 
   const handleSelectSlot = (position: number) => {
     setSelectedPosition(position);
@@ -1371,6 +1483,7 @@ export default function BodegaDashboard() {
       autoId: createAutoId("CAJ"),
       name: ingresoName.trim(),
       temperature: parsedTemp,
+      client: ingresoClient,
     };
 
     setInboundBoxes((prev) => sortByPosition([newBox, ...prev]));
@@ -1378,6 +1491,7 @@ export default function BodegaDashboard() {
     addIngreso(newBox);
     setIngresoName("");
     setIngresoTemp("");
+    setIngresoClient("cliente1");
     setMessage(`Caja registrada en ingresos ${nextPosition}.`);
   };
 
@@ -1443,6 +1557,9 @@ export default function BodegaDashboard() {
       createdAt: new Date().toLocaleString("es-CO"),
       createdAtMs: Date.now(),
       createdBy: role,
+      client: box.client,
+      autoId: box.autoId,
+      boxName: box.name,
     };
 
     setOrders((prev) => [newOrder, ...prev]);
@@ -1571,6 +1688,9 @@ export default function BodegaDashboard() {
       const boxTemp = sourceIsBodega
         ? (boxFromBodega?.temperature ?? 0)
         : (boxFromIngreso?.temperature ?? 0);
+      const boxClient = sourceIsBodega
+        ? (boxFromBodega?.client ?? "")
+        : (boxFromIngreso?.client ?? "");
       setSlots((prev) =>
         prev.map((item) =>
           item.position === target
@@ -1579,6 +1699,7 @@ export default function BodegaDashboard() {
                 autoId: boxAutoId,
                 name: boxName,
                 temperature: boxTemp,
+                client: boxClient,
               }
             : item,
         ),
@@ -1615,6 +1736,9 @@ export default function BodegaDashboard() {
       const boxTemp = sourceIsBodega
         ? (boxFromBodega?.temperature ?? 0)
         : (boxFromIngreso?.temperature ?? 0);
+      const boxClient = sourceIsBodega
+        ? (boxFromBodega?.client ?? "")
+        : (boxFromIngreso?.client ?? "");
 
       setOutboundBoxes((prev) =>
         sortByPosition([
@@ -1623,6 +1747,7 @@ export default function BodegaDashboard() {
             autoId: boxAutoId,
             name: boxName,
             temperature: boxTemp,
+            client: boxClient,
           },
           ...prev,
         ]),
@@ -1634,7 +1759,7 @@ export default function BodegaDashboard() {
       setSlots((prev) =>
         prev.map((item) =>
           item.position === order.sourcePosition
-            ? { ...item, autoId: "", name: "", temperature: null }
+            ? { ...item, autoId: "", name: "", temperature: null, client: "" }
             : item,
         ),
       );
@@ -2073,16 +2198,21 @@ export default function BodegaDashboard() {
           <IngresosSection
             isCustodio={isCustodio}
             canUseIngresoForm={canUseIngresoForm}
-            inboundBoxes={inboundBoxes}
-            outboundBoxes={outboundBoxes}
+            inboundBoxes={isCliente ? inboundClient : inboundBoxes}
+            outboundBoxes={isCliente ? outboundClient : outboundBoxes}
             ingresoPosition={ingresoPosition}
             ingresoName={ingresoName}
             ingresoTemp={ingresoTemp}
+            ingresoClient={ingresoClient}
             setIngresoName={setIngresoName}
             setIngresoTemp={setIngresoTemp}
+            setIngresoClient={setIngresoClient}
             handleIngreso={handleIngreso}
             sortByPosition={sortByPosition}
             handleDispatchBox={handleDispatchBox}
+            isCliente={isCliente}
+            clientFilterId={clientFilterId}
+            onClientChange={setClientFilterId}
           />
         ) : null}
 
@@ -2320,14 +2450,18 @@ export default function BodegaDashboard() {
         {activeTab === "reportes" && (isAdmin || isCliente) ? (
           <ReportesSection
             reportData={reportData}
-            inboundBoxes={inboundBoxes}
-            outboundBoxes={outboundBoxes}
-            dispatchedBoxes={dispatchedBoxes}
-            orders={orders}
-            slots={slots}
+            inboundBoxes={isCliente ? inboundClient : inboundBoxes}
+            outboundBoxes={isCliente ? outboundClient : outboundBoxes}
+            dispatchedBoxes={isCliente ? dispatchedClient : dispatchedBoxes}
+            orders={isCliente ? ordersClient : orders}
+            slots={isCliente ? slotsClient : slots}
             sortByPosition={sortByPosition}
             reportDetailModal={reportDetailModal}
             setReportDetailModal={setReportDetailModal}
+            isCliente={isCliente}
+            clientId={effectiveClientId ?? undefined}
+            clientFilterId={clientFilterId}
+            onClientChange={setClientFilterId}
           />
         ) : null}
 

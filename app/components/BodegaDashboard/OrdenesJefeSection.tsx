@@ -342,6 +342,10 @@ export default function OrdenesJefeSection(props: {
                       <span className="truncate">{selectedBoxModal.autoId}</span>
                     </div>
                     <div className="flex items-center gap-2">
+                      <span className="font-semibold text-slate-600">Cliente:</span>
+                      <span>{selectedBoxModal.client || "—"}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
                       <span className="font-semibold text-slate-600">Posición:</span>
                       <span>{selectedBoxModal.position}</span>
                     </div>
@@ -760,6 +764,7 @@ export default function OrdenesJefeSection(props: {
                         {box.name || "Sin nombre"}
                       </div>
                       <div>Id: {box.autoId}</div>
+                      <div>Cliente: {box.client || "—"}</div>
                       <div>
                         Temp:{" "}
                         {typeof box.temperature === "number"
@@ -1252,6 +1257,7 @@ export default function OrdenesJefeSection(props: {
                         {box.name || "Sin nombre"}
                       </div>
                       <div>Id: {box.autoId}</div>
+                      <div>Cliente: {box.client || "—"}</div>
                       <div>
                         Temp:{" "}
                         {typeof box.temperature === "number"
@@ -1309,7 +1315,7 @@ export default function OrdenesJefeSection(props: {
                     <option
                       key={box.position}
                       value={box.position}
-                    >{`Ingreso ${box.position} - ${box.name} (${box.autoId})`}</option>
+                    >{`Ingreso ${box.position} - ${box.name} (${box.autoId}) · ${box.client || "—"}`}</option>
                   ))
                 )}
               </select>
@@ -1402,7 +1408,7 @@ export default function OrdenesJefeSection(props: {
                     <option
                       key={box.position}
                       value={box.position}
-                    >{`Bodega ${box.position} - ${box.name} (${box.autoId})`}</option>
+                    >{`Bodega ${box.position} - ${box.name} (${box.autoId}) · ${box.client || "—"}`}</option>
                   ))
                 )}
               </select>
@@ -1481,7 +1487,7 @@ export default function OrdenesJefeSection(props: {
                           key={`${group.label}-${box.position}`}
                           value={box.position}
                         >
-                          {`${group.label} ${box.position} - ${box.name} (${box.autoId})`}
+                          {`${group.label} ${box.position} - ${box.name} (${box.autoId}) · ${box.client || "—"}`}
                         </option>
                       ))}
                     </optgroup>
@@ -1546,7 +1552,7 @@ export default function OrdenesJefeSection(props: {
                     <option
                       key={box.position}
                       value={box.position}
-                    >{`Bodega ${box.position} - ${box.name} (${box.autoId})`}</option>
+                    >{`Bodega ${box.position} - ${box.name} (${box.autoId}) · ${box.client || "—"}`}</option>
                   ))
                 )}
               </select>
