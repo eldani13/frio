@@ -1,5 +1,5 @@
 import { FiArchive, FiBox, FiAlertTriangle, FiX } from "react-icons/fi";
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import SlotsGrid from "../bodega/SlotsGrid";
 import SelectedSlotCard from "../bodega/SelectedSlotCard";
 import type { Box, Slot } from "../../interfaces/bodega";
@@ -31,6 +31,53 @@ export default function EstadoBodegaSection(props: Props) {
     outboundBoxes,
     sortByPosition,
   } = props;
+
+  const ITEMS_PER_PAGE = 4;
+  const [entradaPage, setEntradaPage] = useState(0);
+  const [salidaPage, setSalidaPage] = useState(0);
+
+  const sortedInboundBoxes = sortByPosition([...inboundBoxes]);
+  const sortedOutboundBoxes = sortByPosition([...outboundBoxes]);
+
+  const entradaTotalPages = Math.max(
+    1,
+    Math.ceil(sortedInboundBoxes.length / ITEMS_PER_PAGE),
+  );
+  const entradaStart = entradaPage * ITEMS_PER_PAGE;
+  const inboundPageItems = sortedInboundBoxes.slice(
+    entradaStart,
+    entradaStart + ITEMS_PER_PAGE,
+  );
+
+  const salidaTotalPages = Math.max(
+    1,
+    Math.ceil(sortedOutboundBoxes.length / ITEMS_PER_PAGE),
+  );
+  const salidaStart = salidaPage * ITEMS_PER_PAGE;
+  const outboundPageItems = sortedOutboundBoxes.slice(
+    salidaStart,
+    salidaStart + ITEMS_PER_PAGE,
+  );
+
+  useEffect(() => {
+    const maxPage = Math.max(
+      0,
+      Math.ceil((inboundBoxes?.length || 0) / ITEMS_PER_PAGE) - 1,
+    );
+    if (entradaPage > maxPage) {
+      setEntradaPage(maxPage);
+    }
+  }, [entradaPage, inboundBoxes?.length]);
+
+  useEffect(() => {
+    const maxPage = Math.max(
+      0,
+      Math.ceil((outboundBoxes?.length || 0) / ITEMS_PER_PAGE) - 1,
+    );
+    if (salidaPage > maxPage) {
+      setSalidaPage(maxPage);
+    }
+  }, [salidaPage, outboundBoxes?.length]);
 
   // Buscar alertas de temperatura alta
   const highTempAlerts = inboundBoxes
@@ -131,34 +178,63 @@ export default function EstadoBodegaSection(props: Props) {
                 </div>
               )}
         <div className="w-full flex flex-col gap-1 sm:gap-2">
-          {inboundBoxes.length === 0 ? (
+          {sortedInboundBoxes.length === 0 ? (
             <div className="text-xs text-emerald-500">
               No hay cajas en ingreso.
             </div>
           ) : (
-            inboundBoxes.slice(0, 4).map((box) => {
-              const isHighTemp = typeof box.temperature === "number" && box.temperature > 5;
-              return (
-                <div
-                  key={box.position}
-                  className="rounded-xl border border-emerald-200 bg-white p-1 sm:p-2 text-[11px] sm:text-xs text-emerald-700 w-full"
-                >
-                  <div className="font-semibold">
-                    {box.name || "Sin nombre"}
+            <>
+              {inboundPageItems.map((box, idx) => {
+                const isHighTemp = typeof box.temperature === "number" && box.temperature > 5;
+                return (
+                  <div
+                    key={`${box.position}-${box.autoId ?? "no-id"}-${idx}`}
+                    className="rounded-xl border border-emerald-200 bg-white p-1 sm:p-2 text-[11px] sm:text-xs text-emerald-700 w-full"
+                  >
+                    <div className="font-semibold">
+                      {box.name || "Sin nombre"}
+                    </div>
+                    <div>Id: {box.autoId}</div>
+                    <div>Cliente: {box.client || "—"}</div>
+                    <div>
+                      Temp:{" "}
+                      {typeof box.temperature === "number"
+                        ? <span className={isHighTemp ? "text-green-700 font-bold" : undefined}>
+                            {box.temperature} °C
+                          </span>
+                        : "Sin temperatura"}
+                    </div>
                   </div>
-                  <div>Id: {box.autoId}</div>
-                  <div>Cliente: {box.client || "—"}</div>
-                  <div>
-                    Temp:{" "}
-                    {typeof box.temperature === "number"
-                      ? <span className={isHighTemp ? "text-green-700 font-bold" : undefined}>
-                          {box.temperature} °C
-                        </span>
-                      : "Sin temperatura"}
-                  </div>
+                );
+              })}
+              {sortedInboundBoxes.length > ITEMS_PER_PAGE ? (
+                <div className="flex items-center justify-between mt-2 text-[11px] sm:text-xs text-emerald-700">
+                  <button
+                    type="button"
+                    className="rounded-lg border border-emerald-200 px-2 py-1 bg-white font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
+                    onClick={() => setEntradaPage((prev) => Math.max(0, prev - 1))}
+                    disabled={entradaPage === 0}
+                  >
+                    Anterior
+                  </button>
+                  <span className="font-semibold">
+                    {entradaPage + 1} de {entradaTotalPages}
+                  </span>
+                  <button
+                    type="button"
+                    className="rounded-lg border border-emerald-200 px-2 py-1 bg-white font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
+                    onClick={() =>
+                      setEntradaPage((prev) =>
+                        Math.min(entradaTotalPages - 1, prev + 1),
+                      )
+                    }
+                    disabled={entradaPage >= entradaTotalPages - 1}
+                  >
+                    Siguiente
+                  </button>
                 </div>
-              );
-            })
+              ) : null}
+            </>
           )}
         </div>
       </div>
@@ -190,29 +266,58 @@ export default function EstadoBodegaSection(props: Props) {
         </h3>
 
         <div className="w-full flex flex-col gap-2">
-          {outboundBoxes.length === 0 ? (
+          {sortedOutboundBoxes.length === 0 ? (
             <p className="text-xs text-pink-500">
               No hay cajas en salida.
             </p>
           ) : (
-            sortByPosition(outboundBoxes).slice(0, 4).map((box) => (
-              <div
-                key={box.position}
-                className="rounded-xl border border-pink-200 bg-white p-2 text-xs text-pink-700 w-full"
-              >
-                <div className="font-semibold">
-                  {box.name || "Sin nombre"}
+            <>
+              {outboundPageItems.map((box, idx) => (
+                <div
+                  key={`${box.position}-${box.autoId ?? "no-id"}-${idx}`}
+                  className="rounded-xl border border-pink-200 bg-white p-2 text-xs text-pink-700 w-full"
+                >
+                  <div className="font-semibold">
+                    {box.name || "Sin nombre"}
+                  </div>
+                  <div>Id: {box.autoId}</div>
+                  <div>Cliente: {box.client || "—"}</div>
+                  <div>
+                    Temp:{" "}
+                    {typeof box.temperature === "number"
+                      ? `${box.temperature} °C`
+                      : "Sin temperatura"}
+                  </div>
                 </div>
-                <div>Id: {box.autoId}</div>
-                <div>Cliente: {box.client || "—"}</div>
-                <div>
-                  Temp:{" "}
-                  {typeof box.temperature === "number"
-                    ? `${box.temperature} °C`
-                    : "Sin temperatura"}
+              ))}
+              {sortedOutboundBoxes.length > ITEMS_PER_PAGE ? (
+                <div className="flex items-center justify-between mt-2 text-[11px] sm:text-xs text-pink-700">
+                  <button
+                    type="button"
+                    className="rounded-lg border border-pink-200 px-2 py-1 bg-white font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
+                    onClick={() => setSalidaPage((prev) => Math.max(0, prev - 1))}
+                    disabled={salidaPage === 0}
+                  >
+                    Anterior
+                  </button>
+                  <span className="font-semibold">
+                    {salidaPage + 1} de {salidaTotalPages}
+                  </span>
+                  <button
+                    type="button"
+                    className="rounded-lg border border-pink-200 px-2 py-1 bg-white font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
+                    onClick={() =>
+                      setSalidaPage((prev) =>
+                        Math.min(salidaTotalPages - 1, prev + 1),
+                      )
+                    }
+                    disabled={salidaPage >= salidaTotalPages - 1}
+                  >
+                    Siguiente
+                  </button>
                 </div>
-              </div>
-            ))
+              ) : null}
+            </>
           )}
         </div>
       </div>
