@@ -11,6 +11,8 @@ import React, { useState, useMemo, useEffect } from "react";
 import EntradaAlertButton from "../common/EntradaAlertButton";
 import { RiUserReceivedLine } from "react-icons/ri";
 
+const HIGH_TEMP_THRESHOLD = 5;
+
 
 // Estado para forzar re-render cuando se asigna una alerta debe ir dentro del componente
 
@@ -51,6 +53,9 @@ export default function OrdenesJefeSection(props: {
 }) {
   // Estado para forzar re-render cuando se asigna una alerta
   const [asignadoAlertas, setAsignadoAlertas] = useState({});
+  const ITEMS_PER_PAGE = 4;
+  const [entradaPage, setEntradaPage] = useState(0);
+  const [salidaPage, setSalidaPage] = useState(0);
   const {
     isJefe,
     inboundBoxes,
@@ -104,6 +109,26 @@ export default function OrdenesJefeSection(props: {
     kind: ModalKind;
   } | null>(null);
 
+  React.useEffect(() => {
+    const maxPage = Math.max(
+      0,
+      Math.ceil((inboundBoxes?.length || 0) / ITEMS_PER_PAGE) - 1,
+    );
+    if (entradaPage > maxPage) {
+      setEntradaPage(maxPage);
+    }
+  }, [entradaPage, inboundBoxes?.length]);
+
+  React.useEffect(() => {
+    const maxPage = Math.max(
+      0,
+      Math.ceil((outboundBoxes?.length || 0) / ITEMS_PER_PAGE) - 1,
+    );
+    if (salidaPage > maxPage) {
+      setSalidaPage(maxPage);
+    }
+  }, [salidaPage, outboundBoxes?.length]);
+
   const zoneLabels: Record<ZoneKey, string> = {
     entrada: "Entrada",
     bodega: "Bodega",
@@ -127,6 +152,36 @@ export default function OrdenesJefeSection(props: {
       salida: [],
     };
   }, []);
+
+  const sortedInboundBoxes = useMemo(
+    () => sortByPosition([...inboundBoxes]),
+    [inboundBoxes, sortByPosition],
+  );
+
+  const sortedOutboundBoxes = useMemo(
+    () => sortByPosition([...outboundBoxes]),
+    [outboundBoxes, sortByPosition],
+  );
+
+  const entradaTotalPages = Math.max(
+    1,
+    Math.ceil(sortedInboundBoxes.length / ITEMS_PER_PAGE),
+  );
+  const entradaStart = entradaPage * ITEMS_PER_PAGE;
+  const inboundPageItems = sortedInboundBoxes.slice(
+    entradaStart,
+    entradaStart + ITEMS_PER_PAGE,
+  );
+
+  const salidaTotalPages = Math.max(
+    1,
+    Math.ceil(sortedOutboundBoxes.length / ITEMS_PER_PAGE),
+  );
+  const salidaStart = salidaPage * ITEMS_PER_PAGE;
+  const outboundPageItems = sortedOutboundBoxes.slice(
+    salidaStart,
+    salidaStart + ITEMS_PER_PAGE,
+  );
 
   // Buscar alertas de temperatura alta en bodega (slots)
   // Utilidad para obtener las alertas solucionadas (eliminadas) por el operario
@@ -157,7 +212,9 @@ export default function OrdenesJefeSection(props: {
     const solvedPositions = getSolvedOperarioAlertPositions();
     return slots
       .filter(
-        (slot) => typeof slot.temperature === "number" && slot.temperature > 5,
+        (slot) =>
+          typeof slot.temperature === "number" &&
+          slot.temperature > HIGH_TEMP_THRESHOLD,
       )
       .filter((slot) => !solvedPositions.includes(slot.position))
       .map((slot) => ({
@@ -175,7 +232,8 @@ export default function OrdenesJefeSection(props: {
       slots
         .filter(
           (slot) =>
-            typeof slot.temperature === "number" && slot.temperature > 5,
+            typeof slot.temperature === "number" &&
+            slot.temperature > HIGH_TEMP_THRESHOLD,
         )
         .filter((slot) => !solvedPositions.includes(slot.position))
         .map((slot) => ({
@@ -199,7 +257,8 @@ export default function OrdenesJefeSection(props: {
           slots
             .filter(
               (slot) =>
-                typeof slot.temperature === "number" && slot.temperature > 5,
+                typeof slot.temperature === "number" &&
+                slot.temperature > HIGH_TEMP_THRESHOLD,
             )
             .filter((slot) => !solvedPositions.includes(slot.position))
             .map((slot) => ({
@@ -209,6 +268,54 @@ export default function OrdenesJefeSection(props: {
               position: slot.position,
             })),
         );
+      }
+
+      if (e.key === "alerta_temp_event" || e.key === "slots_temperature_event") {
+        try {
+          const payload = e.newValue ? JSON.parse(e.newValue) : null;
+          if (!payload || typeof payload.position !== "number") return;
+
+          const solvedPositions = getSolvedOperarioAlertPositions();
+          if (solvedPositions.includes(payload.position)) return;
+
+          if (
+            typeof payload.temperature === "number" &&
+            payload.temperature > HIGH_TEMP_THRESHOLD
+          ) {
+            setBodegaHighTempAlerts((prev) => {
+              const exists = prev.find(
+                (item) => item.position === payload.position,
+              );
+              if (exists) {
+                return prev.map((item) =>
+                  item.position === payload.position
+                    ? {
+                        ...item,
+                        temperature: payload.temperature,
+                        name: payload.name || item.name,
+                        autoId: payload.autoId || item.autoId,
+                      }
+                    : item,
+                );
+              }
+              return [
+                ...prev,
+                {
+                  name: payload.name || "Sin nombre",
+                  autoId: payload.autoId || "",
+                  temperature: payload.temperature,
+                  position: payload.position,
+                },
+              ];
+            });
+          } else {
+            setBodegaHighTempAlerts((prev) =>
+              prev.filter((item) => item.position !== payload.position),
+            );
+          }
+        } catch {
+          // ignore malformed alert payloads
+        }
       }
     }
     window.addEventListener("storage", handleStorage);
@@ -599,9 +706,9 @@ export default function OrdenesJefeSection(props: {
               </div>
             </div>
           )}
-          <div className="flex flex-col lg:flex-row gap-8">
+          <div className="flex flex-col lg:flex-row items-stretch gap-8">
             {/* Entrada division left */}
-            <div className="flex flex-col items-start rounded-3xl border border-green-200 bg-emerald-50 p-2 sm:p-4 min-h-45 w-full max-w-full sm:max-w-xs lg:max-w-60">
+            <div className="flex flex-col items-start rounded-3xl border border-green-200 bg-emerald-50 p-2 sm:p-4 w-full max-w-full sm:max-w-xs lg:max-w-60 h-full lg:min-h-[435px]">
               <div className="flex items-center justify-between w-full mb-2">
                 <h3 className="text-sm sm:text-lg font-semibold text-emerald-600 flex items-center gap-2">
                   <span className="inline-block">
@@ -750,34 +857,63 @@ export default function OrdenesJefeSection(props: {
                 </div>
               ) : null}
               <div className="w-full flex flex-col gap-1 sm:gap-2">
-                {inboundBoxes.length === 0 ? (
+                {sortedInboundBoxes.length === 0 ? (
                   <div className="text-xs text-emerald-500">
                     No hay cajas en ingreso.
                   </div>
                 ) : (
-                  inboundBoxes.slice(0, 4).map((box) => (
-                    <div
-                      key={box.position}
-                      className="rounded-xl border border-emerald-200 bg-white p-1 sm:p-2 text-[11px] sm:text-xs text-emerald-700 w-full"
-                    >
-                      <div className="font-semibold">
-                        {box.name || "Sin nombre"}
+                  <>
+                    {inboundPageItems.map((box, idx) => (
+                      <div
+                        key={`${box.position}-${box.autoId ?? "no-id"}-${idx}`}
+                        className="rounded-xl border border-emerald-200 bg-white p-1 sm:p-2 text-[11px] sm:text-xs text-emerald-700 w-full"
+                      >
+                        <div className="font-semibold">
+                          {box.name || "Sin nombre"}
+                        </div>
+                        <div>Id: {box.autoId}</div>
+                        <div>Cliente: {box.client || "—"}</div>
+                        <div>
+                          Temp:{" "}
+                          {typeof box.temperature === "number"
+                            ? `${box.temperature} °C`
+                            : "Sin temperatura"}
+                        </div>
                       </div>
-                      <div>Id: {box.autoId}</div>
-                      <div>Cliente: {box.client || "—"}</div>
-                      <div>
-                        Temp:{" "}
-                        {typeof box.temperature === "number"
-                          ? `${box.temperature} °C`
-                          : "Sin temperatura"}
+                    ))}
+                    {sortedInboundBoxes.length > ITEMS_PER_PAGE ? (
+                      <div className="flex items-center justify-between mt-2 text-[11px] sm:text-xs text-emerald-700">
+                        <button
+                          type="button"
+                          className="rounded-lg border border-emerald-200 px-2 py-1 bg-white font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
+                          onClick={() => setEntradaPage((prev) => Math.max(0, prev - 1))}
+                          disabled={entradaPage === 0}
+                        >
+                          Anterior
+                        </button>
+                        <span className="font-semibold">
+                          {entradaPage + 1} de {entradaTotalPages}
+                        </span>
+                        <button
+                          type="button"
+                          className="rounded-lg border border-emerald-200 px-2 py-1 bg-white font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
+                          onClick={() =>
+                            setEntradaPage((prev) =>
+                              Math.min(entradaTotalPages - 1, prev + 1),
+                            )
+                          }
+                          disabled={entradaPage >= entradaTotalPages - 1}
+                        >
+                          Siguiente
+                        </button>
                       </div>
-                    </div>
-                  ))
+                    ) : null}
+                  </>
                 )}
               </div>
             </div>
             {/* Mapa de Bodega section center */}
-            <div className="flex-1 rounded-2xl bg-white p-2 sm:p-4 shadow-md border border-blue-200 w-full relative">
+            <div className="flex-[1.2] rounded-2xl bg-white p-2 sm:p-4 shadow-md border border-blue-200 w-full relative h-full lg:min-h-[380px] flex flex-col">
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-2 sm:mb-4">
                 <h2 className="text-sm sm:text-lg font-semibold text-slate-900 flex items-center gap-1 sm:gap-2">
                   <span className="inline-block">
@@ -824,7 +960,7 @@ export default function OrdenesJefeSection(props: {
                             style={{ fontFamily: '"Space Grotesk", "Work Sans", sans-serif' }}
                           >
                             {/* Header con gradiente y botón cerrar flotante */}
-                            <div className="flex flex-col items-center justify-center pt-8 pb-4 px-8 border-b border-yellow-100 bg-gradient-to-r from-yellow-50 to-white rounded-t-3xl relative">
+                            <div className="flex flex-col items-center justify-center pt-8 pb-4 px-8 border-b border-yellow-100 bg-linear-to-r from-yellow-50 to-white rounded-t-3xl relative">
                               <span className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-yellow-100 shadow mb-2 animate-pulse">
                                 <RiUserReceivedLine className="w-8 h-8 text-yellow-500" />
                               </span>
@@ -871,7 +1007,7 @@ export default function OrdenesJefeSection(props: {
                                     {llamados.map((llamado, idx) => (
                                       <li
                                         key={idx}
-                                        className="bg-gradient-to-r from-yellow-50 to-white border border-yellow-200 rounded-xl px-5 py-4 text-yellow-800 flex items-center gap-4 shadow-sm hover:shadow-md transition-all"
+                                        className="bg-linear-to-r from-yellow-50 to-white border border-yellow-200 rounded-xl px-5 py-4 text-yellow-800 flex items-center gap-4 shadow-sm hover:shadow-md transition-all"
                                       >
                                         <span className="inline-flex items-center justify-center w-10 h-10 rounded-full bg-yellow-100">
                                           <RiUserReceivedLine className="w-6 h-6 text-yellow-500" />
@@ -1235,7 +1371,7 @@ export default function OrdenesJefeSection(props: {
               </div>
             </div>
             {/* Salida division right */}
-            <div className="flex flex-col items-start rounded-3xl border border-pink-200 bg-pink-50 p-4 sm:p-6 min-h-30 w-full max-w-full sm:max-w-xs lg:max-w-60">
+            <div className="flex flex-col items-start rounded-3xl border border-pink-200 bg-pink-50 p-4 sm:p-6 w-full max-w-full sm:max-w-xs lg:max-w-60 h-full lg:min-h-108.75">
               <h3 className="text-base sm:text-lg font-semibold text-pink-600 mb-2 flex items-center gap-2">
                 <span className="inline-block">
                   <FiBox className="w-5 h-5 text-pink-400" />
@@ -1243,29 +1379,58 @@ export default function OrdenesJefeSection(props: {
                 Salida
               </h3>
               <div className="w-full flex flex-col gap-2">
-                {outboundBoxes.length === 0 ? (
+                {sortedOutboundBoxes.length === 0 ? (
                   <div className="text-xs text-pink-500">
                     No hay cajas en salida.
                   </div>
                 ) : (
-                  outboundBoxes.slice(0, 4).map((box) => (
-                    <div
-                      key={box.position}
-                      className="rounded-xl border border-pink-200 bg-white p-2 text-xs text-pink-700 w-full"
-                    >
-                      <div className="font-semibold">
-                        {box.name || "Sin nombre"}
+                  <>
+                    {outboundPageItems.map((box, idx) => (
+                      <div
+                        key={`${box.position}-${box.autoId ?? "no-id"}-${idx}`}
+                        className="rounded-xl border border-pink-200 bg-white p-2 text-xs text-pink-700 w-full"
+                      >
+                        <div className="font-semibold">
+                          {box.name || "Sin nombre"}
+                        </div>
+                        <div>Id: {box.autoId}</div>
+                        <div>Cliente: {box.client || "—"}</div>
+                        <div>
+                          Temp:{" "}
+                          {typeof box.temperature === "number"
+                            ? `${box.temperature} °C`
+                            : "Sin temperatura"}
+                        </div>
                       </div>
-                      <div>Id: {box.autoId}</div>
-                      <div>Cliente: {box.client || "—"}</div>
-                      <div>
-                        Temp:{" "}
-                        {typeof box.temperature === "number"
-                          ? `${box.temperature} °C`
-                          : "Sin temperatura"}
+                    ))}
+                    {sortedOutboundBoxes.length > ITEMS_PER_PAGE ? (
+                      <div className="flex items-center justify-between mt-2 text-[11px] sm:text-xs text-pink-700">
+                        <button
+                          type="button"
+                          className="rounded-lg border border-pink-200 px-2 py-1 bg-white font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
+                          onClick={() => setSalidaPage((prev) => Math.max(0, prev - 1))}
+                          disabled={salidaPage === 0}
+                        >
+                          Anterior
+                        </button>
+                        <span className="font-semibold">
+                          {salidaPage + 1} de {salidaTotalPages}
+                        </span>
+                        <button
+                          type="button"
+                          className="rounded-lg border border-pink-200 px-2 py-1 bg-white font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
+                          onClick={() =>
+                            setSalidaPage((prev) =>
+                              Math.min(salidaTotalPages - 1, prev + 1),
+                            )
+                          }
+                          disabled={salidaPage >= salidaTotalPages - 1}
+                        >
+                          Siguiente
+                        </button>
                       </div>
-                    </div>
-                  ))
+                    ) : null}
+                  </>
                 )}
               </div>
             </div>

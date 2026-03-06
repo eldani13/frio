@@ -1632,6 +1632,9 @@ export default function BodegaDashboard() {
     const boxFromBodega = slots.find(
       (item) => item.position === order.sourcePosition,
     );
+    const boxFromSalida = outboundBoxes.find(
+      (item) => item.position === order.sourcePosition,
+    );
 
     if (order.type === "revisar") {
       const existsInIngreso = inboundBoxes.some(
@@ -1671,26 +1674,31 @@ export default function BodegaDashboard() {
         setMessage("La posicion de bodega ya esta ocupada.");
         return;
       }
-      if (!sourceIsBodega && !boxFromIngreso) {
-        setMessage("La caja ya no esta en ingresos.");
-        return;
+      if (!sourceIsBodega) {
+        if (order.sourceZone === "ingresos" && !boxFromIngreso) {
+          setMessage("La caja ya no esta en ingresos.");
+          return;
+        }
+        if (order.sourceZone === "salida" && !boxFromSalida) {
+          setMessage("La caja ya no esta en salida.");
+          return;
+        }
       }
       if (sourceIsBodega && (!boxFromBodega || !boxFromBodega.autoId.trim())) {
         setMessage("La caja ya no esta en bodega.");
         return;
       }
-      const boxAutoId = sourceIsBodega
-        ? (boxFromBodega?.autoId ?? "")
-        : (boxFromIngreso?.autoId ?? "");
-      const boxName = sourceIsBodega
-        ? (boxFromBodega?.name ?? "")
-        : (boxFromIngreso?.name ?? "");
-      const boxTemp = sourceIsBodega
-        ? (boxFromBodega?.temperature ?? 0)
-        : (boxFromIngreso?.temperature ?? 0);
-      const boxClient = sourceIsBodega
-        ? (boxFromBodega?.client ?? "")
-        : (boxFromIngreso?.client ?? "");
+
+      const sourceBox = sourceIsBodega
+        ? boxFromBodega
+        : order.sourceZone === "salida"
+          ? boxFromSalida
+          : boxFromIngreso;
+
+      const boxAutoId = sourceBox?.autoId ?? "";
+      const boxName = sourceBox?.name ?? "";
+      const boxTemp = sourceBox?.temperature ?? 0;
+      const boxClient = sourceBox?.client ?? "";
       setSlots((prev) =>
         prev.map((item) =>
           item.position === target
@@ -1763,8 +1771,12 @@ export default function BodegaDashboard() {
             : item,
         ),
       );
-    } else {
+    } else if (order.sourceZone === "ingresos") {
       setInboundBoxes((prev) =>
+        prev.filter((item) => item.position !== order.sourcePosition),
+      );
+    } else if (order.sourceZone === "salida") {
+      setOutboundBoxes((prev) =>
         prev.filter((item) => item.position !== order.sourcePosition),
       );
     }

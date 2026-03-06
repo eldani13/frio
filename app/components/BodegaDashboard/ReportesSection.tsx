@@ -62,6 +62,10 @@ const ReportesSection: React.FC<ReportesSectionProps> = ({
 }) => {
   const { ingresos, salidas, movimientosBodega, alertas } = useBodegaHistory();
 
+  const [selectedBoxId, setSelectedBoxId] = React.useState<string>("");
+  const [boxHistoryModalOpen, setBoxHistoryModalOpen] = React.useState(false);
+  const boxHistoryContentRef = React.useRef<HTMLDivElement | null>(null);
+
   const activeClientId = isCliente ? clientFilterId || clientId : clientId;
   const clientOptions = ["cliente1", "cliente2", "cliente3"];
 
@@ -80,6 +84,113 @@ const ReportesSection: React.FC<ReportesSectionProps> = ({
     isCliente && activeClientId
       ? items.filter((item) => item.client === activeClientId)
       : items;
+
+  const clientBoxes = React.useMemo(() => {
+    if (!isCliente || !activeClientId) return [] as Array<{ value: string; label: string }>;
+    const candidates = [...inboundBoxes, ...outboundBoxes, ...dispatchedBoxes, ...slots];
+    const seen = new Set<string>();
+    return candidates
+      .filter((item) => item.client === activeClientId)
+      .map((item) => {
+        const value = item.autoId || `pos-${item.position}`;
+        const label = `${item.autoId ?? `Pos ${item.position}`}${item.name ? ` · ${item.name}` : ""}`;
+        return { value, label };
+      })
+      .filter((item) => {
+        if (seen.has(item.value)) return false;
+        seen.add(item.value);
+        return true;
+      });
+  }, [activeClientId, dispatchedBoxes, inboundBoxes, isCliente, outboundBoxes, slots]);
+
+  const selectedBoxInfo = React.useMemo(() => {
+    if (!selectedBoxId) return null;
+    if (selectedBoxId.startsWith("pos-")) {
+      const pos = Number(selectedBoxId.replace("pos-", ""));
+      return { position: Number.isNaN(pos) ? undefined : pos } as const;
+    }
+    return { autoId: selectedBoxId } as const;
+  }, [selectedBoxId]);
+
+  const handleExportPdf = async () => {
+    if (!boxHistoryModalOpen || !boxHistoryContentRef.current) return;
+    if (typeof window === "undefined") return;
+
+    const sanitizeColors = (root: HTMLElement) => {
+      const snapshots: Array<{ el: HTMLElement; styleAttr: string | null }> = [];
+      const hasUnsupported = (value?: string | null) =>
+        Boolean(value && (value.includes("lab(") || value.includes("oklab") || value.includes("color(")));
+
+      const apply = (el: HTMLElement) => {
+        snapshots.push({ el, styleAttr: el.getAttribute("style") });
+        const cs = window.getComputedStyle(el);
+
+        // Force safe colors if any unsupported functions appear
+        if (hasUnsupported(cs.backgroundImage) || cs.backgroundImage !== "none") {
+          el.style.backgroundImage = "none";
+        }
+        if (hasUnsupported(cs.backgroundColor)) {
+          el.style.backgroundColor = "rgba(255,255,255,1)";
+        }
+        if (hasUnsupported(cs.color)) {
+          el.style.color = "rgba(15,23,42,1)";
+        }
+        if (hasUnsupported(cs.borderColor)) {
+          el.style.borderColor = "rgba(219,234,254,1)";
+        }
+        if (hasUnsupported(cs.boxShadow)) {
+          el.style.boxShadow = "none";
+        }
+        if (hasUnsupported(cs.textShadow)) {
+          el.style.textShadow = "none";
+        }
+        // Also normalize outlines just in case
+        if (hasUnsupported(cs.outlineColor)) {
+          el.style.outlineColor = "transparent";
+        }
+      };
+
+      apply(root);
+      root.querySelectorAll<HTMLElement>("*").forEach(apply);
+
+      return () => {
+        snapshots.forEach(({ el, styleAttr }) => {
+          if (styleAttr === null) el.removeAttribute("style");
+          else el.setAttribute("style", styleAttr);
+        });
+      };
+    };
+
+    try {
+      const [{ default: html2canvas }, jsPDFLib] = await Promise.all([
+        import("html2canvas"),
+        import("jspdf"),
+      ]);
+
+      const JsPDF = jsPDFLib.jsPDF || jsPDFLib.default;
+      if (!JsPDF) {
+        throw new Error("jsPDF no disponible");
+      }
+
+      const node = boxHistoryContentRef.current;
+      const restoreColors = sanitizeColors(node);
+
+      const canvas = await html2canvas(node, { scale: 2 });
+      const imgData = canvas.toDataURL("image/png");
+      const pdf = new JsPDF({
+        orientation: "p",
+        unit: "px",
+        format: [canvas.width, canvas.height],
+      });
+      pdf.addImage(imgData, "PNG", 0, 0, canvas.width, canvas.height);
+      pdf.save("historial-caja.pdf");
+
+      restoreColors();
+    } catch (error) {
+      console.error("Error al exportar PDF", error);
+      alert("No se pudo exportar el PDF. Reintenta o revisa la consola.");
+    }
+  };
 
   const orderMatchesClient = (order: BodegaOrder) => {
     if (!isCliente || !activeClientId) return true;
@@ -175,6 +286,114 @@ const ReportesSection: React.FC<ReportesSectionProps> = ({
 
   const alertHistory = filteredAlertHistory;
 
+  type BoxEventType = "ingreso" | "movimiento" | "revision" | "salida" | "despacho" | "alerta";
+  type BoxTimelineItem = {
+    type: BoxEventType;
+    title: string;
+    detail?: string;
+    whenMs: number;
+    whenLabel?: string;
+  };
+
+  const timelineTypeStyles: Record<BoxEventType, { label: string; color: string }> = {
+    ingreso: { label: "Ingreso", color: "text-green-600" },
+    movimiento: { label: "Movimiento", color: "text-blue-600" },
+    revision: { label: "Revision", color: "text-amber-600" },
+    salida: { label: "Salida", color: "text-rose-600" },
+    despacho: { label: "Despacho", color: "text-teal-600" },
+    alerta: { label: "Alerta", color: "text-red-600" },
+  };
+
+  const selectedBoxLabel = React.useMemo(
+    () => clientBoxes.find((item) => item.value === selectedBoxId)?.label ?? selectedBoxId,
+    [clientBoxes, selectedBoxId],
+  );
+
+  const boxTimeline = React.useMemo(() => {
+    if (!selectedBoxInfo) return [] as BoxTimelineItem[];
+
+    const events: BoxTimelineItem[] = [];
+
+    const matchesBox = (autoId?: string, position?: number) => {
+      if (selectedBoxInfo.autoId && autoId) return autoId === selectedBoxInfo.autoId;
+      if (selectedBoxInfo.position !== undefined && position !== undefined)
+        return position === selectedBoxInfo.position;
+      if (selectedBoxInfo.autoId && position !== undefined)
+        return `pos-${position}` === selectedBoxId;
+      if (selectedBoxInfo.position !== undefined && autoId) return autoId === selectedBoxId;
+      return false;
+    };
+
+    ingresos.forEach((box) => {
+      if (!matchesBox(box.autoId, box.position)) return;
+      events.push({
+        type: "ingreso",
+        title: `Ingreso en posición ${box.position}`,
+        detail: `Temp: ${box.temperature} °C · Cliente: ${box.client || "—"}`,
+        whenMs: -1,
+        whenLabel: "Sin fecha",
+      });
+    });
+
+    movimientosBodega.forEach((order) => {
+      if (!matchesBox(order.autoId, order.targetPosition ?? order.sourcePosition)) return;
+      const isRevision = order.type === "revisar";
+      events.push({
+        type: isRevision ? "revision" : "movimiento",
+        title: isRevision
+          ? "Revisión de caja"
+          : `Movimiento ${order.sourceZone} ${order.sourcePosition} → ${order.targetPosition ?? "-"}`,
+        detail: `Por: ${order.createdBy}`,
+        whenMs: order.createdAtMs ?? 0,
+        whenLabel: order.createdAt,
+      });
+    });
+
+    salidas.forEach((order) => {
+      if (!matchesBox(order.autoId, order.targetPosition ?? order.sourcePosition)) return;
+      const isRevision = order.type === "revisar";
+      events.push({
+        type: isRevision ? "revision" : "salida",
+        title: isRevision
+          ? "Revisión de caja"
+          : `Salida ${order.sourcePosition ?? "-"} → ${order.targetPosition ?? "-"}`,
+        detail: `Por: ${order.createdBy}`,
+        whenMs: order.createdAtMs ?? 0,
+        whenLabel: order.createdAt,
+      });
+    });
+
+    dispatchedBoxes.forEach((box) => {
+      if (!matchesBox(box.autoId, box.position)) return;
+      events.push({
+        type: "despacho",
+        title: `Despachado desde posición ${box.position}`,
+        detail: `Cliente: ${box.client || "—"}`,
+        whenMs: -1,
+        whenLabel: "Sin fecha",
+      });
+    });
+
+    alertHistory.forEach((alert) => {
+      const haystack = `${alert.id} ${alert.title} ${alert.description ?? ""} ${alert.meta ?? ""}`;
+      const matches = selectedBoxInfo.autoId
+        ? haystack.includes(selectedBoxInfo.autoId)
+        : selectedBoxInfo.position !== undefined
+          ? haystack.includes(`pos-${selectedBoxInfo.position}`)
+          : false;
+      if (!matches) return;
+      events.push({
+        type: "alerta",
+        title: alert.title,
+        detail: alert.description,
+        whenMs: alert.createdAtMs ?? 0,
+        whenLabel: alert.createdAt,
+      });
+    });
+
+    return events.sort((a, b) => (b.whenMs ?? -1) - (a.whenMs ?? -1));
+  }, [alertHistory, dispatchedBoxes, ingresos, movimientosBodega, salidas, selectedBoxId, selectedBoxInfo]);
+
   return (
     <section className="rounded-2xl bg-white p-6 shadow-sm">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -192,12 +411,33 @@ const ReportesSection: React.FC<ReportesSectionProps> = ({
             <div className="flex items-center gap-2 rounded-xl bg-white px-3 py-1 shadow-sm ring-1 ring-slate-200">
               <select
                 value={activeClientId ?? "cliente1"}
-                onChange={(event) => onClientChange?.(event.target.value)}
-                className="cursor-pointer bg-transparent text-sm font-semibold text-slate-800 focus:outline-none"
+                onChange={(event) => {
+                  onClientChange?.(event.target.value);
+                  setSelectedBoxId("");
+                  setBoxHistoryModalOpen(false);
+                }}
+                className="cursor-pointer bg-transparent text-sm font-semibold text-slate-800 focus:outline-none px-3 py-1 w-[180px] min-w-[180px] max-w-[180px] whitespace-nowrap"
               >
                 {clientOptions.map((option) => (
                   <option key={option} value={option}>
                     {option.replace("cliente", "Cliente ")}
+                  </option>
+                ))}
+              </select>
+              <select
+                value={selectedBoxId}
+                onChange={(event) => {
+                  const value = event.target.value;
+                  setSelectedBoxId(value);
+                  setBoxHistoryModalOpen(Boolean(value));
+                }}
+                disabled={!activeClientId || clientBoxes.length === 0}
+                className="cursor-pointer bg-transparent text-sm font-semibold text-slate-800 focus:outline-none border-l border-slate-200 pl-4 pr-3 py-1 w-[180px] min-w-[180px] max-w-[180px] whitespace-nowrap"
+              >
+                <option value="">Cajas</option>
+                {clientBoxes.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
                   </option>
                 ))}
               </select>
@@ -300,6 +540,88 @@ const ReportesSection: React.FC<ReportesSectionProps> = ({
           </div>
         </div>
       </div>
+      {boxHistoryModalOpen && selectedBoxInfo ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center backdrop-blur-sm animate-fade-in p-2 sm:p-4"
+          role="dialog"
+          aria-modal="true"
+          onClick={() => setBoxHistoryModalOpen(false)}
+          style={{ background: "rgba(0,0,0,0.1)" }}
+        >
+          <div
+            className="w-full max-w-xl rounded-3xl shadow-2xl relative overflow-hidden animate-fade-in-up"
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              fontFamily: '"Space Grotesk", "Work Sans", sans-serif',
+              background: "rgba(255,255,255,0.92)",
+              border: "1px solid #dbeafe",
+              backdropFilter: "blur(8px)",
+            }}
+            ref={boxHistoryContentRef}
+          >
+            <div
+              className="flex flex-col items-center justify-center pt-8 pb-4 px-8 border-b border-blue-100 rounded-t-3xl relative"
+              style={{ background: "linear-gradient(90deg, #e0f2fe 0%, #ffffff 100%)" }}
+            >
+              <span className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-blue-100 shadow mb-2">
+                <MdMoveToInbox size={26} className="text-blue-500" />
+              </span>
+              <h3 className="text-xl font-extrabold text-blue-700 drop-shadow mb-1 tracking-tight text-center">
+                Historial de caja
+              </h3>
+              <p className="text-sm text-slate-600 text-center">{selectedBoxLabel || "Caja"}</p>
+              <div className="absolute top-4 left-4 flex gap-2">
+                <button
+                  type="button"
+                  onClick={handleExportPdf}
+                  className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-300"
+                >
+                  Exportar PDF
+                </button>
+              </div>
+              <button
+                type="button"
+                onClick={() => setBoxHistoryModalOpen(false)}
+                className="absolute top-4 right-4 text-slate-400 hover:text-blue-500 text-2xl font-bold focus:outline-none transition-colors"
+                aria-label="Cerrar"
+              >
+                <MdClose />
+              </button>
+            </div>
+            <div
+              className="max-h-[60vh] overflow-y-auto px-8 py-6 flex flex-col gap-3"
+              style={{ background: "rgba(255,255,255,0.88)" }}
+            >
+              {boxTimeline.length === 0 ? (
+                <p className="text-base text-slate-500 text-center py-8">No hay eventos registrados para esta caja.</p>
+              ) : (
+                <ul className="w-full space-y-3">
+                  {boxTimeline.map((item, idx) => {
+                    const meta = timelineTypeStyles[item.type];
+                    return (
+                      <li
+                        key={`${item.type}-${idx}-${item.whenMs}`}
+                        className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm"
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <span className={`text-xs font-bold uppercase tracking-wide ${meta.color}`}>
+                            {meta.label}
+                          </span>
+                          <span className="text-xs text-slate-500">{item.whenLabel ?? "Sin fecha"}</span>
+                        </div>
+                        <p className="mt-1 text-sm font-semibold text-slate-900">{item.title}</p>
+                        {item.detail ? (
+                          <p className="text-xs text-slate-600 mt-1 leading-relaxed">{item.detail}</p>
+                        ) : null}
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </div>
+          </div>
+        </div>
+      ) : null}
       <div className="mt-8 grid gap-4 sm:grid-cols-2 md:grid-cols-4">
         <button
           type="button"
@@ -358,7 +680,7 @@ const ReportesSection: React.FC<ReportesSectionProps> = ({
         <button
           type="button"
           onClick={() => setReportDetailModal({ type: "alertas" })}
-          className="rounded-2xl border border-slate-100 bg-white p-5 flex flex-col items-center hover:shadow-md transition w-full"
+          className="rounded-2xl border border-slate-100 bg-white p-5 flex flex-col items-center hover:shadow-md transition w-full col-span-full md:col-span-4"
         >
           <IoAlert size={32} className="text-red-500 mb-2" />
           <span className="text-xs font-semibold uppercase text-slate-500">
@@ -371,18 +693,27 @@ const ReportesSection: React.FC<ReportesSectionProps> = ({
       </div>
       {reportDetailModal && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center backdrop-blur-sm bg-black/10 animate-fade-in p-2 sm:p-4"
+          className="fixed inset-0 z-50 flex items-center justify-center backdrop-blur-sm animate-fade-in p-2 sm:p-4"
           role="dialog"
           aria-modal="true"
           onClick={() => setReportDetailModal(null)}
+          style={{ background: "rgba(0,0,0,0.1)" }}
         >
           <div
-            className="w-full max-w-2xl rounded-3xl border border-blue-100 bg-white/90 shadow-2xl backdrop-blur-lg relative overflow-hidden animate-fade-in-up"
+            className="w-full max-w-2xl rounded-3xl shadow-2xl relative overflow-hidden animate-fade-in-up"
             onClick={(e) => e.stopPropagation()}
-            style={{ fontFamily: '"Space Grotesk", "Work Sans", sans-serif' }}
+            style={{
+              fontFamily: '"Space Grotesk", "Work Sans", sans-serif',
+              background: "rgba(255,255,255,0.92)",
+              border: "1px solid #dbeafe",
+              backdropFilter: "blur(8px)",
+            }}
           >
             {/* Header con gradiente y botón cerrar flotante */}
-            <div className="flex flex-col items-center justify-center pt-8 pb-4 px-8 border-b border-blue-100 bg-linear-to-r from-blue-50 to-white rounded-t-3xl relative">
+            <div
+              className="flex flex-col items-center justify-center pt-8 pb-4 px-8 border-b border-blue-100 rounded-t-3xl relative"
+              style={{ background: "linear-gradient(90deg, #e0f2fe 0%, #ffffff 100%)" }}
+            >
               <span className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-blue-100 shadow mb-2">
                 <MdBarChart size={32} className="text-blue-500" />
               </span>
@@ -426,7 +757,10 @@ const ReportesSection: React.FC<ReportesSectionProps> = ({
               </button>
             </div>
             {/* Lista de detalles */}
-            <div className="max-h-[60vh] overflow-y-auto px-8 py-6 bg-white/80 flex flex-col items-center">
+            <div
+              className="max-h-[60vh] overflow-y-auto px-8 py-6 flex flex-col items-center"
+              style={{ background: "rgba(255,255,255,0.88)" }}
+            >
               {reportDetailModal.type === "ingresos"
                 ? (() => {
                     if (globalIngresos.length === 0) {

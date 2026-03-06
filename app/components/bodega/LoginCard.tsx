@@ -38,7 +38,7 @@ const LoginCard: React.FC<LoginCardProps> = ({
           <MdOutlineSevereCold size={40} className="text-sky-400" />
         </div>
         <p className="text-xs font-bold uppercase tracking-[0.4em] text-slate-400">
-          Bodega de Frío
+          POLARIA
         </p>
       </div>
 

@@ -19,7 +19,7 @@ export default function SlotsGrid({
   role,
 }: ExtendedSlotsGridProps) {
   return (
-    <div className="flex-1 rounded-2xl bg-white p-2 sm:p-4 shadow-md border border-blue-200 w-full">
+    <div className="self-start rounded-2xl bg-white p-2 sm:p-4 shadow-md border border-blue-200 w-full">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3 relative mb-3 sm:mb-4">
         <h2 className="text-sm sm:text-lg font-semibold text-slate-900 mb-2 sm:mb-4 flex items-center gap-1 sm:gap-2">
           <span className="inline-block">
