@@ -476,6 +476,9 @@ export default function BodegaDashboard() {
   const [orders, setOrders] = useState<BodegaOrder[]>([]);
   const [stats, setStats] = useState<BodegaStats>(defaultStats);
   const [alerts, setAlerts] = useState<AlertItem[]>([]);
+  const [alertasOperario, setAlertasOperario] = useState<Array<{ position: number; [key: string]: unknown }>>([]);
+  const [alertasOperarioSolved, setAlertasOperarioSolved] = useState<number[]>([]);
+  const [llamadasJefe, setLlamadasJefe] = useState<Array<Record<string, unknown>>>([]);
   const [assignedAlerts, setAssignedAlerts] = useState<AlertAssignment[]>([]);
   const [alertClock, setAlertClock] = useState(() => Date.now());
   const [statusModal, setStatusModal] = useState<{
