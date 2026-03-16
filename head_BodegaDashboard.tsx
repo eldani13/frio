@@ -2101,7 +2101,6 @@ export default function BodegaDashboard() {
         <div className="absolute inset-0 -z-10 bg-[radial-gradient(circle_at_top,#e2e8f0,transparent_60%)]" />
         <main className="mx-auto flex w-full max-w-6xl flex-col items-center justify-center">
           <LoginCard
-            users={USERS}
             username={loginUser}
             password={loginPassword}
             onUsernameChange={setLoginUser}
