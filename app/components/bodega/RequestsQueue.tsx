@@ -56,23 +56,6 @@ const STATUS_STYLES: Record<
   },
 };
 
-const formatOrderDetails = (order: BodegaOrder): string => {
-  const target = order.targetPosition ?? "-";
-  const sourceLabel =
-    order.sourceZone === "bodega"
-      ? "Bodega"
-      : order.sourceZone === "salida"
-        ? "Salida"
-        : "Ingreso";
-  if (order.type === "revisar") {
-    return `Revisar ${sourceLabel} ${order.sourcePosition}`;
-  }
-  if (order.type === "a_bodega") {
-    return `${sourceLabel} ${order.sourcePosition} · Destino bodega ${target}`;
-  }
-  return `${sourceLabel} ${order.sourcePosition} · Destino salida ${target}`;
-};
-
 const orderTimestamp = (order: BodegaOrder) =>
   typeof order.createdAtMs === "number" ? order.createdAtMs : Date.now();
 
@@ -91,7 +74,7 @@ export default function RequestsQueue(props: RequestsQueueProps) {
     requests,
     canExecute,
     onExecute,
-    onReport,
+    onReport: _onReport,
     slots = [],
     inboundBoxes = [],
     outboundBoxes = [],
@@ -102,6 +85,9 @@ export default function RequestsQueue(props: RequestsQueueProps) {
     onUpdateAlertasOperarioSolved,
     onUpdateLlamadasJefe,
   } = props;
+
+  // Optional callbacks may be provided from parent, keep refs without invoking
+  void _onReport;
 
   const [showAlertModal, setShowAlertModal] = useState(false);
   const [showSolveModal, setShowSolveModal] = useState(false);

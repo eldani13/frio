@@ -966,11 +966,6 @@ export default function BodegaDashboard() {
 
   const reviewBodegaList = useMemo(() => availableBodegaForOrders, [availableBodegaForOrders]);
 
-  const availableOutboundForReview = useMemo(
-    () => outboundBoxes.filter((box) => !pendingSourceKeys.has(`salida:${box.position}`)),
-    [outboundBoxes, pendingSourceKeys],
-  );
-
   const {
     ingresos: historyIngresos,
     salidas: historySalidas,
@@ -1092,7 +1087,6 @@ export default function BodegaDashboard() {
         ),
     [alerts, assignedAlerts],
   );
-  const nextAlert = alerts[0] ?? null;
   const overdueOrders = useMemo(
     () => orders.filter((order) => alertClock - order.createdAtMs >= ALERT_DELAY_MS),
     [alertClock, orders],
@@ -1408,7 +1402,6 @@ export default function BodegaDashboard() {
   const canSeeBodega = isAdmin || isOperario;
   const canUseIngresoForm = isCustodio;
   const canUseOrderForm = isJefe;
-  const canSeeOrders = isAdmin || isOperario;
   const canUseSearch = isAdmin;
 
   useEffect(() => {

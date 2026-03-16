@@ -1,4 +1,4 @@
-import { FiArchive, FiLogOut, FiMenu, FiX } from "react-icons/fi";
+import { FiLogOut, FiMenu, FiX } from "react-icons/fi";
 import { useState } from "react";
 import type { HeaderProps } from "../../interfaces/bodega/Header";
 import type { Role } from "../../interfaces/bodega";
@@ -11,8 +11,6 @@ interface ExtendedHeaderProps extends HeaderProps {
 }
 
 export default function Header({
-  occupiedCount,
-  totalSlots,
   dateLabel,
   warehouseId,
   warehouses,

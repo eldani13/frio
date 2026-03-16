@@ -1,4 +1,4 @@
-import { getApp, getApps, initializeApp, type FirebaseOptions } from "firebase/app";
+import { getApps, initializeApp, type FirebaseOptions } from "firebase/app";
 import { getDatabase } from "firebase/database";
 import { getFirestore } from "firebase/firestore";
 import { getAuth, signInAnonymously } from "firebase/auth";

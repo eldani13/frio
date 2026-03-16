@@ -95,6 +95,9 @@ export default function OrdenesJefeSection(props: {
     setOrderModalType,
   } = props;
 
+  // Mark optional handler as intentionally unused in this view
+  void handleCreateOrderSalida;
+
   // Estado para loading del modal de editar temperatura
   const [editTempLoading, setEditTempLoading] = React.useState(false);
 
@@ -146,7 +149,7 @@ export default function OrdenesJefeSection(props: {
       salida: [],
     };
     return items;
-  }, [inboundBoxes]);
+  }, []);
 
   // Dummy placeholder for zoneTaskItems to avoid compile error
   const zoneTaskItems: Record<ZoneKey, DetailItem[]> = useMemo(() => {
@@ -522,7 +525,7 @@ export default function OrdenesJefeSection(props: {
                                     "No se detectó temperatura en la imagen.",
                                   );
                                 }
-                              } catch (err) {
+                              } catch {
                                 alert("Error al analizar la imagen.");
                               }
                               setEditTempLoading(false);
@@ -1108,7 +1111,7 @@ export default function OrdenesJefeSection(props: {
                 </div>
               )}
               <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-4">
-                {slots.slice(0, 12).map((slot, idx) => {
+                {slots.slice(0, 12).map((slot) => {
                   const isOccupied = slot.autoId && slot.autoId.trim() !== "";
                   return (
                     <div
