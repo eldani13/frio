@@ -2574,6 +2574,9 @@ export default function BodegaDashboard() {
                 inboundBoxes={inboundBoxes}
                 outboundBoxes={outboundBoxes}
                 slots={slots}
+                alertasOperario={alertasOperario}
+                alertasOperarioSolved={alertasOperarioSolved}
+                onUpdateAlertasOperario={setAlertasOperario}
                 selectedBoxModal={selectedBoxModal}
                 setSelectedBoxModal={setSelectedBoxModal}
                 editTempModal={editTempModal}
