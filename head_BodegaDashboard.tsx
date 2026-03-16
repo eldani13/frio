@@ -1,12 +1,12 @@
 "use client";
 /* eslint-disable react-hooks/purity */
 import React from "react";
-import { useBodegaHistory } from "./BodegaDashboard/BodegaHistoryContext";
-import EstadoBodegaSection from "./BodegaDashboard/EstadoBodegaSection";
-import IngresosSection from "./BodegaDashboard/IngresosSection";
-import OrdenesJefeSection from "./BodegaDashboard/OrdenesJefeSection";
-import DespachadosSection from "./BodegaDashboard/DespachadosSection";
-import ReportesSection from "./BodegaDashboard/ReportesSection";
+import { useBodegaHistory } from "./app/components/BodegaDashboard/BodegaHistoryContext";
+import EstadoBodegaSection from "./app/components/BodegaDashboard/EstadoBodegaSection";
+import IngresosSection from "./app/components/BodegaDashboard/IngresosSection";
+import OrdenesJefeSection from "./app/components/BodegaDashboard/OrdenesJefeSection";
+import DespachadosSection from "./app/components/BodegaDashboard/DespachadosSection";
+import ReportesSection from "./app/components/BodegaDashboard/ReportesSection";
 import { AiTwotoneAppstore } from "react-icons/ai";
 import { SlGraph } from "react-icons/sl";
 
@@ -68,9 +68,9 @@ const USERS: UserAccount[] = [
 
 import { useEffect, useMemo, useState } from "react";
 import { FiAlertTriangle, FiClipboard } from "react-icons/fi";
-import Header from "./bodega/Header";
-import MessageBanner from "./bodega/MessageBanner";
-import SlotsGrid from "./bodega/SlotsGrid";
+import Header from "./app/components/bodega/Header";
+import MessageBanner from "./app/components/bodega/MessageBanner";
+import SlotsGrid from "./app/components/bodega/SlotsGrid";
 import {
   Bar,
   BarChart,
@@ -91,10 +91,10 @@ import type {
   Role,
   Slot,
 } from "../interfaces/bodega";
-import SelectedSlotCard from "./bodega/SelectedSlotCard";
-import WarehouseSelector from "./bodega/WarehouseSelector";
-import RequestsQueue from "./bodega/RequestsQueue";
-import LoginCard from "./bodega/LoginCard";
+import SelectedSlotCard from "./app/components/bodega/SelectedSlotCard";
+import WarehouseSelector from "./app/components/bodega/WarehouseSelector";
+import RequestsQueue from "./app/components/bodega/RequestsQueue";
+import LoginCard from "./app/components/bodega/LoginCard";
 
 const TOTAL_SLOTS = 12;
 const SLOTS_STORAGE_KEY = "bodegaSlotsV1";
