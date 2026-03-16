@@ -85,3 +85,9 @@ export type HistoryState = {
 	movimientosBodega: BodegaOrder[];
 	alertas: AlertHistoryEntry[];
 };
+
+export type WarehouseMeta = {
+	id: string;
+	name?: string;
+	status?: string;
+};
