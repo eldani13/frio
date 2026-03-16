@@ -487,7 +487,7 @@ export default function BodegaDashboard() {
   const [alerts, setAlerts] = useState<AlertItem[]>([]);
   const [assignedAlerts, setAssignedAlerts] = useState<AlertAssignment[]>([]);
   const [alertasOperario, setAlertasOperario] = useState<
-    Array<{ position: number; [key: string]: unknown }>
+    Array<{ position: number;[key: string]: unknown }>
   >([]);
   const [alertasOperarioSolved, setAlertasOperarioSolved] = useState<number[]>([]);
   const [llamadasJefe, setLlamadasJefe] = useState<Array<Record<string, unknown>>>([]);
@@ -856,7 +856,7 @@ export default function BodegaDashboard() {
       alertasOperario,
       alertasOperarioSolved,
       llamadasJefe,
-    }).catch(() => {});
+    }).catch(() => { });
   }, [
     alerts,
     alertasOperario,
@@ -1747,12 +1747,12 @@ export default function BodegaDashboard() {
         prev.map((item) =>
           item.position === target
             ? {
-                ...item,
-                autoId: boxAutoId,
-                name: boxName,
-                temperature: boxTemp,
-                client: boxClient,
-              }
+              ...item,
+              autoId: boxAutoId,
+              name: boxName,
+              temperature: boxTemp,
+              client: boxClient,
+            }
             : item,
         ),
       );
@@ -1980,10 +1980,10 @@ export default function BodegaDashboard() {
         prev.map((order) =>
           order.id === sourceOrderId
             ? {
-                ...order,
-                createdAt: new Date().toLocaleString("es-CO"),
-                createdAtMs: Date.now(),
-              }
+              ...order,
+              createdAt: new Date().toLocaleString("es-CO"),
+              createdAtMs: Date.now(),
+            }
             : order,
         ),
       );
@@ -2061,10 +2061,10 @@ export default function BodegaDashboard() {
         prev.map((order) =>
           order.id === orderId
             ? {
-                ...order,
-                createdAt: new Date().toLocaleString("es-CO"),
-                createdAtMs: Date.now(),
-              }
+              ...order,
+              createdAt: new Date().toLocaleString("es-CO"),
+              createdAtMs: Date.now(),
+            }
             : order,
         ),
       );
@@ -2081,10 +2081,10 @@ export default function BodegaDashboard() {
           prev.map((order) =>
             order.id === sourceOrderId
               ? {
-                  ...order,
-                  createdAt: new Date().toLocaleString("es-CO"),
-                  createdAtMs: Date.now(),
-                }
+                ...order,
+                createdAt: new Date().toLocaleString("es-CO"),
+                createdAtMs: Date.now(),
+              }
               : order,
           ),
         );
@@ -2152,33 +2152,33 @@ export default function BodegaDashboard() {
       helper: string;
       span?: string;
     }> = [
-      {
-        key: "compras",
-        label: "Compras",
-        icon: <FiShoppingCart className="h-6 w-6" />,
-        helper: "Órdenes y abastecimiento",
-        span: "sm:col-span-2",
-      },
-      {
-        key: "transporte",
-        label: "Transporte",
-        icon: <FiTruck className="h-6 w-6" />,
-        helper: "Rutas y entregas",
-        span: "sm:col-span-2",
-      },
-      {
-        key: "bodega_interna",
-        label: "Bodega interna",
-        icon: <FiHome className="h-6 w-6" />,
-        helper: "Control de slots y movimientos",
-      },
-      {
-        key: "bodega_externa",
-        label: "Bodega externa",
-        icon: <FiExternalLink className="h-6 w-6" />,
-        helper: "Integraciones externas",
-      },
-    ];
+        {
+          key: "compras",
+          label: "Compras",
+          icon: <FiShoppingCart className="h-6 w-6" />,
+          helper: "Órdenes y abastecimiento",
+          span: "sm:col-span-2",
+        },
+        {
+          key: "transporte",
+          label: "Transporte",
+          icon: <FiTruck className="h-6 w-6" />,
+          helper: "Rutas y entregas",
+          span: "sm:col-span-2",
+        },
+        {
+          key: "bodega_interna",
+          label: "Bodega interna",
+          icon: <FiHome className="h-6 w-6" />,
+          helper: "Control de slots y movimientos",
+        },
+        {
+          key: "bodega_externa",
+          label: "Bodega externa",
+          icon: <FiExternalLink className="h-6 w-6" />,
+          helper: "Integraciones externas",
+        },
+      ];
 
     return (
       <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
@@ -2350,6 +2350,7 @@ export default function BodegaDashboard() {
           onSearchSubmit={handleSearch}
           userDisplayName={session?.displayName}
           onLogout={handleLogout}
+          onGoMenu={() => setAdminSection("menu")}
           role={role}
         />
         {showAdminMenu ? (
@@ -2407,11 +2408,10 @@ export default function BodegaDashboard() {
                         key={tab.key}
                         type="button"
                         onClick={() => setActiveTab(tab.key as typeof activeTab)}
-                        className={`relative flex items-center gap-1 rounded-xl px-4 py-2 text-sm font-semibold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 ${
-                          activeTab === tab.key
-                            ? "bg-slate-900 text-white shadow-md scale-105"
-                            : "bg-slate-100 text-slate-700 hover:bg-slate-200"
-                        }`}
+                        className={`relative flex items-center gap-1 rounded-xl px-4 py-2 text-sm font-semibold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 ${activeTab === tab.key
+                          ? "bg-slate-900 text-white shadow-md scale-105"
+                          : "bg-slate-100 text-slate-700 hover:bg-slate-200"
+                          }`}
                         style={{ minWidth: 120 }}
                       >
                         {icon}
