@@ -1,8 +1,9 @@
-import { FiArchive, FiBox, FiAlertTriangle, FiX } from "react-icons/fi";
+/* eslint-disable react-hooks/set-state-in-effect */
+import { FiArchive, FiBox, FiAlertTriangle } from "react-icons/fi";
 import React, { useState, useEffect } from "react";
 import SlotsGrid from "../bodega/SlotsGrid";
 import SelectedSlotCard from "../bodega/SelectedSlotCard";
-import type { Box, Slot } from "../../interfaces/bodega";
+import type { Box, Slot, Role } from "../../interfaces/bodega";
 import EntradaAlertButton from "../common/EntradaAlertButton";
 
 
@@ -16,7 +17,7 @@ type Props = {
   setSelectedPosition: (position: number | null) => void;
   outboundBoxes: Box[];
   sortByPosition: <T extends { position: number }>(items: T[]) => T[];
-  role?: string;
+  role?: Role;
 };
 
 

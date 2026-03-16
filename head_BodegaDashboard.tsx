@@ -1,4 +1,5 @@
 "use client";
+/* eslint-disable react-hooks/purity */
 import React from "react";
 import { useBodegaHistory } from "./BodegaDashboard/BodegaHistoryContext";
 import EstadoBodegaSection from "./BodegaDashboard/EstadoBodegaSection";

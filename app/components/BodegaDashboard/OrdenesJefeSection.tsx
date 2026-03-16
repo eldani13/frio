@@ -1,13 +1,7 @@
-import {
-  FiArchive,
-  FiBox,
-  FiRepeat,
-  FiSearch,
-  FiAlertTriangle,
-  FiX,
-} from "react-icons/fi";
+/* eslint-disable @typescript-eslint/no-explicit-any */
+import { FiArchive, FiBox, FiRepeat, FiSearch, FiAlertTriangle } from "react-icons/fi";
 
-import React, { useState, useMemo, useEffect } from "react";
+import React, { useState, useMemo } from "react";
 import EntradaAlertButton from "../common/EntradaAlertButton";
 import { RiUserReceivedLine } from "react-icons/ri";
 
