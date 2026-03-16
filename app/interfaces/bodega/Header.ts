@@ -4,6 +4,8 @@ export type HeaderProps = {
   dateLabel: string;
   warehouseId?: string;
   warehouseName?: string;
+  warehouses?: Array<{ id: string; name?: string }>;
+  onSelectWarehouse?: (id: string) => void;
   showIntro?: boolean;
   showMeta?: boolean;
   canSearch?: boolean;

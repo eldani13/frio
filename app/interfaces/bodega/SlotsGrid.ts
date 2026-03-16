@@ -6,4 +6,7 @@ export type SlotsGridProps = {
   selectedPosition: number | null;
   onSelect: (position: number) => void;
   headerActions?: ReactNode;
+  page?: number;
+  pageSize?: number;
+  onPageChange?: (page: number) => void;
 };

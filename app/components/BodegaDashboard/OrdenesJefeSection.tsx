@@ -21,6 +21,13 @@ export default function OrdenesJefeSection(props: {
   inboundBoxes: any[];
   outboundBoxes: any[];
   slots: any[];
+  alertasOperario: Array<{ position: number; [key: string]: unknown }>;
+  alertasOperarioSolved: number[];
+  llamadasJefe?: Array<Record<string, unknown>>;
+  onUpdateAlertasOperario: (
+    next: Array<{ position: number; [key: string]: unknown }>,
+  ) => void;
+  onUpdateLlamadasJefe: (next: Array<Record<string, unknown>>) => void;
   selectedBoxModal: any;
   setSelectedBoxModal: (box: any) => void;
   editTempModal: any;
@@ -51,8 +58,6 @@ export default function OrdenesJefeSection(props: {
   setOrderModalType: (type: string | null) => void;
   headerActions?: React.ReactNode;
 }) {
-  // Estado para forzar re-render cuando se asigna una alerta
-  const [asignadoAlertas, setAsignadoAlertas] = useState({});
   const ITEMS_PER_PAGE = 4;
   const [entradaPage, setEntradaPage] = useState(0);
   const [salidaPage, setSalidaPage] = useState(0);
@@ -61,6 +66,11 @@ export default function OrdenesJefeSection(props: {
     inboundBoxes,
     outboundBoxes,
     slots,
+    alertasOperario,
+    alertasOperarioSolved,
+    llamadasJefe = [],
+    onUpdateAlertasOperario,
+    onUpdateLlamadasJefe,
     selectedBoxModal,
     setSelectedBoxModal,
     editTempModal,
@@ -183,144 +193,22 @@ export default function OrdenesJefeSection(props: {
     salidaStart + ITEMS_PER_PAGE,
   );
 
-  // Buscar alertas de temperatura alta en bodega (slots)
-  // Utilidad para obtener las alertas solucionadas (eliminadas) por el operario
-  function getSolvedOperarioAlertPositions() {
-    if (typeof window === "undefined") return [];
-    const solved = window.localStorage.getItem("alertas_operario_solved");
-    try {
-      return solved ? JSON.parse(solved) : [];
-    } catch {
-      return [];
-    }
-  }
-
-  // Utilidad para obtener las alertas actualmente asignadas al operario
-  function getOperarioAlertPositions() {
-    if (typeof window === "undefined") return [];
-    const assigned = window.localStorage.getItem("alertas_operario");
-    try {
-      const arr = assigned ? JSON.parse(assigned) : [];
-      return arr.map((a: any) => a.position);
-    } catch {
-      return [];
-    }
-  }
-
-  // Estado para alertas de temperatura alta en bodega (excluyendo solucionadas)
-  const [bodegaHighTempAlerts, setBodegaHighTempAlerts] = useState(() => {
-    const solvedPositions = getSolvedOperarioAlertPositions();
+  const bodegaHighTempAlerts = useMemo(() => {
+    const solvedPositions = new Set(alertasOperarioSolved ?? []);
     return slots
       .filter(
         (slot) =>
           typeof slot.temperature === "number" &&
           slot.temperature > HIGH_TEMP_THRESHOLD,
       )
-      .filter((slot) => !solvedPositions.includes(slot.position))
+      .filter((slot) => !solvedPositions.has(slot.position))
       .map((slot) => ({
         name: slot.name || "Sin nombre",
         autoId: slot.autoId,
         temperature: slot.temperature,
         position: slot.position,
       }));
-  });
-
-  // Actualizar alertas cuando cambian los slots o se soluciona una alerta
-  useEffect(() => {
-    const solvedPositions = getSolvedOperarioAlertPositions();
-    setBodegaHighTempAlerts(
-      slots
-        .filter(
-          (slot) =>
-            typeof slot.temperature === "number" &&
-            slot.temperature > HIGH_TEMP_THRESHOLD,
-        )
-        .filter((slot) => !solvedPositions.includes(slot.position))
-        .map((slot) => ({
-          name: slot.name || "Sin nombre",
-          autoId: slot.autoId,
-          temperature: slot.temperature,
-          position: slot.position,
-        })),
-    );
-  }, [slots]);
-
-  // Escuchar evento de solucion de alerta desde localStorage
-  useEffect(() => {
-    function handleStorage(e: StorageEvent) {
-      if (
-        e.key === "alerta_solved_event" ||
-        e.key === "alertas_operario_solved"
-      ) {
-        const solvedPositions = getSolvedOperarioAlertPositions();
-        setBodegaHighTempAlerts(
-          slots
-            .filter(
-              (slot) =>
-                typeof slot.temperature === "number" &&
-                slot.temperature > HIGH_TEMP_THRESHOLD,
-            )
-            .filter((slot) => !solvedPositions.includes(slot.position))
-            .map((slot) => ({
-              name: slot.name || "Sin nombre",
-              autoId: slot.autoId,
-              temperature: slot.temperature,
-              position: slot.position,
-            })),
-        );
-      }
-
-      if (e.key === "alerta_temp_event" || e.key === "slots_temperature_event") {
-        try {
-          const payload = e.newValue ? JSON.parse(e.newValue) : null;
-          if (!payload || typeof payload.position !== "number") return;
-
-          const solvedPositions = getSolvedOperarioAlertPositions();
-          if (solvedPositions.includes(payload.position)) return;
-
-          if (
-            typeof payload.temperature === "number" &&
-            payload.temperature > HIGH_TEMP_THRESHOLD
-          ) {
-            setBodegaHighTempAlerts((prev) => {
-              const exists = prev.find(
-                (item) => item.position === payload.position,
-              );
-              if (exists) {
-                return prev.map((item) =>
-                  item.position === payload.position
-                    ? {
-                        ...item,
-                        temperature: payload.temperature,
-                        name: payload.name || item.name,
-                        autoId: payload.autoId || item.autoId,
-                      }
-                    : item,
-                );
-              }
-              return [
-                ...prev,
-                {
-                  name: payload.name || "Sin nombre",
-                  autoId: payload.autoId || "",
-                  temperature: payload.temperature,
-                  position: payload.position,
-                },
-              ];
-            });
-          } else {
-            setBodegaHighTempAlerts((prev) =>
-              prev.filter((item) => item.position !== payload.position),
-            );
-          }
-        } catch {
-          // ignore malformed alert payloads
-        }
-      }
-    }
-    window.addEventListener("storage", handleStorage);
-    return () => window.removeEventListener("storage", handleStorage);
-  }, [slots]);
+  }, [alertasOperarioSolved, slots]);
 
   const [showAlertModal, setShowAlertModal] = useState(false);
 
@@ -936,8 +824,8 @@ export default function OrdenesJefeSection(props: {
                       </span>
                     </button>
                   )}
-                  {/* Botón de llamados solo si hay llamada_jefe */}
-                  {typeof window !== 'undefined' && window.localStorage.getItem('llamada_jefe') && (
+                  {/* Botón de llamados solo si hay llamados activos */}
+                  {llamadasJefe.length > 0 && (
                     <>
                       <button
                         className="flex items-center px-2 py-0.5 rounded-full bg-yellow-200 hover:bg-yellow-300 transition text-blue-900 relative shadow focus:outline-none min-h-6 min-w-6"
@@ -976,148 +864,94 @@ export default function OrdenesJefeSection(props: {
                             </div>
                             {/* Lista de llamados */}
                             <div className="px-8 py-6 min-h-30 flex flex-col items-center max-h-[60vh] overflow-y-auto bg-white/80">
-                              {(() => {
-                                let llamados = [];
-                                try {
-                                  const raw = typeof window !== 'undefined' && window.localStorage.getItem('llamada_jefe');
-                                  if (raw) {
-                                    const parsed = JSON.parse(raw);
-                                    if (Array.isArray(parsed)) {
-                                      llamados = parsed;
-                                    } else if (parsed && typeof parsed === 'object') {
-                                      llamados = [parsed];
-                                    }
-                                  }
-                                } catch {
-                                  llamados = [];
-                                }
-                                if (!Array.isArray(llamados) || llamados.length === 0) {
-                                  return (
-                                    <div className="flex flex-col items-center justify-center py-8">
-                                      <span className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-yellow-100 mb-2">
-                                        <RiUserReceivedLine className="w-8 h-8 text-yellow-400" />
+                              {llamadasJefe.length === 0 ? (
+                                <div className="flex flex-col items-center justify-center py-8">
+                                  <span className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-yellow-100 mb-2">
+                                    <RiUserReceivedLine className="w-8 h-8 text-yellow-400" />
+                                  </span>
+                                  <div className="text-center text-slate-400 text-lg font-semibold">No hay llamados activos</div>
+                                  <div className="text-slate-400 text-sm text-center mt-1">Cuando haya un llamado, aparecerá aquí.</div>
+                                </div>
+                              ) : (
+                                <ul className="mt-2 w-full space-y-3">
+                                  {llamadasJefe.map((llamado, idx) => (
+                                    <li
+                                      key={idx}
+                                      className="bg-linear-to-r from-yellow-50 to-white border border-yellow-200 rounded-xl px-5 py-4 text-yellow-800 flex items-center gap-4 shadow-sm hover:shadow-md transition-all"
+                                    >
+                                      <span className="inline-flex items-center justify-center w-10 h-10 rounded-full bg-yellow-100">
+                                        <RiUserReceivedLine className="w-6 h-6 text-yellow-500" />
                                       </span>
-                                      <div className="text-center text-slate-400 text-lg font-semibold">No hay llamados activos</div>
-                                      <div className="text-slate-400 text-sm text-center mt-1">Cuando haya un llamado, aparecerá aquí.</div>
-                                    </div>
-                                  );
-                                }
-                                return (
-                                  <ul className="mt-2 w-full space-y-3">
-                                    {llamados.map((llamado, idx) => (
-                                      <li
-                                        key={idx}
-                                        className="bg-linear-to-r from-yellow-50 to-white border border-yellow-200 rounded-xl px-5 py-4 text-yellow-800 flex items-center gap-4 shadow-sm hover:shadow-md transition-all"
-                                      >
-                                        <span className="inline-flex items-center justify-center w-10 h-10 rounded-full bg-yellow-100">
-                                          <RiUserReceivedLine className="w-6 h-6 text-yellow-500" />
-                                        </span>
-                                        <div className="flex-1 min-w-0">
-                                          <div className="flex items-center gap-2 mb-1">
-                                            <span className="font-bold text-base text-yellow-700 truncate">{llamado.message || llamado.titulo || 'Llamado'}</span>
-                                            {llamado.from && (
-                                              <span className="ml-2 text-xs text-yellow-700 bg-yellow-50 rounded px-2 py-0.5 border border-yellow-200">{llamado.from}</span>
-                                            )}
-                                          </div>
-                                          {llamado.descripcion && (
-                                            <div className="text-xs text-yellow-800 whitespace-pre-line mb-1">{llamado.descripcion}</div>
+                                      <div className="flex-1 min-w-0">
+                                        <div className="flex items-center gap-2 mb-1">
+                                          <span className="font-bold text-base text-yellow-700 truncate">{(llamado as any).message || (llamado as any).titulo || "Llamado"}</span>
+                                          {(llamado as any).from && (
+                                            <span className="ml-2 text-xs text-yellow-700 bg-yellow-50 rounded px-2 py-0.5 border border-yellow-200">{(llamado as any).from}</span>
                                           )}
-                                          {llamado.timestamp && (
-                                            <div className="text-xs text-yellow-700 flex items-center gap-1 mt-1">
-                                              <svg className="w-4 h-4 inline-block text-yellow-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                                              {new Date(llamado.timestamp).toLocaleDateString('es-CL', { day: '2-digit', month: '2-digit', year: 'numeric' })}, {new Date(llamado.timestamp).toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' })}
-                                            </div>
-                                          )}
-                                          <div className="flex flex-row items-center gap-2 mt-2">
-                                            <button
-                                              type="button"
-                                              className="rounded-lg bg-green-500 hover:bg-green-600 text-white text-xs font-semibold px-4 py-1.5 shadow transition focus:outline-none focus:ring-2 focus:ring-green-400"
-                                              onClick={() => {
-                                                if (typeof window === 'undefined') return;
-                                                try {
-                                                  const raw = window.localStorage.getItem('llamada_jefe');
-                                                  if (!raw) return;
-                                                  let llamados = [];
-                                                  const parsed = JSON.parse(raw);
-                                                  if (Array.isArray(parsed)) {
-                                                    llamados = parsed;
-                                                  } else if (parsed && typeof parsed === 'object') {
-                                                    llamados = [parsed];
-                                                  }
-                                                  // Eliminar el llamado por índice
-                                                  llamados.splice(idx, 1);
-                                                  // Guardar el nuevo array
-                                                  if (llamados.length === 0) {
-                                                    window.localStorage.removeItem('llamada_jefe');
-                                                  } else if (llamados.length === 1) {
-                                                    window.localStorage.setItem('llamada_jefe', JSON.stringify(llamados[0]));
-                                                  } else {
-                                                    window.localStorage.setItem('llamada_jefe', JSON.stringify(llamados));
-                                                  }
-                                                  // Forzar re-render
-                                                  window.dispatchEvent(new Event('storage'));
-                                                  // Cerrar el modal si ya no quedan llamados
-                                                  setTimeout(() => {
-                                                    const check = window.localStorage.getItem('llamada_jefe');
-                                                    if (!check) {
-                                                      if (typeof setShowLlamadosModal === 'function') setShowLlamadosModal(false);
-                                                    }
-                                                  }, 100);
-                                                } catch (e) {
-                                                  // opcional: mostrar error
-                                                }
-                                              }}
-                                            >
-                                              Solucionar
-                                            </button>
-                                          </div>
                                         </div>
-                                      </li>
-                                    ))}
-                                  </ul>
-                                );
-                              })()}
+                                        {(llamado as any).descripcion && (
+                                          <div className="text-xs text-yellow-800 whitespace-pre-line mb-1">{(llamado as any).descripcion}</div>
+                                        )}
+                                        {(llamado as any).timestamp && (
+                                          <div className="text-xs text-yellow-700 flex items-center gap-1 mt-1">
+                                            <svg className="w-4 h-4 inline-block text-yellow-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                                            {new Date((llamado as any).timestamp as number).toLocaleDateString("es-CL", { day: "2-digit", month: "2-digit", year: "numeric" })}, {new Date((llamado as any).timestamp as number).toLocaleTimeString("es-CL", { hour: "2-digit", minute: "2-digit" })}
+                                          </div>
+                                        )}
+                                        <div className="flex flex-row items-center gap-2 mt-2">
+                                          <button
+                                            type="button"
+                                            className="rounded-lg bg-green-500 hover:bg-green-600 text-white text-xs font-semibold px-4 py-1.5 shadow transition focus:outline-none focus:ring-2 focus:ring-green-400"
+                                            onClick={() => {
+                                              const remaining = llamadasJefe.filter((_, i) => i !== idx);
+                                              onUpdateLlamadasJefe(remaining);
+                                              if (remaining.length === 0) {
+                                                setShowLlamadosModal(false);
+                                              }
+                                            }}
+                                          >
+                                            Resolver
+                                          </button>
+                                          <button
+                                            type="button"
+                                            className="rounded-lg bg-white border border-yellow-200 hover:bg-yellow-50 text-yellow-800 text-xs font-semibold px-4 py-1.5 shadow-sm transition focus:outline-none focus:ring-2 focus:ring-yellow-200"
+                                            onClick={() => {
+                                              navigator.clipboard.writeText(
+                                                `${(llamado as any).message || (llamado as any).titulo || "Llamado"} - ${(llamado as any).descripcion || ""}`,
+                                              );
+                                            }}
+                                          >
+                                            Copiar
+                                          </button>
+                                        </div>
+                                      </div>
+                                    </li>
+                                  ))}
+                                </ul>
+                              )}
                             </div>
                           </div>
                         </div>
                       )}
                     </>
                   )}
-                  <div className="flex items-center gap-2 bg-blue-50 border border-blue-200 rounded-lg px-3 py-1 shadow text-xs font-semibold text-blue-900">
-                    <FiArchive className="w-4 h-4 text-blue-500" />
-                    Ocupadas:{" "}
-                    {
-                      slots.filter((s) => s.autoId && s.autoId.trim() !== "")
-                        .length
-                    }{" "}
-                    / {slots.length}
-                  </div>
                 </div>
               </div>
-              {/* Modal de alertas de temperatura alta en bodega */}
               {showAlertModal && (
                 <div
-                  className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-2 sm:p-4"
+                  className="fixed inset-0 z-50 flex items-center justify-center backdrop-blur-sm bg-black/10 animate-fade-in p-2 sm:p-4"
                   role="dialog"
                   aria-modal="true"
                   onClick={() => setShowAlertModal(false)}
                 >
                   <div
-                    className="w-full max-w-lg sm:max-w-2xl rounded-3xl bg-white p-0 shadow-2xl border border-blue-100 relative overflow-hidden"
+                    className="w-full max-w-lg sm:max-w-xl rounded-3xl border border-blue-100 bg-white/90 shadow-2xl backdrop-blur-lg relative overflow-hidden animate-fade-in-up"
                     onClick={(e) => e.stopPropagation()}
+                    style={{ fontFamily: '"Space Grotesk", "Work Sans", sans-serif' }}
                   >
-                    {/* Header sticky con icono */}
-                    <div className="sticky top-0 z-10 flex items-center gap-4 bg-linear-to-r from-red-100 via-blue-50 to-blue-100 px-6 py-4 border-b border-blue-100 shadow-sm">
-                      <span className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-red-200 shadow animate-pulse">
-                        <FiAlertTriangle className="w-8 h-8 text-red-600" />
-                      </span>
-                      <div className="flex flex-col gap-0.5">
-                        <div className="flex items-center gap-2">
-                          <p className="text-xs font-bold uppercase tracking-[0.25em] text-red-600">
-                            Alertas
-                          </p>
-                        </div>
-                        <h3 className="mt-1 text-xl sm:text-2xl font-bold text-slate-900 drop-shadow">
+                    <div className="flex items-start gap-3 px-6 pt-6 pb-4 border-b border-blue-100">
+                      <div className="flex flex-col">
+                        <h3 className="text-xl sm:text-2xl font-bold text-slate-900 drop-shadow">
                           Bodega
                         </h3>
                         <p className="mt-1 text-xs sm:text-sm text-slate-700 font-medium">
@@ -1216,18 +1050,10 @@ export default function OrdenesJefeSection(props: {
                             <div className="flex flex-col items-end gap-2">
                               <button
                                 type="button"
-                                className={`flex items-center gap-2 rounded-lg bg-linear-to-r from-blue-600 to-cyan-500 px-4 py-2 text-sm font-semibold text-white shadow-lg transition-all duration-150 hover:from-blue-700 hover:to-cyan-600 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:ring-offset-2 active:scale-95 relative ${typeof window !== "undefined" && window.localStorage.getItem("alertas_operario") && JSON.parse(window.localStorage.getItem("alertas_operario") || "[]").some((a: any) => a.position === slot.position) ? "opacity-60 pointer-events-none" : ""}`}
+                                className={`flex items-center gap-2 rounded-lg bg-linear-to-r from-blue-600 to-cyan-500 px-4 py-2 text-sm font-semibold text-white shadow-lg transition-all duration-150 hover:from-blue-700 hover:to-cyan-600 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:ring-offset-2 active:scale-95 relative ${alertasOperario.some((a) => a.position === slot.position) ? "opacity-60 pointer-events-none" : ""}`}
                                 title={
-                                  typeof window !== "undefined" &&
-                                  window.localStorage.getItem(
-                                    "alertas_operario",
-                                  ) &&
-                                  JSON.parse(
-                                    window.localStorage.getItem(
-                                      "alertas_operario",
-                                    ) || "[]",
-                                  ).some(
-                                    (a: any) => a.position === slot.position,
+                                  alertasOperario.some(
+                                    (a) => a.position === slot.position,
                                   )
                                     ? "Ya asignado"
                                     : "Asignar operario a esta alerta"
@@ -1239,38 +1065,22 @@ export default function OrdenesJefeSection(props: {
                                   e.currentTarget.classList.remove("scale-90")
                                 }
                                 onClick={() => {
-                                  if (typeof window === "undefined") return;
-                                  let alertas = [];
-                                  try {
-                                    alertas = JSON.parse(
-                                      window.localStorage.getItem(
-                                        "alertas_operario",
-                                      ) || "[]",
-                                    );
-                                  } catch {
-                                    alertas = [];
-                                  }
                                   if (
-                                    !alertas.some(
-                                      (a: any) => a.position === slot.position,
+                                    alertasOperario.some(
+                                      (a) => a.position === slot.position,
                                     )
                                   ) {
-                                    alertas.push({
+                                    return;
+                                  }
+                                  onUpdateAlertasOperario([
+                                    ...alertasOperario,
+                                    {
                                       position: slot.position,
                                       name: slot.name,
                                       autoId: slot.autoId,
                                       temperature: slot.temperature,
-                                    });
-                                    window.localStorage.setItem(
-                                      "alertas_operario",
-                                      JSON.stringify(alertas),
-                                    );
-                                  }
-                                  // Forzar re-render
-                                  setAsignadoAlertas &&
-                                    setAsignadoAlertas((prev: any) => ({
-                                      ...prev,
-                                    }));
+                                    },
+                                  ]);
                                 }}
                               >
                                 <svg
@@ -1288,16 +1098,8 @@ export default function OrdenesJefeSection(props: {
                                   />
                                 </svg>
                                 <span>
-                                  {typeof window !== "undefined" &&
-                                  window.localStorage.getItem(
-                                    "alertas_operario",
-                                  ) &&
-                                  JSON.parse(
-                                    window.localStorage.getItem(
-                                      "alertas_operario",
-                                    ) || "[]",
-                                  ).some(
-                                    (a: any) => a.position === slot.position,
+                                  {alertasOperario.some(
+                                    (a) => a.position === slot.position,
                                   )
                                     ? "Asignado"
                                     : "Asignar operario"}
