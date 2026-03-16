@@ -2319,7 +2319,7 @@ export default function BodegaDashboard() {
             setBodegaOrderTargetPosition={setBodegaOrderTargetPosition}
             reviewSourcePosition={reviewSourcePosition}
             setReviewSourcePosition={setReviewSourcePosition}
-            reviewBodegaList={reviewBodegaList}
+            reviewBodegaList={reviewBodegaList} 
             handleCreateReviewOrder={handleCreateReviewOrder}
             salidaSourcePosition={salidaSourcePosition}
             setSalidaSourcePosition={setSalidaSourcePosition}
