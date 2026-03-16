@@ -2294,6 +2294,11 @@ export default function BodegaDashboard() {
             inboundBoxes={inboundBoxes}
             outboundBoxes={outboundBoxes}
             slots={slots}
+            alertasOperario={alertasOperario}
+            alertasOperarioSolved={alertasOperarioSolved}
+            llamadasJefe={llamadasJefe}
+            onUpdateAlertasOperario={setAlertasOperario}
+            onUpdateLlamadasJefe={setLlamadasJefe}
             selectedBoxModal={selectedBoxModal}
             setSelectedBoxModal={setSelectedBoxModal}
             editTempModal={editTempModal}
@@ -2314,7 +2319,7 @@ export default function BodegaDashboard() {
             setBodegaOrderTargetPosition={setBodegaOrderTargetPosition}
             reviewSourcePosition={reviewSourcePosition}
             setReviewSourcePosition={setReviewSourcePosition}
-            reviewBodegaList={reviewBodegaList}
+            reviewBodegaList={reviewBodegaList} 
             handleCreateReviewOrder={handleCreateReviewOrder}
             salidaSourcePosition={salidaSourcePosition}
             setSalidaSourcePosition={setSalidaSourcePosition}
