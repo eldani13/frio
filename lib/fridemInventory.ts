@@ -40,16 +40,18 @@ const normalizeRawToSlot = (raw: FridemRaw, index: number): Slot => {
 async function fetchFirestoreCandidates(warehouseId: string): Promise<Slot[]> {
   await ensureFridemAuth();
   if (!fridemDb) return [];
-  const paths = [
-    ["detalle_inventario"] as const,
-    ["bodegas", warehouseId, "inventario"] as const,
-    ["inventario"] as const,
-    ["bodegas", warehouseId, "items"] as const,
+  const paths: string[][] = [
+    ["detalle_inventario"],
+    ["bodegas", warehouseId, "inventario"],
+    ["inventario"],
+    ["bodegas", warehouseId, "items"],
   ];
 
   for (const path of paths) {
     try {
-      const snap = await getDocs(collection(fridemDb, ...path));
+      const [first, ...rest] = path;
+      if (!first) continue;
+      const snap = await getDocs(collection(fridemDb, first, ...rest));
       if (!snap.empty) {
         const slots = snap.docs.map((docSnap, idx) =>
           normalizeRawToSlot(docSnap.data() as FridemRaw, idx),
