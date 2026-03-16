@@ -2153,8 +2153,21 @@ export default function BodegaDashboard() {
             role={role}
             warehouseId={warehouseId}
             warehouseName={warehouseName}
-            onWarehouseNameChange={setWarehouseName}
-            onChange={noop}
+            warehouses={warehouses}
+            onSelectWarehouse={(id) => {
+              setWarehouseId(id);
+              setWarehouseName(() => {
+                const match = warehouses.find((w) => w.id === id);
+                return match?.name ?? warehouseName;
+              });
+            }}
+            onCreateWarehouse={(name) => {
+              const newId = `bodega-${Math.random().toString(36).slice(2, 6)}`;
+              const next = [...warehouses, { id: newId, name }];
+              setWarehouses(next);
+              setWarehouseId(newId);
+              setWarehouseName(name);
+            }}
           />
         ) : null}
 
