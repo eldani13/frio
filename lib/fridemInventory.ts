@@ -56,7 +56,7 @@ async function fetchFirestoreCandidates(warehouseId: string): Promise<Slot[]> {
         );
         if (slots.length) return slots;
       }
-    } catch (error) {
+    } catch {
       // Try next path silently
     }
   }
@@ -82,7 +82,7 @@ async function fetchRealtimeCandidates(warehouseId: string): Promise<Slot[]> {
       if (arr.length) {
         return arr.map((item, idx) => normalizeRawToSlot(item, idx));
       }
-    } catch (error) {
+    } catch {
       // Try next path silently
     }
   }

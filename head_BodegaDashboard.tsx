@@ -1,5 +1,6 @@
 "use client";
 /* eslint-disable react-hooks/purity */
+/* eslint-disable @typescript-eslint/no-unused-vars, react-hooks/exhaustive-deps */
 import React from "react";
 import { useBodegaHistory } from "./app/components/BodegaDashboard/BodegaHistoryContext";
 import EstadoBodegaSection from "./app/components/BodegaDashboard/EstadoBodegaSection";
@@ -90,7 +91,7 @@ import type {
   OrderType,
   Role,
   Slot,
-} from "../interfaces/bodega";
+} from "./app/interfaces/bodega";
 import SelectedSlotCard from "./app/components/bodega/SelectedSlotCard";
 import WarehouseSelector from "./app/components/bodega/WarehouseSelector";
 import RequestsQueue from "./app/components/bodega/RequestsQueue";
