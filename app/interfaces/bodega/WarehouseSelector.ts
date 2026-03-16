@@ -1,9 +1,17 @@
 import type { Role } from "../bodega";
 
+export type WarehouseMeta = {
+	id: string;
+	name?: string;
+	status?: string;
+};
+
 export type WarehouseSelectorProps = {
 	role: Role;
-	onChange: (role: Role) => void;
 	warehouseId: string;
-	warehouseName: string;
-	onWarehouseNameChange: (name: string) => void;
+	warehouseName?: string;
+	warehouses: WarehouseMeta[];
+	onSelectWarehouse: (id: string) => void;
+	onCreateWarehouse: (name: string) => void;
+	isLoading?: boolean;
 };

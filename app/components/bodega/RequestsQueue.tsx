@@ -1,15 +1,18 @@
+"use client";
+
+import React, { useCallback, useMemo, useState } from "react";
 import type { RequestsQueueProps } from "../../interfaces/bodega/RequestsQueue";
-import {
-  FiMapPin,
-  FiBox,
-  FiUser,
-  FiCalendar,
-  FiPackage,
-  FiArrowRight,
-  FiAlertCircle,
-  FiPhoneCall,
-} from "react-icons/fi";
 import type { BodegaOrder, OrderSource, OrderType } from "../../interfaces/bodega";
+import {
+  FiAlertCircle,
+  FiArrowRight,
+  FiBox,
+  FiCalendar,
+  FiMapPin,
+  FiPackage,
+  FiPhoneCall,
+  FiUser,
+} from "react-icons/fi";
 import { IoCloseOutline } from "react-icons/io5";
 
 const TYPE_LABELS: Record<OrderType, string> = {
@@ -72,19 +75,6 @@ const formatOrderDetails = (order: BodegaOrder): string => {
 const orderTimestamp = (order: BodegaOrder) =>
   typeof order.createdAtMs === "number" ? order.createdAtMs : Date.now();
 
-import React, { useState } from "react";
-
-const SLOTS_STORAGE_KEY = "bodegaSlotsV1";
-const INBOUND_STORAGE_KEY = "bodegaIngresosV1";
-const OUTBOUND_STORAGE_KEY = "bodegaSalidasV1";
-const HIGH_TEMP_THRESHOLD = 5;
-
-const ZONE_LABELS: Record<OrderSource, string> = {
-  ingresos: "Ingreso",
-  bodega: "Bodega",
-  salida: "Salida",
-};
-
 type ReviewDetail = {
   zone: OrderSource;
   position: number;
@@ -92,22 +82,45 @@ type ReviewDetail = {
   name: string;
   temperature: number | null;
   client: string;
-  source: "storage" | "order";
+  source: "cloud" | "order";
 };
 
-export default function RequestsQueue({
-  requests,
-  canExecute,
-  onExecute,
-  onReport,
-}: RequestsQueueProps) {
+export default function RequestsQueue(props: RequestsQueueProps) {
+  const {
+    requests,
+    canExecute,
+    onExecute,
+    onReport,
+    slots = [],
+    inboundBoxes = [],
+    outboundBoxes = [],
+    alertasOperario = [],
+    alertasOperarioSolved = [],
+    llamadasJefe = [],
+    onUpdateAlertasOperario,
+    onUpdateAlertasOperarioSolved,
+    onUpdateLlamadasJefe,
+  } = props;
+
   const [showAlertModal, setShowAlertModal] = useState(false);
-  const [alertasOperario, setAlertasOperario] = useState<any[]>([]);
   const [showSolveModal, setShowSolveModal] = useState(false);
-  const [alertaSeleccionada, setAlertaSeleccionada] = useState<any | null>(
-    null,
-  );
-  const [editTempModal, setEditTempModal] = useState<any | null>(null);
+  const [alertaSeleccionada, setAlertaSeleccionada] = useState<
+    | null
+    | {
+        alerta: { position: number; [key: string]: unknown };
+        idx: number;
+      }
+  >(null);
+  const [editTempModal, setEditTempModal] = useState<
+    | null
+    | {
+        position: number;
+        autoId?: string;
+        name?: string;
+        temperature: number | null;
+        zone: OrderSource;
+      }
+  >(null);
   const [editTempLoading, setEditTempLoading] = useState(false);
   const [showCallModal, setShowCallModal] = useState(false);
   const [reviewModal, setReviewModal] = useState<
@@ -118,121 +131,12 @@ export default function RequestsQueue({
       }
   >(null);
 
-  const loadReviewDetail = React.useCallback(
-    (order: BodegaOrder): ReviewDetail | null => {
-      if (typeof window === "undefined") return null;
-
-      const storageKey =
-        order.sourceZone === "ingresos"
-          ? INBOUND_STORAGE_KEY
-          : order.sourceZone === "salida"
-            ? OUTBOUND_STORAGE_KEY
-            : SLOTS_STORAGE_KEY;
-
-      try {
-        const raw = window.localStorage.getItem(storageKey);
-        if (raw) {
-          const parsed = JSON.parse(raw);
-          if (Array.isArray(parsed)) {
-            const match = parsed.find(
-              (item: any) =>
-                item &&
-                typeof item === "object" &&
-                Number(item.position) === order.sourcePosition,
-            );
-            if (match) {
-              return {
-                zone: order.sourceZone,
-                position: order.sourcePosition,
-                autoId: typeof match.autoId === "string" ? match.autoId : "",
-                name: typeof match.name === "string" ? match.name : "",
-                temperature:
-                  typeof match.temperature === "number"
-                    ? match.temperature
-                    : null,
-                client: typeof match.client === "string" ? match.client : "",
-                source: "storage",
-              };
-            }
-          }
-        }
-      } catch {
-        // ignore parse errors, fallback below
-      }
-
-      if (order.autoId || order.boxName || order.client) {
-        return {
-          zone: order.sourceZone,
-          position: order.sourcePosition,
-          autoId: order.autoId ?? "",
-          name: order.boxName ?? "",
-          temperature: null,
-          client: order.client ?? "",
-          source: "order",
-        };
-      }
-
-      return null;
-    },
-    [],
-  );
-
-  const loadAlertasOperario = React.useCallback(() => {
-    if (typeof window === "undefined") return;
-    try {
-      const stored = window.localStorage.getItem("alertas_operario");
-      const solvedRaw = window.localStorage.getItem("alertas_operario_solved");
-      const solved = solvedRaw ? JSON.parse(solvedRaw) : [];
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        const filtered = Array.isArray(parsed)
-          ? parsed.filter(
-              (a) =>
-                !solved.includes(a?.position) &&
-                !(typeof a?.position === "string" && solved.includes(Number(a.position))),
-            )
-          : [];
-        setAlertasOperario(filtered);
-        window.localStorage.setItem(
-          "alertas_operario",
-          JSON.stringify(filtered),
-        );
-      } else {
-        setAlertasOperario([]);
-      }
-    } catch {
-      setAlertasOperario([]);
-    }
-  }, []);
-
-  React.useEffect(() => {
-    loadAlertasOperario();
-  }, [loadAlertasOperario]);
-
-  React.useEffect(() => {
-    if (!showAlertModal) return;
-    loadAlertasOperario();
-  }, [showAlertModal, loadAlertasOperario]);
-
-  React.useEffect(() => {
-    const handler = (e: StorageEvent) => {
-      if (e.key === "alertas_operario" || e.key === "alertas_operario_solved") {
-        loadAlertasOperario();
-      }
-    };
-    if (typeof window !== "undefined") {
-      window.addEventListener("storage", handler);
-    }
-    return () => {
-      if (typeof window !== "undefined") {
-        window.removeEventListener("storage", handler);
-      }
-    };
-  }, [loadAlertasOperario]);
-  const orderedRequests = [...requests].sort(
-    (a, b) => orderTimestamp(a) - orderTimestamp(b),
+  const orderedRequests = useMemo(
+    () => [...requests].sort((a, b) => orderTimestamp(a) - orderTimestamp(b)),
+    [requests],
   );
   const nextRequest = orderedRequests[0];
+
   const originStatus: keyof typeof STATUS_STYLES = nextRequest
     ? (() => {
         const zone = (nextRequest.sourceZone || "").toString().toLowerCase();
@@ -254,157 +158,121 @@ export default function RequestsQueue({
   const originStyle = STATUS_STYLES[originStatus];
   const destinationStyle = STATUS_STYLES[destinationStatus];
 
-  type UpdateTempOpts = {
-    zone?: OrderSource;
-    name?: string;
-    autoId?: string;
-  };
+  const loadReviewDetail = useCallback(
+    (order: BodegaOrder): ReviewDetail | null => {
+      const sourceList =
+        order.sourceZone === "ingresos"
+          ? inboundBoxes
+          : order.sourceZone === "salida"
+            ? outboundBoxes
+            : slots;
+
+      const match = sourceList.find(
+        (item: any) => item && Number(item.position) === order.sourcePosition,
+      );
+
+      if (match) {
+        return {
+          zone: order.sourceZone,
+          position: order.sourcePosition,
+          autoId: typeof match.autoId === "string" ? match.autoId : "",
+          name: typeof match.name === "string" ? match.name : "",
+          temperature:
+            typeof match.temperature === "number" ? match.temperature : null,
+          client: typeof match.client === "string" ? match.client : "",
+          source: "cloud",
+        };
+      }
+
+      if (order.autoId || order.boxName || order.client) {
+        return {
+          zone: order.sourceZone,
+          position: order.sourcePosition,
+          autoId: order.autoId ?? "",
+          name: order.boxName ?? "",
+          temperature: null,
+          client: order.client ?? "",
+          source: "order",
+        };
+      }
+
+      return null;
+    },
+    [inboundBoxes, outboundBoxes, slots],
+  );
 
   const handleUpdateAlertTemperature = (
     position: number,
     newTemp: number,
-    opts: UpdateTempOpts = {},
+    opts: { zone?: OrderSource; name?: string; autoId?: string } = {},
   ) => {
-    setAlertasOperario((prev: any[]) => {
-      const updated = prev.map((a) =>
-        a.position === position ? { ...a, temperature: newTemp } : a,
-      );
-      if (typeof window !== "undefined") {
-        window.localStorage.setItem(
-          "alertas_operario",
-          JSON.stringify(updated),
-        );
-      }
-      return updated;
-    });
-    setAlertaSeleccionada((prev: any) => {
+    const updated = alertasOperario.map((a) =>
+      Number(a.position) === position ? { ...a, temperature: newTemp } : a,
+    );
+    onUpdateAlertasOperario(updated);
+    setAlertaSeleccionada((prev) => {
       if (!prev) return prev;
       return prev.alerta.position === position
         ? { ...prev, alerta: { ...prev.alerta, temperature: newTemp } }
         : prev;
     });
 
-    // Sincronizar con almacenamiento local para que jefe/administrador vean la temperatura actualizada
-    if (typeof window === "undefined") return;
+    // Trigger solved flow when editing temperature from a solve modal
+    if (alertaSeleccionada) {
+      const pos = Number(position);
+      const solved = alertasOperarioSolved.includes(pos)
+        ? alertasOperarioSolved
+        : [...alertasOperarioSolved, pos];
+      onUpdateAlertasOperarioSolved(solved);
+    }
 
+    // Mirror the temp change into slots list if we have it
     const zone = opts.zone ?? "bodega";
-    const targetKey =
-      zone === "ingresos"
-        ? INBOUND_STORAGE_KEY
-        : zone === "salida"
-          ? OUTBOUND_STORAGE_KEY
-          : SLOTS_STORAGE_KEY;
-
-    const updateTemperatureForKey = (key: string) => {
-      const raw = window.localStorage.getItem(key);
-      if (!raw) return null;
-      let parsed: any;
-      try {
-        parsed = JSON.parse(raw);
-      } catch {
-        return null;
-      }
-      if (!Array.isArray(parsed)) return null;
-      const updated = parsed.map((item: any) =>
-        item && typeof item === "object" && Number(item.position) === position
-          ? { ...item, temperature: newTemp }
-          : item,
-      );
-      const serialized = JSON.stringify(updated);
-      window.localStorage.setItem(key, serialized);
-      try {
-        window.dispatchEvent(
-          new StorageEvent("storage", {
-            key,
-            newValue: serialized,
-            storageArea: window.localStorage,
-          }),
-        );
-      } catch {
-        // ignore dispatch issues
-      }
-      return updated;
-    };
-
-    updateTemperatureForKey(targetKey);
-
-    // Mantener sincronizado el mapa de bodega incluso si el origen no era bodega
-    if (targetKey !== SLOTS_STORAGE_KEY) {
-      updateTemperatureForKey(SLOTS_STORAGE_KEY);
-    }
-
-    try {
-      window.localStorage.setItem(
-        "slots_temperature_event",
-        JSON.stringify({
-          position,
-          temperature: newTemp,
-          zone,
-          autoId: opts.autoId ?? "",
-          name: opts.name ?? "",
-          timestamp: Date.now(),
-        }),
-      );
-    } catch {
-      // ignore storage errors
-    }
-
-    // Verificación silenciosa para disparar alerta si la temperatura es alta
-    if (newTemp > HIGH_TEMP_THRESHOLD) {
-      try {
-        window.localStorage.setItem(
-          "alerta_temp_event",
-          JSON.stringify({
-            position,
-            temperature: newTemp,
-            zone,
-            autoId: opts.autoId ?? "",
-            name: opts.name ?? "",
-            timestamp: Date.now(),
-          }),
-        );
-        window.dispatchEvent(
-          new StorageEvent("storage", {
-            key: "alerta_temp_event",
-            newValue: window.localStorage.getItem("alerta_temp_event"),
-            storageArea: window.localStorage,
-          }),
-        );
-      } catch {
-        // ignore alert dispatch issues
-      }
+    if (zone === "bodega") {
+      // parent is responsible for persisting; this component just updates alerts
     }
   };
 
-  const markAlertSolved = (alerta: any, idx: number) => {
-    const nuevasAlertas = alertasOperario.filter((_, i) => i !== idx);
-    if (typeof window !== "undefined") {
-      window.localStorage.setItem(
-        "alertas_operario",
-        JSON.stringify(nuevasAlertas),
-      );
-      let solved: any[] = [];
-      try {
-        const prev = window.localStorage.getItem("alertas_operario_solved");
-        solved = prev ? JSON.parse(prev) : [];
-      } catch {
-        solved = [];
-      }
-      if (!solved.includes(alerta.position)) {
-        solved.push(alerta.position);
-        window.localStorage.setItem(
-          "alertas_operario_solved",
-          JSON.stringify(solved),
-        );
-      }
-      window.localStorage.setItem(
-        "alerta_solved_event",
-        JSON.stringify({ position: alerta.position, timestamp: Date.now() }),
-      );
-    }
-    setAlertasOperario(nuevasAlertas);
+  const markAlertSolved = (
+    alerta: { position: number; [key: string]: unknown },
+    idx: number,
+  ) => {
+    const remaining = alertasOperario.filter((_, i) => i !== idx);
+    onUpdateAlertasOperario(remaining);
+
+    const pos = Number(alerta.position);
+    const solvedPositions = alertasOperarioSolved.includes(pos)
+      ? alertasOperarioSolved
+      : [...alertasOperarioSolved, pos];
+    onUpdateAlertasOperarioSolved(solvedPositions);
+
     setShowSolveModal(false);
     setAlertaSeleccionada(null);
+  };
+
+  const handleMainExecute = (event: React.MouseEvent<HTMLButtonElement>) => {
+    if (!nextRequest) return;
+    if (nextRequest.type === "revisar") {
+      const detail = loadReviewDetail(nextRequest);
+      setReviewModal({ order: nextRequest, detail });
+      return;
+    }
+    const btn = event.currentTarget;
+    btn.classList.add("zoom-out");
+    setTimeout(() => {
+      btn.classList.remove("zoom-out");
+      onExecute(nextRequest.id);
+    }, 180);
+  };
+
+  const handleCall = () => {
+    const llamada = {
+      timestamp: Date.now(),
+      from: "operario",
+      message: "Llamado del operario",
+    };
+    onUpdateLlamadasJefe([...llamadasJefe, llamada]);
+    setShowCallModal(true);
   };
 
   return (
@@ -413,7 +281,6 @@ export default function RequestsQueue({
       {showAlertModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center backdrop-blur-sm bg-black/10 animate-fade-in">
           <div className="bg-white rounded-3xl shadow-2xl p-0 max-w-lg w-full relative animate-fade-in-up border border-red-100">
-            {/* Header */}
             <div className="flex flex-col items-center justify-center pt-8 pb-4 px-8 border-b border-red-100 bg-linear-to-r from-red-50 to-white rounded-t-3xl">
               <span className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-red-100 shadow animate-pulse mb-2">
                 <FiAlertCircle className="w-9 h-9 text-red-500" />
@@ -422,8 +289,7 @@ export default function RequestsQueue({
                 Alertas asignadas
               </h2>
               <p className="text-sm text-slate-500 font-medium text-center">
-                Estas son las alertas de temperatura que tienes asignadas
-                actualmente.
+                Estas son las alertas de temperatura que tienes asignadas actualmente.
               </p>
               <button
                 className="absolute top-4 right-4 text-slate-400 text-2xl font-bold focus:outline-none transition-colors"
@@ -471,20 +337,18 @@ export default function RequestsQueue({
                           <span className="font-bold text-base text-red-700">
                             Alerta {alerta.position}
                           </span>
-                          {alerta.name && (
+                          {(alerta as any).name && (
                             <span className="ml-2 text-xs text-slate-700 bg-slate-100 rounded px-2 py-0.5">
-                              {alerta.name}
+                              {(alerta as any).name}
                             </span>
                           )}
                         </div>
-                        {typeof alerta.temperature === "number" && (
+                        {typeof (alerta as any).temperature === "number" && (
                           <span className="inline-block text-xs font-semibold text-white bg-red-500 rounded px-2 py-0.5 animate-pulse shadow">
-                            {alerta.temperature} °C
+                            {(alerta as any).temperature} °C
                           </span>
                         )}
-                        <div className="text-xs text-slate-500 mt-1">
-                          Alerta de temperatura alta
-                        </div>
+                        <div className="text-xs text-slate-500 mt-1">Alerta de temperatura alta</div>
                       </div>
                       <button
                         className="ml-2 px-3 py-1 rounded-lg bg-green-500 hover:bg-green-600 text-white text-xs font-bold shadow transition-all focus:outline-none focus:ring-2 focus:ring-green-300"
@@ -501,7 +365,6 @@ export default function RequestsQueue({
                 </ul>
               )}
             </div>
-            {/* Close button for mobile UX */}
             <div className="flex justify-center pb-6 pt-2 px-8">
               <button
                 className="w-full sm:w-auto rounded-xl bg-red-500 text-white font-bold text-lg py-3 px-8 shadow transition-all focus:outline-none focus:ring-2 focus:ring-red-300"
@@ -511,28 +374,15 @@ export default function RequestsQueue({
               </button>
             </div>
           </div>
-          {/* Ya no se cierra al hacer click en el fondo */}
         </div>
       )}
+
       <div>
         {canExecute ? (
           <button
             type="button"
             disabled={!nextRequest}
-            onClick={(e) => {
-              if (!nextRequest) return;
-              if (nextRequest.type === "revisar") {
-                const detail = loadReviewDetail(nextRequest);
-                setReviewModal({ order: nextRequest, detail });
-                return;
-              }
-              const btn = e.currentTarget;
-              btn.classList.add("zoom-out");
-              setTimeout(() => {
-                btn.classList.remove("zoom-out");
-                onExecute(nextRequest.id);
-              }, 180);
-            }}
+            onClick={handleMainExecute}
             className="rounded-2xl bg-white p-6 sm:p-8 shadow-sm w-full border border-emerald-200 transition-transform duration-150 hover:shadow-lg focus:shadow-lg active:shadow-lg hover:scale-[0.98] active:scale-[0.95]"
             style={{ outline: "none" }}
           >
@@ -563,7 +413,6 @@ export default function RequestsQueue({
                     Transferencia de:
                   </span>
                   <div className="flex flex-col sm:flex-row items-center justify-center gap-4 sm:gap-6 w-full">
-                    {/* Origen */}
                     <div
                       className={`flex flex-col items-center rounded-2xl px-6 sm:px-8 py-5 sm:py-6 w-full sm:w-64 max-w-md border ${originStyle.bg} ${originStyle.border}`}
                     >
@@ -580,23 +429,15 @@ export default function RequestsQueue({
                         {nextRequest.sourcePosition}
                       </span>
                     </div>
-                    {/* Flecha */}
                     <FiArrowRight className="w-8 h-8 sm:w-10 sm:h-10 text-slate-300" />
-                    {/* Destino */}
                     <div
                       className={`flex flex-col items-center rounded-2xl px-6 sm:px-8 py-5 sm:py-6 w-full sm:w-64 max-w-md border ${destinationStyle.bg} ${destinationStyle.border}`}
                     >
-                      <FiBox
-                        className={`w-8 h-8 mb-2 ${destinationStyle.icon}`}
-                      />
-                      <span
-                        className={`text-xs mb-1 ${destinationStyle.label}`}
-                      >
+                      <FiBox className={`w-8 h-8 mb-2 ${destinationStyle.icon}`} />
+                      <span className={`text-xs mb-1 ${destinationStyle.label}`}>
                         DESTINO
                       </span>
-                      <span
-                        className={`text-2xl font-bold ${destinationStyle.text}`}
-                      >
+                      <span className={`text-2xl font-bold ${destinationStyle.text}`}>
                         {nextRequest.type === "a_bodega"
                           ? `bodega ${nextRequest.targetPosition}`
                           : nextRequest.type === "a_salida"
@@ -611,31 +452,24 @@ export default function RequestsQueue({
                     </div>
                   </div>
                   <hr className="my-8 border-slate-200 w-full" />
-                  {/* Detalles */}
                   <div className="flex flex-wrap justify-center gap-4 sm:gap-8 w-full mb-6">
                     <div className="flex items-center gap-1 sm:gap-2 text-center sm:text-left">
                       <FiUser className="w-5 h-5 text-slate-400" />
-                      <span className="text-xs text-slate-500">
-                        Solicitado por
-                      </span>
+                      <span className="text-xs text-slate-500">Solicitado por</span>
                       <span className="font-semibold text-slate-700">
                         {nextRequest.createdBy}
                       </span>
                     </div>
                     <div className="flex items-center gap-1 sm:gap-2 text-center sm:text-left">
                       <FiCalendar className="w-5 h-5 text-slate-400" />
-                      <span className="text-xs text-slate-500">
-                        Fecha y hora
-                      </span>
+                      <span className="text-xs text-slate-500">Fecha y hora</span>
                       <span className="font-semibold text-slate-700">
                         {nextRequest.createdAt}
                       </span>
                     </div>
                     <div className="flex items-center gap-1 sm:gap-2 text-center sm:text-left">
                       <FiPackage className="w-5 h-5 text-slate-400" />
-                      <span className="text-xs text-slate-500">
-                        ID de solicitud
-                      </span>
+                      <span className="text-xs text-slate-500">ID de solicitud</span>
                       <span className="font-semibold text-slate-700">
                         {nextRequest.id}
                       </span>
@@ -673,20 +507,7 @@ export default function RequestsQueue({
             type="button"
             className="flex-1 flex items-center justify-center gap-2 rounded-2xl bg-yellow-100 hover:bg-yellow-200 text-yellow-700 font-bold text-lg py-4 shadow transition-all border-2 border-yellow-200 focus:outline-none focus:ring-2 focus:ring-yellow-300"
             style={{ minWidth: 0 }}
-            onClick={() => {
-              if (typeof window !== "undefined") {
-                const llamada = {
-                  timestamp: Date.now(),
-                  from: "operario",
-                  message: "Llamado del operario",
-                };
-                window.localStorage.setItem(
-                  "llamada_jefe",
-                  JSON.stringify(llamada),
-                );
-              }
-              setShowCallModal(true);
-            }}
+            onClick={handleCall}
           >
             <FiPhoneCall className="w-6 h-6" />
             Llamar
@@ -731,7 +552,14 @@ export default function RequestsQueue({
                 <div className="flex items-center justify-between gap-3">
                   <span className="font-semibold text-slate-600">Zona</span>
                   <span className="text-slate-900 font-bold">
-                    {ZONE_LABELS[reviewModal.order.sourceZone]} {reviewModal.order.sourcePosition}
+                    {(() => {
+                      const labelMap: Record<OrderSource, string> = {
+                        ingresos: "Ingreso",
+                        bodega: "Bodega",
+                        salida: "Salida",
+                      };
+                      return `${labelMap[reviewModal.order.sourceZone]} ${reviewModal.order.sourcePosition}`;
+                    })()}
                   </span>
                 </div>
                 {reviewModal.detail ? (
@@ -764,13 +592,13 @@ export default function RequestsQueue({
                     </div>
                     {reviewModal.detail.source === "order" ? (
                       <p className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-                        No se encontró la caja en almacenamiento local. Se muestran los datos guardados en la orden.
+                        No se encontró la caja en los datos de la nube. Se muestran los datos guardados en la orden.
                       </p>
                     ) : null}
                   </>
                 ) : (
                   <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
-                    No se encontró la caja en almacenamiento local. Usa “Marcar revisada” si ya validaste manualmente.
+                    No se encontró la caja en los datos de la nube. Usa “Marcar revisada” si ya validaste manualmente.
                   </div>
                 )}
                 <div className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2 text-xs text-slate-500">
@@ -792,12 +620,9 @@ export default function RequestsQueue({
                   onClick={() => {
                     const detail = reviewModal.detail;
                     setEditTempModal({
-                      position:
-                        detail?.position ?? reviewModal.order.sourcePosition,
-                      autoId:
-                        detail?.autoId || reviewModal.order.autoId || "",
-                      name:
-                        detail?.name || reviewModal.order.boxName || "",
+                      position: detail?.position ?? reviewModal.order.sourcePosition,
+                      autoId: detail?.autoId || reviewModal.order.autoId || "",
+                      name: detail?.name || reviewModal.order.boxName || "",
                       temperature: detail?.temperature ?? null,
                       zone: reviewModal.order.sourceZone,
                     });
@@ -821,7 +646,6 @@ export default function RequestsQueue({
         </div>
       )}
 
-      {/* Modal de confirmación de llamado al jefe */}
       {showCallModal && (
         <div
           className="fixed inset-0 z-70 flex items-center justify-center backdrop-blur-sm bg-black/15 animate-fade-in p-2 sm:p-4"
@@ -878,7 +702,6 @@ export default function RequestsQueue({
         </div>
       )}
 
-      {/* Modal de acciones al solucionar */}
       {showAlertModal && showSolveModal && alertaSeleccionada && (
         <div
           className="fixed inset-0 z-60 flex items-center justify-center backdrop-blur-sm bg-black/25 animate-fade-in"
@@ -933,28 +756,23 @@ export default function RequestsQueue({
               <div className="w-full space-y-2 text-sm text-slate-700 mb-4">
                 <div className="flex items-center gap-2">
                   <span className="font-semibold text-slate-600">Nombre:</span>
-                  {alertaSeleccionada.alerta.name && (
+                  {(alertaSeleccionada.alerta as any).name && (
                     <span className="inline-block px-2 py-1 rounded bg-slate-100 text-slate-700 text-xs">
-                      {alertaSeleccionada.alerta.name}
+                      {(alertaSeleccionada.alerta as any).name}
                     </span>
                   )}
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className="font-semibold text-slate-600">
-                    Id único:
-                  </span>
+                  <span className="font-semibold text-slate-600">Id único:</span>
                   <span className="truncate">
-                    {alertaSeleccionada.alerta.autoId || "N/A"}
+                    {(alertaSeleccionada.alerta as any).autoId || "N/A"}
                   </span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className="font-semibold text-slate-600">
-                    Temperatura:
-                  </span>
-                  {typeof alertaSeleccionada.alerta.temperature ===
-                    "number" && (
+                  <span className="font-semibold text-slate-600">Temperatura:</span>
+                  {typeof (alertaSeleccionada.alerta as any).temperature === "number" && (
                     <span className="inline-block px-2 py-1 rounded bg-red-100 text-red-700 font-semibold text-xs">
-                      {alertaSeleccionada.alerta.temperature} °C
+                      {(alertaSeleccionada.alerta as any).temperature} °C
                     </span>
                   )}
                 </div>
@@ -966,10 +784,10 @@ export default function RequestsQueue({
                   className="flex-1 rounded-xl bg-blue-700 px-4 py-2 text-base font-bold text-white shadow-lg transition hover:bg-blue-800 active:scale-95 focus:outline-none focus:ring-2 focus:ring-blue-300"
                   onClick={() =>
                     setEditTempModal({
-                      position: alertaSeleccionada.alerta.position,
-                      autoId: alertaSeleccionada.alerta.autoId,
-                      name: alertaSeleccionada.alerta.name,
-                      temperature: alertaSeleccionada.alerta.temperature,
+                      position: Number(alertaSeleccionada.alerta.position),
+                      autoId: (alertaSeleccionada.alerta as any).autoId,
+                      name: (alertaSeleccionada.alerta as any).name,
+                      temperature: (alertaSeleccionada.alerta as any).temperature,
                       zone: "bodega",
                     })
                   }
@@ -1014,7 +832,6 @@ export default function RequestsQueue({
         </div>
       )}
 
-      {/* Modal para editar temperatura (operario) */}
       {editTempModal && (
         <div
           className="fixed inset-0 z-100 flex items-center justify-center p-2 bg-black/40 backdrop-blur-sm"
@@ -1079,15 +896,11 @@ export default function RequestsQueue({
               <div className="w-full space-y-1 text-xs text-slate-700 mb-2">
                 <div className="flex items-center gap-1">
                   <span className="font-semibold text-slate-600">Caja:</span>
-                  <span className="truncate">
-                    {editTempModal.name || "Sin nombre"}
-                  </span>
+                  <span className="truncate">{editTempModal.name || "Sin nombre"}</span>
                 </div>
                 <div className="flex items-center gap-1">
                   <span className="font-semibold text-slate-600">Id:</span>
-                  <span className="truncate">
-                    {editTempModal.autoId || "N/A"}
-                  </span>
+                  <span className="truncate">{editTempModal.autoId || "N/A"}</span>
                 </div>
                 <div className="flex items-center gap-1">
                   <span className="font-semibold text-slate-600">Pos:</span>
@@ -1099,7 +912,7 @@ export default function RequestsQueue({
                   e.preventDefault();
                   const formData = new FormData(e.currentTarget);
                   const temp = Number(formData.get("temp"));
-                  if (!isNaN(temp)) {
+                  if (!Number.isNaN(temp)) {
                     handleUpdateAlertTemperature(editTempModal.position, temp, {
                       zone: editTempModal.zone,
                       name: editTempModal.name,

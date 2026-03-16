@@ -16,6 +16,7 @@ type Props = {
   setSelectedPosition: (position: number | null) => void;
   outboundBoxes: Box[];
   sortByPosition: <T extends { position: number }>(items: T[]) => T[];
+  role?: string;
 };
 
 
@@ -30,11 +31,14 @@ export default function EstadoBodegaSection(props: Props) {
     setSelectedPosition,
     outboundBoxes,
     sortByPosition,
+    role,
   } = props;
 
   const ITEMS_PER_PAGE = 4;
   const [entradaPage, setEntradaPage] = useState(0);
   const [salidaPage, setSalidaPage] = useState(0);
+  const MAP_PAGE_SIZE = 12;
+  const [mapPage, setMapPage] = useState(0);
 
   const sortedInboundBoxes = sortByPosition([...inboundBoxes]);
   const sortedOutboundBoxes = sortByPosition([...outboundBoxes]);
@@ -58,6 +62,14 @@ export default function EstadoBodegaSection(props: Props) {
     salidaStart,
     salidaStart + ITEMS_PER_PAGE,
   );
+
+  useEffect(() => {
+    const maxPage = Math.max(0, Math.ceil((slots?.length || 0) / MAP_PAGE_SIZE) - 1);
+    if (mapPage > maxPage) {
+      setMapPage(maxPage);
+      setSelectedPosition(null);
+    }
+  }, [mapPage, slots?.length, MAP_PAGE_SIZE, setSelectedPosition]);
 
   useEffect(() => {
     const maxPage = Math.max(
@@ -247,7 +259,10 @@ export default function EstadoBodegaSection(props: Props) {
           headerActions={renderStatusButtons("bodega")}
           occupiedCount={slots.filter((s) => s.autoId && s.autoId.trim() !== "").length}
           totalSlots={slots.length}
-          role={typeof window !== "undefined" && window.localStorage ? (JSON.parse(window.localStorage.getItem("bodegaRoleV1") ?? '{}').role ?? undefined) : undefined}
+          role={role}
+          page={mapPage}
+          pageSize={MAP_PAGE_SIZE}
+          onPageChange={(page) => setMapPage(page)}
         />
         <SelectedSlotCard
           slot={selectedSlot}

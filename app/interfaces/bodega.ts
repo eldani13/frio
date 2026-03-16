@@ -6,7 +6,16 @@ export type Slot = {
 	client: string;
 };
 
-export type Role = "custodio" | "administrador" | "operario" | "jefe" | "cliente";
+export type Role = "custodio" | "administrador" | "operario" | "jefe" | "cliente" | "configurador";
+
+export type Client = {
+	id: string;
+	name: string;
+	createdAt?: string;
+	createdAtMs?: number;
+	createdBy?: string | null;
+	createdByRole?: Role | null;
+};
 
 export type Box = {
 	position: number;
@@ -32,4 +41,47 @@ export type BodegaOrder = {
 	client?: string;
 	autoId?: string;
 	boxName?: string;
+};
+
+export type BodegaStats = {
+	ingresos: number;
+	salidas: number;
+	movimientosBodega: number;
+};
+
+export type AlertReason = "no_tuve_tiempo" | "no_quise" | "no_pude";
+
+export type AlertItem = {
+	id: string;
+	title: string;
+	description: string;
+	reason?: AlertReason;
+	sourceOrderId?: string;
+	meta?: string;
+	createdAt?: string;
+};
+
+export type AlertAssignment = {
+	alertId: string;
+	kind: "temperatura" | "reporte" | "otro";
+	assignedAt: string;
+	assignedBy: string;
+	sourceOrderId?: string;
+	position?: number;
+};
+
+export type AlertHistoryEntry = {
+	id: string;
+	title: string;
+	description: string;
+	createdAt: string;
+	createdAtMs: number;
+	meta?: string;
+};
+
+export type HistoryState = {
+	ingresos: Box[];
+	salidas: BodegaOrder[];
+	movimientosBodega: BodegaOrder[];
+	alertas: AlertHistoryEntry[];
 };

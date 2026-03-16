@@ -1,15 +1,15 @@
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import { FiArchive, FiBox, FiAlertCircle } from "react-icons/fi";
 import { IoCloseOutline } from "react-icons/io5";
-import type { Box } from "../../interfaces/bodega";
+import type { Box, Slot, BodegaOrder } from "../../interfaces/bodega";
 
-const ORDERS_STORAGE_KEY = "bodegaOrdenesV1";
-const SLOTS_STORAGE_KEY = "bodegaSlotsV1";
 const HIGH_TEMP_THRESHOLD = 5;
 
 type Props = {
   isCustodio: boolean;
   canUseIngresoForm: boolean;
+  slots: Slot[];
+  orders: BodegaOrder[];
   inboundBoxes: Box[];
   outboundBoxes: Box[];
   ingresoPosition: number;
@@ -20,17 +20,22 @@ type Props = {
   setIngresoTemp: (v: string) => void;
   setIngresoClient: (v: string) => void;
   handleIngreso: () => void;
+  createReturnOrder: (box: Box, targetPosition: number) => string | null;
   sortByPosition: <T extends { position: number }>(items: T[]) => T[];
   handleDispatchBox: (position: number) => void;
+  availableBodegaTargets: number[];
   isCliente?: boolean;
   clientFilterId?: string;
   onClientChange?: (id: string) => void;
+  clientCatalog?: string[];
 };
 
 export default function IngresosSection(props: Props) {
   const {
     isCustodio,
     canUseIngresoForm,
+    slots,
+    orders,
     inboundBoxes,
     outboundBoxes,
     ingresoPosition,
@@ -41,16 +46,46 @@ export default function IngresosSection(props: Props) {
     setIngresoTemp,
     setIngresoClient,
     handleIngreso,
+    createReturnOrder,
     sortByPosition,
     handleDispatchBox,
+    availableBodegaTargets,
     isCliente = false,
     clientFilterId,
     onClientChange,
+    clientCatalog = [],
   } = props;
 
-  const clientOptions = Array.from(
-    new Set(outboundBoxes.map((box) => box.client).filter(Boolean)),
-  );
+  const ingresoClientOptions = useMemo(() => {
+    const unique = new Set<string>();
+    [inboundBoxes, outboundBoxes, slots]
+      .filter(Boolean)
+      .forEach((list) => {
+        list.forEach((item) => {
+          if (item.client && item.client.trim()) {
+            unique.add(item.client);
+          }
+        });
+      });
+    clientCatalog.forEach((name) => {
+      if (name && name.trim()) {
+        unique.add(name.trim());
+      }
+    });
+    if (clientFilterId) unique.add(clientFilterId);
+    if (ingresoClient) unique.add(ingresoClient);
+    return Array.from(unique);
+  }, [clientCatalog, clientFilterId, inboundBoxes, ingresoClient, outboundBoxes, slots]);
+
+  const clientOptions = useMemo(() => {
+    const unique = new Set<string>();
+    outboundBoxes.forEach((box) => {
+      if (box.client && box.client.trim()) {
+        unique.add(box.client.trim());
+      }
+    });
+    return Array.from(unique);
+  }, [outboundBoxes]);
 
   const initialSelected = clientFilterId ?? "";
   const selectedClient =
@@ -73,40 +108,16 @@ export default function IngresosSection(props: Props) {
   const [tempConfirmError, setTempConfirmError] = useState<string | null>(null);
 
   const getFirstFreeBodegaSlot = () => {
-    if (typeof window === "undefined") return null;
-    try {
-      const raw = window.localStorage.getItem(SLOTS_STORAGE_KEY);
-      const parsed = raw ? JSON.parse(raw) : [];
-      if (!Array.isArray(parsed)) return null;
-      const freeSlot = parsed.find(
-        (slot: any) =>
-          slot && typeof slot === "object" &&
-          (!slot.autoId || String(slot.autoId).trim() === ""),
-      );
-      return freeSlot ? Number(freeSlot.position) : null;
-    } catch {
-      return null;
-    }
+    const free = slots.find((slot) => !slot.autoId || !slot.autoId.trim());
+    return free ? free.position : null;
   };
 
   const createReturnOrderForHighTemp = (box: Box) => {
-    if (typeof window === "undefined") return "No se pudo crear la tarea.";
-
-    let orders: any[] = [];
-    try {
-      const raw = window.localStorage.getItem(ORDERS_STORAGE_KEY);
-      orders = raw ? JSON.parse(raw) : [];
-      if (!Array.isArray(orders)) orders = [];
-    } catch {
-      orders = [];
-    }
-
     const alreadyPending = orders.some(
-      (o) =>
-        o &&
-        o.type === "a_bodega" &&
-        o.sourceZone === "salida" &&
-        Number(o.sourcePosition) === box.position,
+      (order) =>
+        order?.type === "a_bodega" &&
+        order?.sourceZone === "salida" &&
+        Number(order?.sourcePosition) === box.position,
     );
     if (alreadyPending) {
       return "Ya existe una tarea para esta caja.";
@@ -116,38 +127,11 @@ export default function IngresosSection(props: Props) {
     if (!targetPosition) {
       return "No hay posiciones libres en bodega para reasignar la caja.";
     }
-
-    const now = Date.now();
-    const newOrder = {
-      id: `ORD-${now}-${Math.floor(Math.random() * 1000)}`,
-      type: "a_bodega",
-      sourcePosition: box.position,
-      sourceZone: "salida",
-      targetPosition,
-      createdAt: new Date(now).toLocaleString("es-CO"),
-      createdAtMs: now,
-      createdBy: "custodio",
-      client: box.client,
-      autoId: box.autoId,
-      boxName: box.name,
-    };
-
-    const updated = [newOrder, ...orders];
-    try {
-      const serialized = JSON.stringify(updated);
-      window.localStorage.setItem(ORDERS_STORAGE_KEY, serialized);
-      window.dispatchEvent(
-        new StorageEvent("storage", {
-          key: ORDERS_STORAGE_KEY,
-          newValue: serialized,
-          storageArea: window.localStorage,
-        }),
-      );
-    } catch {
-      return "No se pudo guardar la tarea de retorno.";
+    if (!availableBodegaTargets.includes(targetPosition)) {
+      return "La posición libre ya fue tomada por otra tarea.";
     }
 
-    return null;
+    return createReturnOrder(box, targetPosition);
   };
 
   if (!isCustodio) return null;
@@ -249,9 +233,15 @@ export default function IngresosSection(props: Props) {
                 onChange={(event) => setIngresoClient(event.target.value)}
                 className="w-full rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-700 mb-2"
               >
-                <option value="cliente1">Cliente 1</option>
-                <option value="cliente2">Cliente 2</option>
-                <option value="cliente3">Cliente 3</option>
+                {ingresoClientOptions.length === 0 ? (
+                  <option value="">Sin clientes</option>
+                ) : (
+                  ingresoClientOptions.map((option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ))
+                )}
               </select>
               <label className="text-sm font-medium text-slate-600">
                 Nombre de la caja

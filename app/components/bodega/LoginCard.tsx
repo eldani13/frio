@@ -3,7 +3,6 @@ import { MdOutlineSevereCold } from "react-icons/md";
 
 
 export interface LoginCardProps {
-  users: Array<{ username: string; password: string; role: string; displayName: string }>;
   username: string;
   password: string;
   onUsernameChange: (value: string) => void;
@@ -13,7 +12,6 @@ export interface LoginCardProps {
 }
 
 const LoginCard: React.FC<LoginCardProps> = ({
-  users,
   username,
   password,
   onUsernameChange,
@@ -22,11 +20,6 @@ const LoginCard: React.FC<LoginCardProps> = ({
   errorMessage,
 }) => {
   const [showPassword, setShowPassword] = useState(false);
-  // Handler para autocompletar usuario y contraseña
-  const handleFillCredentials = (user: { username: string; password: string }) => {
-    onUsernameChange(user.username);
-    onPasswordChange(user.password);
-  };
   return (
     <div
       className="w-full max-w-md rounded-3xl border border-white/60 bg-white/95 p-8 shadow-2xl backdrop-blur-lg"
@@ -111,24 +104,6 @@ const LoginCard: React.FC<LoginCardProps> = ({
         </button>
       </form>
 
-      <div className="mt-8 border-t border-slate-200 pt-4 text-xs text-slate-500 bg-white/60 rounded-xl shadow-inner">
-        <div className="font-semibold uppercase tracking-wide text-slate-400 mb-2 text-center">
-          Usuarios de prueba
-        </div>
-        <div className="grid gap-2 grid-cols-1 sm:grid-cols-2">
-          {users.map((user) => (
-            <button
-              key={user.username}
-              type="button"
-              className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2 text-slate-700 hover:bg-sky-50 focus:outline-none focus:ring-2 focus:ring-sky-300 transition font-semibold uppercase tracking-wide text-xs"
-              title={`Autocompletar como ${user.displayName || user.role}`}
-              onClick={() => handleFillCredentials(user)}
-            >
-              {user.displayName || user.role}
-            </button>
-          ))}
-        </div>
-      </div>
     </div>
   );
 };

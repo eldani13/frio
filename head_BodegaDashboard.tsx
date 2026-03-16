@@ -1,6 +1,5 @@
 "use client";
-
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React from "react";
 import { useBodegaHistory } from "./BodegaDashboard/BodegaHistoryContext";
 import EstadoBodegaSection from "./BodegaDashboard/EstadoBodegaSection";
 import IngresosSection from "./BodegaDashboard/IngresosSection";
@@ -9,86 +8,128 @@ import DespachadosSection from "./BodegaDashboard/DespachadosSection";
 import ReportesSection from "./BodegaDashboard/ReportesSection";
 import { AiTwotoneAppstore } from "react-icons/ai";
 import { SlGraph } from "react-icons/sl";
-import {
-  FiAlertTriangle,
-  FiClipboard,
-  FiShoppingCart,
-  FiTruck,
-  FiHome,
-  FiExternalLink,
-} from "react-icons/fi";
-import {
-  addDoc,
-  collection,
-  doc,
-  getDoc,
-  getDocs,
-  serverTimestamp,
-  setDoc,
-} from "firebase/firestore";
-import { onAuthStateChanged, signInWithEmailAndPassword, signOut } from "firebase/auth";
-import { auth, db } from "../../lib/firebaseClient";
+
+
+
+
+import { FiArchive, FiBox, FiRepeat, FiSearch } from "react-icons/fi";
+const noop = () => {};
+
+// --- USUARIOS Y SESION ---
+type UserAccount = {
+  username: string;
+  password: string;
+  role: Role;
+  displayName: string;
+  clientId?: string;
+};
+
+type Session = {
+  username: string;
+  role: Role;
+  displayName: string;
+  clientId?: string;
+};
+
+const USERS: UserAccount[] = [
+  {
+    username: "custodio",
+    password: "custodio123",
+    role: "custodio",
+    displayName: "Custodio",
+  },
+  {
+    username: "administrador",
+    password: "admin123",
+    role: "administrador",
+    displayName: "Administrador",
+  },
+  {
+    username: "jefe",
+    password: "jefe123",
+    role: "jefe",
+    displayName: "Jefe",
+  },
+  {
+    username: "operario",
+    password: "operario123",
+    role: "operario",
+    displayName: "Operario",
+  },
+  {
+    username: "cliente",
+    password: "cliente123",
+    role: "cliente",
+    displayName: "Cliente",
+    clientId: "cliente1",
+  },
+];
+
+import { useEffect, useMemo, useState } from "react";
+import { FiAlertTriangle, FiClipboard } from "react-icons/fi";
 import Header from "./bodega/Header";
 import MessageBanner from "./bodega/MessageBanner";
+import SlotsGrid from "./bodega/SlotsGrid";
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Cell,
+  Pie,
+  PieChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
 import type {
-  AlertAssignment,
-  AlertHistoryEntry,
-  AlertItem,
   BodegaOrder,
-  BodegaStats,
-  Client,
   Box,
   OrderSource,
   OrderType,
   Role,
   Slot,
 } from "../interfaces/bodega";
+import SelectedSlotCard from "./bodega/SelectedSlotCard";
 import WarehouseSelector from "./bodega/WarehouseSelector";
 import RequestsQueue from "./bodega/RequestsQueue";
 import LoginCard from "./bodega/LoginCard";
-import {
-  DEFAULT_WAREHOUSE_ID,
-  ensureHistoryState,
-  ensureWarehouseState,
-  saveWarehouseState,
-  subscribeWarehouseState,
-} from "../../lib/bodegaCloudState";
-import { fetchFridemSlots } from "../../lib/fridemInventory";
 
-// --- SESION DESDE FIREBASE ---
-type Session = {
-  uid: string;
-  email: string | null;
-  role: Role;
-  displayName: string;
-  clientId?: string;
-};
-
-type UserProfile = {
-  role: Role;
-  displayName: string;
-  clientId?: string;
-};
-
-// --- TIPOS Y CONSTANTES ---
 const TOTAL_SLOTS = 12;
-const WAREHOUSE_ID = DEFAULT_WAREHOUSE_ID;
-const FRIDEM_WAREHOUSE_ID = "x7T7rQc7hmTXxJ5df27B";
-const FRIDEM_WAREHOUSE_NAME = "Prueba";
+const SLOTS_STORAGE_KEY = "bodegaSlotsV1";
+const ROLE_STORAGE_KEY = "bodegaRoleV1";
+const INBOUND_STORAGE_KEY = "bodegaIngresosV1";
+const OUTBOUND_STORAGE_KEY = "bodegaSalidasV1";
+const DISPATCHED_STORAGE_KEY = "bodegaDespachosV1";
+const ORDERS_STORAGE_KEY = "bodegaOrdenesV1";
+const WAREHOUSE_ID_KEY = "bodegaWarehouseIdV1";
+const WAREHOUSE_NAME_KEY = "bodegaWarehouseNameV1";
+const AUTO_COUNTER_KEY = "bodegaAutoCounterV1";
+const STATS_STORAGE_KEY = "bodegaStatsV1";
+
+type BodegaStats = {
+  ingresos: number;
+  salidas: number;
+  movimientosBodega: number;
+};
 
 type AlertReason = "no_tuve_tiempo" | "no_quise" | "no_pude";
 
-type AdminSection =
-  | "menu"
-  | "compras"
-  | "transporte"
-  | "bodega_interna"
-  | "bodega_externa";
-
-type WarehouseMeta = {
+type AlertItem = {
   id: string;
-  name?: string;
-  status?: string;
+  title: string;
+  description: string;
+  reason?: AlertReason;
+  sourceOrderId?: string;
+  meta?: string;
+};
+
+type AlertAssignment = {
+  alertId: string;
+  kind: "temperatura" | "reporte";
+  assignedAt: string;
+  assignedBy: string;
+  sourceOrderId?: string;
 };
 
 type ZoneKey = "entrada" | "bodega" | "salida";
@@ -134,23 +175,18 @@ const getDateStamp = (date: Date) =>
     2,
   )}`;
 
-const createAutoId = (() => {
-  const counters: Record<string, number> = {};
-  return (prefix: string) => {
-    const dateStamp = getDateStamp(new Date());
-    const key = `${prefix}:${dateStamp}`;
-    counters[key] = (counters[key] ?? 0) + 1;
-    return `${prefix}-${dateStamp}-${padNumber(counters[key], 3)}`;
-  };
-})();
+const createAutoId = (prefix: string) => {
+  const dateStamp = getDateStamp(new Date());
+  if (typeof localStorage === "undefined") {
+    return `${prefix}-${dateStamp}-${padNumber(Math.floor(Math.random() * 999), 3)}`;
+  }
 
-const isValidRole = (value: unknown): value is Role =>
-  value === "custodio" ||
-  value === "administrador" ||
-  value === "operario" ||
-  value === "jefe" ||
-  value === "cliente" ||
-  value === "configurador";
+  const counterKey = `${AUTO_COUNTER_KEY}:${prefix}:${dateStamp}`;
+  const current = Number(localStorage.getItem(counterKey) ?? "0");
+  const next = current + 1;
+  localStorage.setItem(counterKey, String(next));
+  return `${prefix}-${dateStamp}-${padNumber(next, 3)}`;
+};
 
 const normalizeSlots = (value: unknown): Slot[] | null => {
   if (!Array.isArray(value) || value.length !== TOTAL_SLOTS) {
@@ -173,7 +209,7 @@ const normalizeSlots = (value: unknown): Slot[] | null => {
     }
 
     const legacyName = typeof record.itemId === "string" ? record.itemId : "";
-    const normalizedName = typeof name === "string" ? name : legacyName;
+    const normalizedName = typeof name === "string" ? name : (legacyName ?? "");
     const normalizedAutoId =
       typeof autoId === "string"
         ? autoId
@@ -194,7 +230,7 @@ const normalizeSlots = (value: unknown): Slot[] | null => {
     slots.push({
       position,
       autoId: normalizedAutoId,
-      name: normalizedName ?? "",
+      name: normalizedName,
       temperature: normalizedTemp,
       client: normalizedClient,
     });
@@ -202,6 +238,13 @@ const normalizeSlots = (value: unknown): Slot[] | null => {
 
   return slots;
 };
+
+const isValidRole = (value: unknown): value is Role =>
+  value === "custodio" ||
+  value === "administrador" ||
+  value === "operario" ||
+  value === "jefe" ||
+  value === "cliente";
 
 const normalizeBoxes = (value: unknown): Box[] | null => {
   if (!Array.isArray(value)) {
@@ -308,9 +351,6 @@ const normalizeOrders = (value: unknown): BodegaOrder[] | null => {
       createdAt,
       createdAtMs: normalizedCreatedAtMs,
       createdBy: isValidRole(createdBy) ? (createdBy as Role) : "custodio",
-      client: typeof record.client === "string" ? record.client : undefined,
-      autoId: typeof record.autoId === "string" ? record.autoId : undefined,
-      boxName: typeof record.boxName === "string" ? record.boxName : undefined,
     });
   }
 
@@ -351,38 +391,33 @@ const getNextSalidaPosition = (boxes: Box[], reserved?: Set<number>) => {
   return next;
 };
 
-const loadUserProfile = async (uid: string): Promise<UserProfile> => {
-  const ref = doc(db, "users", uid);
-  const snap = await getDoc(ref);
-  if (!snap.exists()) {
-    throw new Error("El perfil de usuario no existe en Firestore (colección users)");
-  }
-  const data = snap.data() as Partial<UserProfile>;
-  if (!data.role) {
-    throw new Error("El perfil de usuario no tiene rol definido");
-  }
-  return {
-    role: data.role as Role,
-    displayName: data.displayName ?? "Usuario",
-    clientId: data.clientId,
-  };
-};
-
 export default function BodegaDashboard() {
-  const [selectedBoxModal, setSelectedBoxModal] = useState<Box | Slot | null>(null);
+  // ...existing code...
+  const [selectedBoxModal, setSelectedBoxModal] = useState<Box | Slot | null>(
+    null,
+  );
+  const [selectedOutboundIdx, setSelectedOutboundIdx] = React.useState(0);
+  // State for editing temperature modal
   const [editTempModal, setEditTempModal] = useState<{
     position: number;
     autoId: string;
     name: string;
     temperature: number | null;
   } | null>(null);
-  const [orderModalType, setOrderModalType] = React.useState<string | null>(null);
+  // ...existing code...
+  // Modal state for jefe action cards
+  const [orderModalType, setOrderModalType] = React.useState<string | null>(
+    null,
+  );
+  // ...otros hooks y lógica...
+  // Estado para modal de detalle de reportes (debe ir aquí, después de otros hooks)
   const [reportDetailModal, setReportDetailModal] = useState<null | {
     type: "ingresos" | "salidas" | "movimientos" | "despachados" | "alertas";
   }>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [isHydrated, setIsHydrated] = useState(false);
   const [dateLabel, setDateLabel] = useState("");
+  const [hasRestoredSession, setHasRestoredSession] = useState(false);
   const [activeTab, setActiveTab] = useState<
     | "estado"
     | "ingresos"
@@ -393,92 +428,44 @@ export default function BodegaDashboard() {
     | "actividades"
     | "alertas"
     | "reportes"
-    | "configuracion"
   >("estado");
 
-  const handleLogout = async () => {
-    try {
-      await signOut(auth);
-    } catch (err) {
-      console.warn("Logout error", err);
-    }
+  // Define handleLogout function
+  const handleLogout = () => {
     setSession(null);
     setLoginUser("");
     setLoginPassword("");
     setLoginError("");
   };
-
-  const handleLogin = async () => {
-    setLoginError("");
-    try {
-      const credentials = await signInWithEmailAndPassword(auth, loginUser, loginPassword);
-      const profile = await loadUserProfile(credentials.user.uid);
-      setSession({
-        uid: credentials.user.uid,
-        email: credentials.user.email ?? loginUser,
-        role: profile.role,
-        displayName: profile.displayName,
-        clientId: profile.clientId,
-      });
-      setLoginUser("");
-      setLoginPassword("");
-    } catch (err: unknown) {
-      const message =
-        typeof err === "object" && err && "message" in err
-          ? (err as { message: string }).message
-          : "Error al iniciar sesión";
-      setLoginError(message);
-      setSession(null);
+  // Define handleLogin function after useState declarations so it can access loginUser and loginPassword
+  const handleLogin = () => {
+    const user = USERS.find(
+      (u) => u.username === loginUser && u.password === loginPassword,
+    );
+    if (!user) {
+      setLoginError("Usuario o contraseña incorrectos.");
+      return;
     }
+    const newSession: Session = {
+      username: user.username,
+      role: user.role,
+      displayName: user.displayName,
+      clientId: user.clientId,
+    };
+    setSession(newSession);
+    setLoginError("");
+    setLoginUser("");
+    setLoginPassword("");
   };
 
   const [loginUser, setLoginUser] = useState<string>("");
   const [loginPassword, setLoginPassword] = useState<string>("");
   const [loginError, setLoginError] = useState<string>("");
-  const [adminSection, setAdminSection] = useState<AdminSection>("bodega_interna");
-
-  useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      if (!user) {
-        setSession(null);
-        return;
-      }
-      try {
-        const profile = await loadUserProfile(user.uid);
-        setSession({
-          uid: user.uid,
-          email: user.email ?? null,
-          role: profile.role,
-          displayName: profile.displayName,
-          clientId: profile.clientId,
-        });
-      } catch (err: unknown) {
-        const message =
-          typeof err === "object" && err && "message" in err
-            ? (err as { message: string }).message
-            : "No se pudo cargar el perfil de usuario";
-        setLoginError(message);
-        setSession(null);
-      }
-    });
-    return () => unsubscribe();
-  }, []);
-
-  useEffect(() => {
-    if (session?.role === "administrador") {
-      setAdminSection("menu");
-    } else {
-      setAdminSection("bodega_interna");
-    }
-  }, [session?.role]);
 
   const [slots, setSlots] = useState<Slot[]>(() => createInitialSlots());
   const [message, setMessage] = useState<string>("");
-  const [warehouseId, setWarehouseId] = useState<string>(WAREHOUSE_ID);
+  const [warehouseId, setWarehouseId] = useState<string>("");
   const [warehouseName, setWarehouseName] = useState<string>("");
-  const [warehouses, setWarehouses] = useState<WarehouseMeta[]>([]);
-  const isExternalWarehouse = warehouseId === FRIDEM_WAREHOUSE_ID;
-  const [warehousesLoading, setWarehousesLoading] = useState<boolean>(false);
   const [inboundBoxes, setInboundBoxes] = useState<Box[]>([]);
   const [outboundBoxes, setOutboundBoxes] = useState<Box[]>([]);
   const [dispatchedBoxes, setDispatchedBoxes] = useState<Box[]>([]);
@@ -486,17 +473,14 @@ export default function BodegaDashboard() {
   const [stats, setStats] = useState<BodegaStats>(defaultStats);
   const [alerts, setAlerts] = useState<AlertItem[]>([]);
   const [assignedAlerts, setAssignedAlerts] = useState<AlertAssignment[]>([]);
-  const [alertasOperario, setAlertasOperario] = useState<
-    Array<{ position: number; [key: string]: unknown }>
-  >([]);
-  const [alertasOperarioSolved, setAlertasOperarioSolved] = useState<number[]>([]);
-  const [llamadasJefe, setLlamadasJefe] = useState<Array<Record<string, unknown>>>([]);
   const [alertClock, setAlertClock] = useState(() => Date.now());
   const [statusModal, setStatusModal] = useState<{
     zone: ZoneKey;
     kind: ModalKind;
   } | null>(null);
-  const [resolveModalAlert, setResolveModalAlert] = useState<AlertItem | null>(null);
+  const [resolveModalAlert, setResolveModalAlert] = useState<AlertItem | null>(
+    null,
+  );
   const [alertsPanelOpen, setAlertsPanelOpen] = useState(false);
   const [assignedAlertsPanelOpen, setAssignedAlertsPanelOpen] = useState(false);
   const [tempFixZone, setTempFixZone] = useState<OrderSource>("ingresos");
@@ -508,376 +492,306 @@ export default function BodegaDashboard() {
   const [ingresoTemp, setIngresoTemp] = useState<string>("");
   const [ingresoClient, setIngresoClient] = useState<string>("cliente1");
   const [clientFilterId, setClientFilterId] = useState<string>("cliente1");
-  const [clients, setClients] = useState<Client[]>([]);
-  const [newClientName, setNewClientName] = useState<string>("");
-  const [clientsLoading, setClientsLoading] = useState<boolean>(false);
-  const [clientSaving, setClientSaving] = useState<boolean>(false);
 
-  const [bodegaOrderSourcePosition, setBodegaOrderSourcePosition] = useState<number>(1);
-  const [bodegaOrderTargetPosition, setBodegaOrderTargetPosition] = useState<number>(1);
-  const [ingresoOrderSourcePosition, setIngresoOrderSourcePosition] = useState<number>(1);
-  const [ingresoOrderTargetPosition, setIngresoOrderTargetPosition] = useState<number>(1);
+  const [bodegaOrderSourcePosition, setBodegaOrderSourcePosition] =
+    useState<number>(1);
+  const [bodegaOrderTargetPosition, setBodegaOrderTargetPosition] =
+    useState<number>(1);
+  const [ingresoOrderSourcePosition, setIngresoOrderSourcePosition] =
+    useState<number>(1);
+  const [ingresoOrderTargetPosition, setIngresoOrderTargetPosition] =
+    useState<number>(1);
   const [salidaSourcePosition, setSalidaSourcePosition] = useState<number>(1);
   const [salidaTargetPosition, setSalidaTargetPosition] = useState<number>(1);
-  const [reviewSourceZone, setReviewSourceZone] = useState<OrderSource>("ingresos");
+  const [reviewSourceZone, setReviewSourceZone] =
+    useState<OrderSource>("ingresos");
   const [reviewSourcePosition, setReviewSourcePosition] = useState<number>(1);
 
   const [searchId, setSearchId] = useState<string>("");
   const [selectedPosition, setSelectedPosition] = useState<number | null>(null);
 
-  const [cloudReady, setCloudReady] = useState(false);
-  const remoteUpdate = React.useRef(false);
-  const lastSavedSnapshot = React.useRef<string>("");
-  const clientsLoadedRef = React.useRef(false);
-
-  const loadWarehouses = useCallback(async () => {
-    setWarehousesLoading(true);
+  // Persist session in localStorage after restore
+  useEffect(() => {
+    if (!hasRestoredSession) {
+      return;
+    }
     try {
-      const snapshot = await getDocs(collection(db, "warehouses"));
-      let items = snapshot.docs.map((docSnap) => {
-        const data = docSnap.data() as { name?: string; status?: string };
-        return { id: docSnap.id, name: data.name, status: data.status } satisfies WarehouseMeta;
-      });
-
-      // Ensure default exists and is present in the list
-      const ensureDefault = async () => {
-        const defaultRef = doc(db, "warehouses", DEFAULT_WAREHOUSE_ID);
-        const defaultSnap = await getDoc(defaultRef);
-        if (!defaultSnap.exists()) {
-          await setDoc(defaultRef, {
-            name: "default",
-            status: "active",
-            createdAt: serverTimestamp(),
-          });
-        }
-        if (!items.some((item) => item.id === DEFAULT_WAREHOUSE_ID)) {
-          items = [{ id: DEFAULT_WAREHOUSE_ID, name: "default", status: "active" }, ...items];
-        }
-      };
-
-      if (!items.length) {
-        await ensureDefault();
+      if (session) {
+        localStorage.setItem(ROLE_STORAGE_KEY, JSON.stringify(session));
       } else {
-        await ensureDefault();
+        localStorage.removeItem(ROLE_STORAGE_KEY);
       }
-
-      if (!items.some((item) => item.id === FRIDEM_WAREHOUSE_ID)) {
-        items = [
-          ...items,
-          {
-            id: FRIDEM_WAREHOUSE_ID,
-            name: FRIDEM_WAREHOUSE_NAME,
-            status: "external",
-          },
-        ];
-      }
-
-      setWarehouses(items);
-      if (items.length && !items.some((item) => item.id === warehouseId)) {
-        setWarehouseId(items[0].id);
-      }
-    } catch (err) {
-      console.warn("No se pudo cargar la lista de bodegas", err);
-      // Fallback: ensure at least the default and the external entry so the selector is usable
-      setWarehouses([
-        { id: DEFAULT_WAREHOUSE_ID, name: "default", status: "active" },
-        { id: FRIDEM_WAREHOUSE_ID, name: FRIDEM_WAREHOUSE_NAME, status: "external" },
-      ]);
-      if (!warehouseId) {
-        setWarehouseId(DEFAULT_WAREHOUSE_ID);
-      }
-    } finally {
-      setWarehousesLoading(false);
+    } catch {
+      // ignore storage errors
     }
-  }, [warehouseId]);
-
-  const handleSelectWarehouse = useCallback(
-    (id: string) => {
-      if (!id || id === warehouseId) return;
-      setCloudReady(false);
-      remoteUpdate.current = false;
-      lastSavedSnapshot.current = "";
-      setSlots(createInitialSlots());
-      setInboundBoxes([]);
-      setOutboundBoxes([]);
-      setDispatchedBoxes([]);
-      setOrders([]);
-      setStats(defaultStats);
-      setWarehouseName("");
-      setAlerts([]);
-      setAssignedAlerts([]);
-      setAlertasOperario([]);
-      setAlertasOperarioSolved([]);
-      setLlamadasJefe([]);
-      setWarehouseId(id);
-    },
-    [warehouseId],
-  );
-
-  const handleCreateWarehouse = useCallback(
-    async (name: string) => {
-      if (!session) {
-        setMessage("Debes iniciar sesión para crear bodegas.");
-        return;
-      }
-      setWarehousesLoading(true);
-      try {
-        const ref = await addDoc(collection(db, "warehouses"), {
-          name: name.trim() || "Nueva bodega",
-          status: "active",
-          createdAt: serverTimestamp(),
-        });
-        await Promise.all([ensureWarehouseState(ref.id), ensureHistoryState(ref.id)]);
-        const meta: WarehouseMeta = {
-          id: ref.id,
-          name: name.trim() || "Nueva bodega",
-          status: "active",
-        };
-        setWarehouses((prev) => {
-          const exists = prev.some((item) => item.id === ref.id);
-          return exists ? prev : [...prev, meta];
-        });
-        await loadWarehouses();
-        handleSelectWarehouse(ref.id);
-      } catch (err) {
-        const code =
-          typeof err === "object" && err && "code" in err
-            ? (err as { code?: string }).code
-            : undefined;
-        console.error("No se pudo crear la bodega", err);
-        setMessage(
-          code
-            ? `No se pudo crear la bodega. Error: ${code}`
-            : "No se pudo crear la bodega. Revisa permisos o conexión.",
-        );
-      } finally {
-        setWarehousesLoading(false);
-      }
-    },
-    [handleSelectWarehouse, loadWarehouses, session],
-  );
-
-  const fetchClients = useCallback(async () => {
-    setClientsLoading(true);
-    try {
-      const snapshot = await getDocs(collection(db, "clientes"));
-      const items: Client[] = snapshot.docs.map((docSnap) => {
-        const data = docSnap.data() as {
-          name?: string;
-          createdAt?: { toMillis?: () => number };
-          createdBy?: string | null;
-          createdByRole?: Role | null;
-        };
-        const createdAtMs =
-          data.createdAt && typeof data.createdAt.toMillis === "function"
-            ? data.createdAt.toMillis()
-            : undefined;
-        return {
-          id: docSnap.id,
-          name: (data.name ?? "").toString().trim() || "Sin nombre",
-          createdAtMs,
-          createdAt: createdAtMs ? new Date(createdAtMs).toLocaleString("es-CO") : undefined,
-          createdBy: data.createdBy ?? null,
-          createdByRole: data.createdByRole ?? null,
-        } satisfies Client;
-      });
-
-      items.sort(
-        (a, b) =>
-          (b.createdAtMs ?? 0) - (a.createdAtMs ?? 0) || a.name.localeCompare(b.name, "es"),
-      );
-      setClients(items);
-    } catch (err) {
-      console.error("No se pudieron cargar los clientes", err);
-      setMessage(
-        "No se pudieron cargar los clientes. Revisa permisos de Firestore para la colección clientes.",
-      );
-    } finally {
-      setClientsLoading(false);
-    }
-  }, [setMessage]);
-
-  const handleCreateClient = useCallback(async () => {
-    const value = newClientName.trim();
-    if (!value) {
-      setMessage("Ingresa un nombre de cliente.");
-      return;
-    }
-    if (!session) {
-      setMessage("Debes iniciar sesión como configurador para crear clientes.");
-      return;
-    }
-
-    setClientSaving(true);
-    try {
-      const docRef = await addDoc(collection(db, "clientes"), {
-        name: value,
-        createdAt: serverTimestamp(),
-        createdBy: session.uid,
-        createdByRole: session.role,
-      });
-      const createdAtMs = Date.now();
-      const newClient: Client = {
-        id: docRef.id,
-        name: value,
-        createdAt: new Date(createdAtMs).toLocaleString("es-CO"),
-        createdAtMs,
-        createdBy: session.uid,
-        createdByRole: session.role,
-      };
-      setClients((prev) => [newClient, ...prev]);
-      setNewClientName("");
-      clientsLoadedRef.current = true;
-      setMessage("Cliente creado correctamente.");
-    } catch (err) {
-      console.error("No se pudo crear el cliente", err);
-      setMessage("No se pudo crear el cliente. Revisa permisos o conexión.");
-    } finally {
-      setClientSaving(false);
-    }
-  }, [newClientName, session]);
-
-  const loadFridemData = useCallback(async () => {
-    setCloudReady(false);
-    setMessage("");
-    try {
-      const slotsFromFridem = await fetchFridemSlots(FRIDEM_WAREHOUSE_ID);
-      if (!slotsFromFridem.length) {
-        setMessage(
-          "No se encontraron datos en la bodega externa. Revisa la base fridem (Firestore o Realtime) y la URL de Realtime (NEXT_PUBLIC_FRIDEM_DATABASE_URL).",
-        );
-      }
-      setSlots(slotsFromFridem.length ? slotsFromFridem : createInitialSlots());
-      setInboundBoxes([]);
-      setOutboundBoxes([]);
-      setDispatchedBoxes([]);
-      setOrders([]);
-      setStats(defaultStats);
-      setWarehouseName(FRIDEM_WAREHOUSE_NAME);
-      setAlerts([]);
-      setAssignedAlerts([]);
-      setAlertasOperario([]);
-      setAlertasOperarioSolved([]);
-      setLlamadasJefe([]);
-    } catch (err) {
-      console.warn("No se pudo cargar la bodega externa", err);
-      setMessage("No se pudo cargar la bodega externa fridem. Revisa consola y credenciales.");
-      setSlots(createInitialSlots());
-    } finally {
-      setCloudReady(true);
-    }
-  }, []);
+  }, [session]);
 
   useEffect(() => {
     setIsHydrated(true);
     setDateLabel(new Date().toLocaleDateString("es-CO"));
-    setWarehouseId(WAREHOUSE_ID);
+
+    try {
+      const storedSession = localStorage.getItem(ROLE_STORAGE_KEY);
+      if (storedSession) {
+        const parsedSession = JSON.parse(storedSession);
+        if (
+          typeof parsedSession === "object" &&
+          parsedSession !== null &&
+          typeof parsedSession.username === "string" &&
+          typeof parsedSession.role === "string" &&
+          typeof parsedSession.displayName === "string"
+        ) {
+          setSession(parsedSession as Session);
+        }
+      }
+    } catch {
+      // ignore storage errors
+    }
+    setHasRestoredSession(true);
+
+    try {
+      const stored = localStorage.getItem(SLOTS_STORAGE_KEY);
+      if (stored) {
+        const parsed = JSON.parse(stored) as unknown;
+        const normalized = normalizeSlots(parsed);
+        if (normalized) {
+          setSlots(normalized);
+        }
+      }
+    } catch {
+      // ignore invalid storage
+    }
+
+    try {
+      const storedRole = localStorage.getItem(ROLE_STORAGE_KEY);
+      if (storedRole) {
+        const parsedRole = JSON.parse(storedRole) as unknown;
+        if (isValidRole(parsedRole)) {
+          // setRole removed, session logic should be used
+        }
+      }
+    } catch {
+      // ignore invalid storage
+    }
+
+    try {
+      const storedInbound = localStorage.getItem(INBOUND_STORAGE_KEY);
+      if (storedInbound) {
+        const parsedInbound = JSON.parse(storedInbound) as unknown;
+        const normalized = normalizeBoxes(parsedInbound);
+        if (normalized) {
+          setInboundBoxes(normalized);
+        }
+      }
+    } catch {
+      // ignore invalid storage
+    }
+
+    try {
+      const storedOutbound = localStorage.getItem(OUTBOUND_STORAGE_KEY);
+      if (storedOutbound) {
+        const parsedOutbound = JSON.parse(storedOutbound) as unknown;
+        const normalized = normalizeBoxes(parsedOutbound);
+        if (normalized) {
+          setOutboundBoxes(normalized);
+        }
+      }
+    } catch {
+      // ignore invalid storage
+    }
+
+    try {
+      const storedDispatched = localStorage.getItem(DISPATCHED_STORAGE_KEY);
+      if (storedDispatched) {
+        const parsedDispatched = JSON.parse(storedDispatched) as unknown;
+        const normalized = normalizeBoxes(parsedDispatched);
+        if (normalized) {
+          setDispatchedBoxes(normalized);
+        }
+      }
+    } catch {
+      // ignore invalid storage
+    }
+
+    try {
+      const storedOrders = localStorage.getItem(ORDERS_STORAGE_KEY);
+      if (storedOrders) {
+        const parsedOrders = JSON.parse(storedOrders) as unknown;
+        const normalized = normalizeOrders(parsedOrders);
+        if (normalized) {
+          setOrders(normalized);
+        }
+      }
+    } catch {
+      // ignore invalid storage
+    }
+
+    try {
+      const storedStats = localStorage.getItem(STATS_STORAGE_KEY);
+      if (storedStats) {
+        const parsedStats = JSON.parse(storedStats) as Partial<BodegaStats>;
+        setStats({
+          ingresos: Number(parsedStats.ingresos ?? 0),
+          salidas: Number(parsedStats.salidas ?? 0),
+          movimientosBodega: Number(parsedStats.movimientosBodega ?? 0),
+        });
+      }
+    } catch {
+      // ignore invalid storage
+    }
+
+    try {
+      const storedWarehouseId = localStorage.getItem(WAREHOUSE_ID_KEY);
+      if (storedWarehouseId) {
+        setWarehouseId(storedWarehouseId);
+      } else {
+        const newId = createAutoId("BOD");
+        setWarehouseId(newId);
+        localStorage.setItem(WAREHOUSE_ID_KEY, newId);
+      }
+    } catch {
+      // ignore invalid storage
+    }
+
+    try {
+      const storedWarehouseName = localStorage.getItem(WAREHOUSE_NAME_KEY);
+      if (storedWarehouseName) {
+        setWarehouseName(storedWarehouseName);
+      }
+    } catch {
+      // ignore invalid storage
+    }
+  }, []);
+
+  // Sync state across tabs (same browser) when localStorage changes
+  useEffect(() => {
+    const handleStorage = (event: StorageEvent) => {
+      try {
+        if (event.key === SLOTS_STORAGE_KEY) {
+          const normalized = normalizeSlots(
+            event.newValue ? JSON.parse(event.newValue) : [],
+          );
+          if (normalized) {
+            setSlots(normalized);
+          }
+        }
+        if (event.key === INBOUND_STORAGE_KEY) {
+          const normalized = normalizeBoxes(
+            event.newValue ? JSON.parse(event.newValue) : [],
+          );
+          if (normalized) {
+            setInboundBoxes(normalized);
+          }
+        }
+        if (event.key === OUTBOUND_STORAGE_KEY) {
+          const normalized = normalizeBoxes(
+            event.newValue ? JSON.parse(event.newValue) : [],
+          );
+          if (normalized) {
+            setOutboundBoxes(normalized);
+          }
+        }
+        if (event.key === DISPATCHED_STORAGE_KEY) {
+          const normalized = normalizeBoxes(
+            event.newValue ? JSON.parse(event.newValue) : [],
+          );
+          if (normalized) {
+            setDispatchedBoxes(normalized);
+          }
+        }
+        if (event.key === ORDERS_STORAGE_KEY) {
+          const normalized = normalizeOrders(
+            event.newValue ? JSON.parse(event.newValue) : [],
+          );
+          if (normalized) {
+            setOrders(normalized);
+          }
+        }
+        if (event.key === WAREHOUSE_ID_KEY) {
+          if (typeof event.newValue === "string") {
+            setWarehouseId(event.newValue);
+          }
+        }
+        if (event.key === WAREHOUSE_NAME_KEY) {
+          if (typeof event.newValue === "string") {
+            setWarehouseName(event.newValue);
+          }
+        }
+      } catch {
+        // ignore invalid storage events
+      }
+    };
+
+    window.addEventListener("storage", handleStorage);
+    return () => window.removeEventListener("storage", handleStorage);
   }, []);
 
   useEffect(() => {
-    if (!session) {
-      setWarehouses([]);
-      return;
+    try {
+      localStorage.setItem(SLOTS_STORAGE_KEY, JSON.stringify(slots));
+    } catch {
+      // ignore storage errors
     }
-    loadWarehouses();
-  }, [session, loadWarehouses]);
+  }, [slots]);
+
+  // Eliminado: persistencia de role, ahora se usa session
 
   useEffect(() => {
-    if (!session || !warehouseId) {
-      setCloudReady(false);
-      return;
+    try {
+      localStorage.setItem(INBOUND_STORAGE_KEY, JSON.stringify(inboundBoxes));
+    } catch {
+      // ignore storage errors
     }
-
-    if (isExternalWarehouse) {
-      loadFridemData();
-      return;
-    }
-
-    const unsubscribe = subscribeWarehouseState(warehouseId, (cloud) => {
-      remoteUpdate.current = true;
-      const normalizedSlots = normalizeSlots(cloud.slots) ?? createInitialSlots();
-      setSlots(normalizedSlots);
-      setInboundBoxes(cloud.inboundBoxes?.length ? normalizeBoxes(cloud.inboundBoxes) ?? [] : []);
-      setOutboundBoxes(cloud.outboundBoxes?.length ? normalizeBoxes(cloud.outboundBoxes) ?? [] : []);
-      setDispatchedBoxes(
-        cloud.dispatchedBoxes?.length ? normalizeBoxes(cloud.dispatchedBoxes) ?? [] : [],
-      );
-      setOrders(cloud.orders?.length ? normalizeOrders(cloud.orders) ?? [] : []);
-      setStats(cloud.stats ?? defaultStats);
-      setWarehouseName(cloud.warehouseName ?? "");
-      setAlerts(cloud.alerts ?? []);
-      setAssignedAlerts(cloud.assignedAlerts ?? []);
-      setAlertasOperario(cloud.alertasOperario ?? []);
-      setAlertasOperarioSolved(cloud.alertasOperarioSolved ?? []);
-      setLlamadasJefe(cloud.llamadasJefe ?? []);
-      setCloudReady(true);
-    });
-
-    return () => unsubscribe();
-  }, [isExternalWarehouse, loadFridemData, session, warehouseId]);
-
-  useEffect(() => {
-    if (!cloudReady || !warehouseId || isExternalWarehouse) return;
-    if (remoteUpdate.current) {
-      remoteUpdate.current = false;
-      return;
-    }
-
-    const snapshot = JSON.stringify({
-      slots,
-      inboundBoxes,
-      outboundBoxes,
-      dispatchedBoxes,
-      orders,
-      stats,
-      warehouseName,
-      alerts,
-      assignedAlerts,
-      alertasOperario,
-      alertasOperarioSolved,
-      llamadasJefe,
-    });
-
-    if (lastSavedSnapshot.current === snapshot) {
-      return;
-    }
-
-    lastSavedSnapshot.current = snapshot;
-    saveWarehouseState(warehouseId, {
-      slots,
-      inboundBoxes,
-      outboundBoxes,
-      dispatchedBoxes,
-      orders,
-      stats,
-      warehouseName,
-      alerts,
-      assignedAlerts,
-      alertasOperario,
-      alertasOperarioSolved,
-      llamadasJefe,
-    }).catch(() => {});
-  }, [
-    alerts,
-    alertasOperario,
-    alertasOperarioSolved,
-    assignedAlerts,
-    cloudReady,
-    dispatchedBoxes,
-    isExternalWarehouse,
-    inboundBoxes,
-    llamadasJefe,
-    orders,
-    outboundBoxes,
-    slots,
-    stats,
-    warehouseId,
-    warehouseName,
-  ]);
+  }, [inboundBoxes]);
 
   useEffect(() => {
     setIngresoPosition(getNextIngresoPosition(inboundBoxes));
   }, [inboundBoxes]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(OUTBOUND_STORAGE_KEY, JSON.stringify(outboundBoxes));
+    } catch {
+      // ignore storage errors
+    }
+  }, [outboundBoxes]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(
+        DISPATCHED_STORAGE_KEY,
+        JSON.stringify(dispatchedBoxes),
+      );
+    } catch {
+      // ignore storage errors
+    }
+  }, [dispatchedBoxes]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(ORDERS_STORAGE_KEY, JSON.stringify(orders));
+    } catch {
+      // ignore storage errors
+    }
+  }, [orders]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(STATS_STORAGE_KEY, JSON.stringify(stats));
+    } catch {
+      // ignore storage errors
+    }
+  }, [stats]);
+
+  useEffect(() => {
+    try {
+      if (warehouseName.trim()) {
+        localStorage.setItem(WAREHOUSE_NAME_KEY, warehouseName.trim());
+      }
+    } catch {
+      // ignore storage errors
+    }
+  }, [warehouseName]);
 
   useEffect(() => {
     const timerId = window.setInterval(() => {
@@ -897,7 +811,8 @@ export default function BodegaDashboard() {
   );
 
   const freeSlots = useMemo(
-    () => slots.filter((slot) => !slot.autoId.trim()).map((slot) => slot.position),
+    () =>
+      slots.filter((slot) => !slot.autoId.trim()).map((slot) => slot.position),
     [slots],
   );
 
@@ -955,19 +870,31 @@ export default function BodegaDashboard() {
   }, [orders]);
 
   const availableInboundForOrders = useMemo(
-    () => inboundBoxes.filter((box) => !pendingSourceKeys.has(`ingresos:${box.position}`)),
+    () =>
+      inboundBoxes.filter(
+        (box) => !pendingSourceKeys.has(`ingresos:${box.position}`),
+      ),
     [inboundBoxes, pendingSourceKeys],
   );
 
   const availableBodegaForOrders = useMemo(
-    () => bodegaBoxes.filter((box) => !pendingSourceKeys.has(`bodega:${box.position}`)),
+    () =>
+      bodegaBoxes.filter(
+        (box) => !pendingSourceKeys.has(`bodega:${box.position}`),
+      ),
     [bodegaBoxes, pendingSourceKeys],
   );
 
-  const reviewBodegaList = useMemo(() => availableBodegaForOrders, [availableBodegaForOrders]);
+  const reviewBodegaList = useMemo(
+    () => availableBodegaForOrders,
+    [availableBodegaForOrders],
+  );
 
   const availableOutboundForReview = useMemo(
-    () => outboundBoxes.filter((box) => !pendingSourceKeys.has(`salida:${box.position}`)),
+    () =>
+      outboundBoxes.filter(
+        (box) => !pendingSourceKeys.has(`salida:${box.position}`),
+      ),
     [outboundBoxes, pendingSourceKeys],
   );
 
@@ -980,12 +907,8 @@ export default function BodegaDashboard() {
     addSalida,
     addMovimientoBodega,
     addAlerta,
-    setWarehouseId: setHistoryWarehouseId,
   } = useBodegaHistory();
 
-  useEffect(() => {
-    setHistoryWarehouseId(warehouseId);
-  }, [warehouseId, setHistoryWarehouseId]);
 
   const zoneLabels: Record<ZoneKey, string> = {
     entrada: "Entrada",
@@ -1018,15 +941,19 @@ export default function BodegaDashboard() {
     () => outboundBoxes.filter((box) => box.temperature > 5),
     [outboundBoxes],
   );
+  // Filtrar slots de bodega con temperatura alta, excluyendo solucionadas por operario
   const bodegaHighSlots = React.useMemo(() => {
-    const solvedPositions = new Set(alertasOperarioSolved);
+    let solvedPositions: number[] = [];
+    if (typeof window !== 'undefined') {
+      try {
+        const solved = window.localStorage.getItem('alertas_operario_solved');
+        solvedPositions = solved ? JSON.parse(solved) : [];
+      } catch { solvedPositions = []; }
+    }
     return slots.filter(
-      (slot) =>
-        typeof slot.temperature === "number" &&
-        slot.temperature > 5 &&
-        !solvedPositions.has(slot.position),
+      (slot) => typeof slot.temperature === "number" && slot.temperature > 5 && !solvedPositions.includes(slot.position)
     );
-  }, [alertasOperarioSolved, slots]);
+  }, [slots]);
 
   const tempFixOptions = useMemo(() => {
     const options: Array<{
@@ -1094,7 +1021,10 @@ export default function BodegaDashboard() {
   );
   const nextAlert = alerts[0] ?? null;
   const overdueOrders = useMemo(
-    () => orders.filter((order) => alertClock - order.createdAtMs >= ALERT_DELAY_MS),
+    () =>
+      orders.filter(
+        (order) => alertClock - order.createdAtMs >= ALERT_DELAY_MS,
+      ),
     [alertClock, orders],
   );
 
@@ -1236,11 +1166,13 @@ export default function BodegaDashboard() {
       });
     });
 
-    const overdueOrdersList = orders.filter((order) => alertClock - order.createdAtMs >= ALERT_DELAY_MS);
+    const overdueOrders = orders.filter(
+      (order) => alertClock - order.createdAtMs >= ALERT_DELAY_MS,
+    );
 
     const next: AlertItem[] = [...tempAlerts];
 
-    for (const order of overdueOrdersList) {
+    for (const order of overdueOrders) {
       const alertId = `${ALERT_ORDER_PREFIX}${order.id}`;
       const orderTarget = order.targetPosition ?? null;
       const sourceLabel =
@@ -1283,7 +1215,7 @@ export default function BodegaDashboard() {
         createdAt,
         createdAtMs,
         meta: alert.meta,
-      } as AlertHistoryEntry));
+      }));
 
     const changed =
       next.length !== alerts.length ||
@@ -1321,7 +1253,11 @@ export default function BodegaDashboard() {
       setBodegaOrderSourcePosition(1);
       return;
     }
-    if (!availableBodegaForOrders.some((box) => box.position === bodegaOrderSourcePosition)) {
+    if (
+      !availableBodegaForOrders.some(
+        (box) => box.position === bodegaOrderSourcePosition,
+      )
+    ) {
       setBodegaOrderSourcePosition(availableBodegaForOrders[0].position);
     }
   }, [availableBodegaForOrders, bodegaOrderSourcePosition]);
@@ -1331,7 +1267,11 @@ export default function BodegaDashboard() {
       setIngresoOrderSourcePosition(1);
       return;
     }
-    if (!availableInboundForOrders.some((box) => box.position === ingresoOrderSourcePosition)) {
+    if (
+      !availableInboundForOrders.some(
+        (box) => box.position === ingresoOrderSourcePosition,
+      )
+    ) {
       setIngresoOrderSourcePosition(availableInboundForOrders[0].position);
     }
   }, [availableInboundForOrders, ingresoOrderSourcePosition]);
@@ -1372,7 +1312,9 @@ export default function BodegaDashboard() {
   ]);
 
   useEffect(() => {
-    setSalidaTargetPosition(getNextSalidaPosition(outboundBoxes, reservedSalidaTargets));
+    setSalidaTargetPosition(
+      getNextSalidaPosition(outboundBoxes, reservedSalidaTargets),
+    );
   }, [outboundBoxes, reservedSalidaTargets]);
 
   useEffect(() => {
@@ -1380,11 +1322,16 @@ export default function BodegaDashboard() {
       setSalidaSourcePosition(1);
       return;
     }
-    if (!availableBodegaForOrders.some((box) => box.position === salidaSourcePosition)) {
+    if (
+      !availableBodegaForOrders.some(
+        (box) => box.position === salidaSourcePosition,
+      )
+    ) {
       setSalidaSourcePosition(availableBodegaForOrders[0].position);
     }
   }, [availableBodegaForOrders, salidaSourcePosition]);
 
+  // role ahora se deriva de session
   useEffect(() => {
     if (session?.clientId) {
       setClientFilterId(session.clientId);
@@ -1397,13 +1344,9 @@ export default function BodegaDashboard() {
   const isCustodio = role === "custodio";
   const isJefe = role === "jefe";
   const isCliente = role === "cliente";
-  const isConfigurator = role === "configurador";
   const clientId = session?.clientId ?? null;
   const effectiveClientId = isCliente ? clientFilterId || clientId || "cliente1" : clientId;
   const canManageAlerts = isJefe;
-
-  const showAdminMenu = isAdmin && adminSection !== "bodega_interna";
-  const showDashboard = !isAdmin || adminSection === "bodega_interna" || isConfigurator;
 
   const canSeeBodega = isAdmin || isOperario;
   const canUseIngresoForm = isCustodio;
@@ -1411,34 +1354,10 @@ export default function BodegaDashboard() {
   const canSeeOrders = isAdmin || isOperario;
   const canUseSearch = isAdmin;
 
-  useEffect(() => {
-    if (!session) {
-      setClients([]);
-      setNewClientName("");
-      clientsLoadedRef.current = false;
-    }
-  }, [session]);
-
-  useEffect(() => {
-    if (!isConfigurator || activeTab !== "configuracion") {
-      return;
-    }
-    if (clientsLoadedRef.current) {
-      return;
-    }
-    clientsLoadedRef.current = true;
-    fetchClients();
-  }, [activeTab, fetchClients, isConfigurator]);
-
-  useEffect(() => {
-    if (!session) return;
-    if (clientsLoadedRef.current) return;
-    clientsLoadedRef.current = true;
-    fetchClients();
-  }, [fetchClients, session]);
-
   const filterByClient = <T extends { client?: string }>(items: T[]) =>
-    isCliente && effectiveClientId ? items.filter((item) => item.client === effectiveClientId) : items;
+    isCliente && effectiveClientId
+      ? items.filter((item) => item.client === effectiveClientId)
+      : items;
 
   const orderMatchesClientLoose = (order: BodegaOrder) => {
     if (!isCliente || !effectiveClientId) return true;
@@ -1477,11 +1396,13 @@ export default function BodegaDashboard() {
   const clientAutoIds = useMemo(() => {
     if (!isCliente || !effectiveClientId) return new Set<string>();
     const ids = new Set<string>();
-    [inboundClient, outboundClient, slotsClient, dispatchedClient].forEach((list) => {
-      list.forEach((item) => {
-        if (item.autoId) ids.add(item.autoId);
-      });
-    });
+    [inboundClient, outboundClient, slotsClient, dispatchedClient].forEach(
+      (list) => {
+        list.forEach((item) => {
+          if (item.autoId) ids.add(item.autoId);
+        });
+      },
+    );
     return ids;
   }, [dispatchedClient, effectiveClientId, inboundClient, isCliente, outboundClient, slotsClient]);
 
@@ -1525,7 +1446,13 @@ export default function BodegaDashboard() {
         fill: "#ef4444",
       },
     ],
-    [alertasCount, despachadosCount, ingresosCount, movimientosCount, salidasCount],
+    [
+      alertasCount,
+      despachadosCount,
+      ingresosCount,
+      movimientosCount,
+      salidasCount,
+    ],
   );
 
   const handleSelectSlot = (position: number) => {
@@ -1575,7 +1502,8 @@ export default function BodegaDashboard() {
     targetPosition?: number;
   }) => {
     const { destination, sourceZone, sourcePosition, targetPosition } = params;
-    const effectiveSourceZone = destination === "a_salida" ? "bodega" : sourceZone;
+    const effectiveSourceZone =
+      destination === "a_salida" ? "bodega" : sourceZone;
     const effectiveSourcePosition = sourcePosition;
 
     if (role !== "jefe") {
@@ -1583,13 +1511,17 @@ export default function BodegaDashboard() {
       return;
     }
     const sourceList =
-      effectiveSourceZone === "bodega" ? availableBodegaForOrders : availableInboundForOrders;
+      effectiveSourceZone === "bodega"
+        ? availableBodegaForOrders
+        : availableInboundForOrders;
     if (sourceList.length === 0) {
       setMessage("No hay cajas disponibles sin tareas asignadas.");
       return;
     }
 
-    const box = sourceList.find((item) => item.position === effectiveSourcePosition);
+    const box = sourceList.find(
+      (item) => item.position === effectiveSourcePosition,
+    );
     if (!box) {
       setMessage("Selecciona una caja valida.");
       return;
@@ -1601,7 +1533,10 @@ export default function BodegaDashboard() {
         return;
       }
     } else {
-      const salidaPosition = getNextSalidaPosition(outboundBoxes, reservedSalidaTargets);
+      const salidaPosition = getNextSalidaPosition(
+        outboundBoxes,
+        reservedSalidaTargets,
+      );
       if (salidaPosition <= 0) {
         setMessage("Ingresa una posicion de salida valida.");
         return;
@@ -1637,7 +1572,9 @@ export default function BodegaDashboard() {
     setMessage("Orden creada correctamente.");
     if (role === "jefe") {
       setBodegaOrderSourcePosition(availableBodegaForOrders[0]?.position ?? 1);
-      setIngresoOrderSourcePosition(availableInboundForOrders[0]?.position ?? 1);
+      setIngresoOrderSourcePosition(
+        availableInboundForOrders[0]?.position ?? 1,
+      );
       setBodegaOrderTargetPosition(availableBodegaTargets[0] ?? 1);
       setIngresoOrderTargetPosition(availableBodegaTargets[0] ?? 1);
     }
@@ -1655,7 +1592,9 @@ export default function BodegaDashboard() {
       return;
     }
 
-    const box = reviewList.find((item) => item.position === reviewSourcePosition);
+    const box = reviewList.find(
+      (item) => item.position === reviewSourcePosition,
+    );
     if (!box) {
       setMessage("Selecciona una caja valida.");
       return;
@@ -1687,16 +1626,26 @@ export default function BodegaDashboard() {
     }
 
     const sourceIsBodega = order.sourceZone === "bodega";
-    const boxFromIngreso = inboundBoxes.find((item) => item.position === order.sourcePosition);
-    const boxFromBodega = slots.find((item) => item.position === order.sourcePosition);
-    const boxFromSalida = outboundBoxes.find((item) => item.position === order.sourcePosition);
+    const boxFromIngreso = inboundBoxes.find(
+      (item) => item.position === order.sourcePosition,
+    );
+    const boxFromBodega = slots.find(
+      (item) => item.position === order.sourcePosition,
+    );
+    const boxFromSalida = outboundBoxes.find(
+      (item) => item.position === order.sourcePosition,
+    );
 
     if (order.type === "revisar") {
-      const existsInIngreso = inboundBoxes.some((item) => item.position === order.sourcePosition);
+      const existsInIngreso = inboundBoxes.some(
+        (item) => item.position === order.sourcePosition,
+      );
       const existsInBodega = slots.some(
         (item) => item.position === order.sourcePosition && item.autoId.trim(),
       );
-      const existsInSalida = outboundBoxes.some((item) => item.position === order.sourcePosition);
+      const existsInSalida = outboundBoxes.some(
+        (item) => item.position === order.sourcePosition,
+      );
       if (
         (order.sourceZone === "ingresos" && !existsInIngreso) ||
         (order.sourceZone === "bodega" && !existsInBodega) ||
@@ -1786,10 +1735,18 @@ export default function BodegaDashboard() {
         return;
       }
 
-      const boxAutoId = sourceIsBodega ? boxFromBodega?.autoId ?? "" : boxFromIngreso?.autoId ?? "";
-      const boxName = sourceIsBodega ? boxFromBodega?.name ?? "" : boxFromIngreso?.name ?? "";
-      const boxTemp = sourceIsBodega ? boxFromBodega?.temperature ?? 0 : boxFromIngreso?.temperature ?? 0;
-      const boxClient = sourceIsBodega ? boxFromBodega?.client ?? "" : boxFromIngreso?.client ?? "";
+      const boxAutoId = sourceIsBodega
+        ? (boxFromBodega?.autoId ?? "")
+        : (boxFromIngreso?.autoId ?? "");
+      const boxName = sourceIsBodega
+        ? (boxFromBodega?.name ?? "")
+        : (boxFromIngreso?.name ?? "");
+      const boxTemp = sourceIsBodega
+        ? (boxFromBodega?.temperature ?? 0)
+        : (boxFromIngreso?.temperature ?? 0);
+      const boxClient = sourceIsBodega
+        ? (boxFromBodega?.client ?? "")
+        : (boxFromIngreso?.client ?? "");
 
       setOutboundBoxes((prev) =>
         sortByPosition([
@@ -1815,9 +1772,13 @@ export default function BodegaDashboard() {
         ),
       );
     } else if (order.sourceZone === "ingresos") {
-      setInboundBoxes((prev) => prev.filter((item) => item.position !== order.sourcePosition));
+      setInboundBoxes((prev) =>
+        prev.filter((item) => item.position !== order.sourcePosition),
+      );
     } else if (order.sourceZone === "salida") {
-      setOutboundBoxes((prev) => prev.filter((item) => item.position !== order.sourcePosition));
+      setOutboundBoxes((prev) =>
+        prev.filter((item) => item.position !== order.sourcePosition),
+      );
     }
     setOrders((prev) => prev.filter((item) => item.id !== orderId));
     setMessage("Orden ejecutada correctamente.");
@@ -1830,7 +1791,9 @@ export default function BodegaDashboard() {
       return;
     }
 
-    const ingreso = inboundBoxes.find((box) => box.autoId === id || box.name === id);
+    const ingreso = inboundBoxes.find(
+      (box) => box.autoId === id || box.name === id,
+    );
     if (ingreso) {
       setMessage(`El id ${id} esta en ingresos ${ingreso.position}.`);
       return;
@@ -1842,7 +1805,9 @@ export default function BodegaDashboard() {
       return;
     }
 
-    const salida = outboundBoxes.find((box) => box.autoId === id || box.name === id);
+    const salida = outboundBoxes.find(
+      (box) => box.autoId === id || box.name === id,
+    );
     if (salida) {
       setMessage(`El id ${id} esta en salida ${salida.position}.`);
       return;
@@ -1863,7 +1828,9 @@ export default function BodegaDashboard() {
       return;
     }
 
-    setOutboundBoxes((prev) => prev.filter((item) => item.position !== position));
+    setOutboundBoxes((prev) =>
+      prev.filter((item) => item.position !== position),
+    );
     setDispatchedBoxes((prev) => sortByPosition([box, ...prev]));
     setMessage(`Caja en salida ${position} enviada.`);
   };
@@ -1962,7 +1929,9 @@ export default function BodegaDashboard() {
 
   const handleResolveAlert = (alertId: string) => {
     setAlerts((prev) => prev.filter((alert) => alert.id !== alertId));
-    setAssignedAlerts((prev) => prev.filter((assignment) => assignment.alertId !== alertId));
+    setAssignedAlerts((prev) =>
+      prev.filter((assignment) => assignment.alertId !== alertId),
+    );
   };
 
   const openResolveModal = (alert: AlertItem) => {
@@ -2000,16 +1969,26 @@ export default function BodegaDashboard() {
 
       if (tempFixZone === "ingresos") {
         setInboundBoxes((prev) =>
-          prev.map((box) => (box.position === tempFixPosition ? { ...box, temperature: parsedTemp } : box)),
+          prev.map((box) =>
+            box.position === tempFixPosition
+              ? { ...box, temperature: parsedTemp }
+              : box,
+          ),
         );
       } else if (tempFixZone === "salida") {
         setOutboundBoxes((prev) =>
-          prev.map((box) => (box.position === tempFixPosition ? { ...box, temperature: parsedTemp } : box)),
+          prev.map((box) =>
+            box.position === tempFixPosition
+              ? { ...box, temperature: parsedTemp }
+              : box,
+          ),
         );
       } else {
         setSlots((prev) =>
           prev.map((slot) =>
-            slot.position === tempFixPosition ? { ...slot, temperature: parsedTemp } : slot,
+            slot.position === tempFixPosition
+              ? { ...slot, temperature: parsedTemp }
+              : slot,
           ),
         );
       }
@@ -2086,15 +2065,10 @@ export default function BodegaDashboard() {
           label: "Solicitudes pendientes",
           visible: isOperario,
         },
-        {
-          key: "configuracion",
-          label: "Configuración",
-          visible: isConfigurator,
-        },
         { key: "alertas", label: "Gestion de alertas", visible: false },
         { key: "reportes", label: "Reportes", visible: isAdmin || isCliente },
       ].filter((tab) => tab.visible),
-    [isAdmin, isCliente, isCustodio, isOperario, isJefe, canUseOrderForm, isConfigurator],
+    [isAdmin, isCliente, isCustodio, isOperario, isJefe, canUseOrderForm],
   );
 
   useEffect(() => {
@@ -2108,155 +2082,6 @@ export default function BodegaDashboard() {
       setActiveTab((tabs[0]?.key ?? "ingresos") as typeof activeTab);
     }
   }, [activeTab, isJefe, tabs]);
-
-  const renderAdminLanding = () => {
-    const cards: Array<{
-      key: AdminSection;
-      label: string;
-      icon: React.ReactNode;
-      helper: string;
-      span?: string;
-    }> = [
-      {
-        key: "compras",
-        label: "Compras",
-        icon: <FiShoppingCart className="h-6 w-6" />,
-        helper: "Órdenes y abastecimiento",
-        span: "sm:col-span-2",
-      },
-      {
-        key: "transporte",
-        label: "Transporte",
-        icon: <FiTruck className="h-6 w-6" />,
-        helper: "Rutas y entregas",
-        span: "sm:col-span-2",
-      },
-      {
-        key: "bodega_interna",
-        label: "Bodega interna",
-        icon: <FiHome className="h-6 w-6" />,
-        helper: "Control de slots y movimientos",
-      },
-      {
-        key: "bodega_externa",
-        label: "Bodega externa",
-        icon: <FiExternalLink className="h-6 w-6" />,
-        helper: "Integraciones externas",
-      },
-    ];
-
-    return (
-      <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.25em] text-slate-400">Panel administrador</p>
-            <h2 className="mt-1 text-xl font-semibold text-slate-900">Selecciona un módulo</h2>
-            <p className="mt-1 text-sm text-slate-600">
-              Elige la operación que quieres gestionar. Bodega interna abre la vista completa de slots.
-            </p>
-          </div>
-        </div>
-        <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
-          {cards.map((card) => (
-            <button
-              key={card.key}
-              type="button"
-              onClick={() => setAdminSection(card.key)}
-              className={`group flex h-full flex-col items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-5 text-center shadow-sm transition hover:-translate-y-1 hover:border-slate-300 hover:bg-white hover:shadow-md ${card.span ?? ""}`.trim()}
-            >
-              <div className="flex items-center justify-center gap-3">
-                <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-900 text-white shadow-sm">
-                  {card.icon}
-                </span>
-                <div className="text-center">
-                  <p className="text-base font-semibold text-slate-900">{card.label}</p>
-                  <p className="text-xs text-slate-500">{card.helper}</p>
-                </div>
-              </div>
-              <span className="text-sm font-semibold text-emerald-600 opacity-0 transition group-hover:opacity-100">
-                Abrir módulo →
-              </span>
-            </button>
-          ))}
-        </div>
-      </section>
-    );
-  };
-
-  const renderAdminPlaceholder = (title: string, description: string) => (
-    <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-      <div className="flex flex-col gap-4">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.25em] text-slate-400">Vista en preparación</p>
-          <h2 className="mt-1 text-xl font-semibold text-slate-900">{title}</h2>
-          <p className="mt-1 text-sm text-slate-600">{description}</p>
-        </div>
-
-        {title === "Bodega externa" ? (
-          <div className="overflow-hidden rounded-xl border border-slate-200 bg-slate-50">
-            <div className="grid grid-cols-4 gap-0 border-b border-slate-200 bg-white px-4 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
-              <span>ID único</span>
-              <span className="col-span-2">Descripción</span>
-              <span className="text-right">Peso / Temp</span>
-            </div>
-            {[
-              {
-                id: "EXT-001",
-                description: "Operador aliado zona norte",
-                weight: "12.4 t",
-                temperature: "4 °C",
-              },
-              {
-                id: "EXT-002",
-                description: "Túnel de frío externo",
-                weight: "8.9 t",
-                temperature: "2 °C",
-              },
-              {
-                id: "EXT-003",
-                description: "Bodega portuaria transitoria",
-                weight: "15.2 t",
-                temperature: "5 °C",
-              },
-            ].map((row) => (
-              <div
-                key={row.id}
-                className="grid grid-cols-4 gap-0 border-b border-slate-200 px-4 py-3 text-sm last:border-b-0"
-              >
-                <span className="font-semibold text-slate-900">{row.id}</span>
-                <span className="col-span-2 truncate text-slate-800">{row.description}</span>
-                <div className="flex items-center justify-end gap-2 text-slate-700">
-                  <span className="whitespace-nowrap rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-700">
-                    {row.weight}
-                  </span>
-                  <span className="whitespace-nowrap rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700">
-                    {row.temperature}
-                  </span>
-                </div>
-              </div>
-            ))}
-          </div>
-        ) : null}
-
-        <div className="flex flex-wrap gap-3">
-          <button
-            type="button"
-            onClick={() => setAdminSection("menu")}
-            className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
-          >
-            Volver al menú
-          </button>
-          <button
-            type="button"
-            onClick={() => setAdminSection("bodega_interna")}
-            className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800"
-          >
-            Ir a bodega interna
-          </button>
-        </div>
-      </div>
-    </section>
-  );
 
   if (!isHydrated) {
     return (
@@ -2274,6 +2099,7 @@ export default function BodegaDashboard() {
         <div className="absolute inset-0 -z-10 bg-[radial-gradient(circle_at_top,#e2e8f0,transparent_60%)]" />
         <main className="mx-auto flex w-full max-w-6xl flex-col items-center justify-center">
           <LoginCard
+            users={USERS}
             username={loginUser}
             password={loginPassword}
             onUsernameChange={setLoginUser}
@@ -2287,11 +2113,17 @@ export default function BodegaDashboard() {
   }
 
   function handleUpdateBoxTemperature(position: number, newTemp: number) {
+    // Actualiza la temperatura de la caja/slot en el estado correspondiente
+    // Puedes adaptar esto según cómo se gestionen los datos en tu app
     setSlots((prev) =>
-      prev.map((slot) => (slot.position === position ? { ...slot, temperature: newTemp } : slot)),
+      prev.map((slot) =>
+        slot.position === position ? { ...slot, temperature: newTemp } : slot,
+      ),
     );
     setSelectedBoxModal((prev) =>
-      prev && prev.position === position ? { ...prev, temperature: newTemp } : prev,
+      prev && prev.position === position
+        ? { ...prev, temperature: newTemp }
+        : prev,
     );
     setMessage("Temperatura actualizada");
   }
@@ -2305,8 +2137,6 @@ export default function BodegaDashboard() {
           dateLabel={dateLabel}
           warehouseId={warehouseId}
           warehouseName={warehouseName}
-          warehouses={warehouses}
-          onSelectWarehouse={handleSelectWarehouse}
           showIntro={!isOperario}
           showMeta={!isOperario}
           canSearch={canUseSearch}
@@ -2317,439 +2147,334 @@ export default function BodegaDashboard() {
           onLogout={handleLogout}
           role={role}
         />
-        {showAdminMenu ? (
-          <>
-            {adminSection === "menu" ? renderAdminLanding() : null}
-            {adminSection === "compras"
-              ? renderAdminPlaceholder("Compras", "Administra adquisiciones, proveedores y órdenes de compra.")
-              : null}
-            {adminSection === "transporte"
-              ? renderAdminPlaceholder("Transporte", "Coordina rutas, entregas y transporte de mercancía.")
-              : null}
-            {adminSection === "bodega_externa"
-              ? renderAdminPlaceholder("Bodega externa", "Conecta y sincroniza con bodegas externas.")
-              : null}
-          </>
+        {isAdmin ? (
+          <WarehouseSelector
+            role={role}
+            warehouseId={warehouseId}
+            warehouseName={warehouseName}
+            onWarehouseNameChange={setWarehouseName}
+            onChange={noop}
+          />
         ) : null}
 
-        {showDashboard ? (
-          <>
-            {isAdmin ? (
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div className="flex-1 min-w-[260px]">
-                  <WarehouseSelector
-                    role={role}
-                    warehouseId={warehouseId}
-                    warehouseName={warehouseName}
-                    warehouses={warehouses}
-                    onSelectWarehouse={handleSelectWarehouse}
-                    onCreateWarehouse={handleCreateWarehouse}
-                    isLoading={warehousesLoading}
-                  />
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setAdminSection("menu")}
-                  className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
-                >
-                  Volver al menú de administrador
-                </button>
-              </div>
-            ) : null}
-
-            {!isJefe && tabs.length > 1 ? (
-              <section className="rounded-2xl bg-linear-to-r from-slate-50 to-white border border-slate-200 p-3 shadow-sm">
-                <div className="flex flex-wrap gap-2">
-                  {tabs.map((tab) => {
-                    let icon = null;
-                    if (tab.key === "estado") icon = <span className="mr-2"><AiTwotoneAppstore /></span>;
-                    if (tab.key === "ingresos") icon = <span className="mr-2">📦</span>;
-                    if (tab.key === "ordenes") icon = <span className="mr-2">📝</span>;
-                    if (tab.key === "solicitudes") icon = <span className="mr-2">⏳</span>;
-                    if (tab.key === "reportes") icon = <span className="mr-2"><SlGraph /></span>;
-                    return (
-                      <button
-                        key={tab.key}
-                        type="button"
-                        onClick={() => setActiveTab(tab.key as typeof activeTab)}
-                        className={`relative flex items-center gap-1 rounded-xl px-4 py-2 text-sm font-semibold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 ${
-                          activeTab === tab.key
-                            ? "bg-slate-900 text-white shadow-md scale-105"
-                            : "bg-slate-100 text-slate-700 hover:bg-slate-200"
-                        }`}
-                        style={{ minWidth: 120 }}
-                      >
-                        {icon}
-                        <span>{tab.label}</span>
-                        {activeTab === tab.key && (
-                          <span className="absolute left-2 right-2 -bottom-1 h-1 rounded-b-xl bg-emerald-400/80 animate-fadeIn" />
-                        )}
-                      </button>
-                    );
-                  })}
-                </div>
-              </section>
-            ) : null}
-
-            {activeTab === "estado" && canSeeBodega ? (
-              <EstadoBodegaSection
-                inboundBoxes={inboundBoxes}
-                slots={slots}
-                selectedPosition={selectedPosition}
-                handleSelectSlot={handleSelectSlot}
-                renderStatusButtons={renderStatusButtons}
-                selectedSlot={selectedSlot}
-                setSelectedPosition={setSelectedPosition}
-                outboundBoxes={outboundBoxes}
-                sortByPosition={sortByPosition}
-              />
-            ) : null}
-
-            {activeTab === "configuracion" && isConfigurator ? (
-              <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-                <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-                  <div className="flex-1 space-y-2">
-                    <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
-                      Configuración
-                    </p>
-                    <h2 className="text-lg font-semibold text-slate-900">Panel de configurador</h2>
-                    <p className="text-sm text-slate-600">
-                      Primera herramienta: crear clientes con un formulario simple. Los registros se guardan en la
-                      colección clientes de Firestore.
-                    </p>
-                  </div>
-                  <div className="w-full md:w-96">
-                    <label className="text-sm font-semibold text-slate-700">Nuevo cliente</label>
-                    <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center">
-                      <input
-                        type="text"
-                        value={newClientName}
-                        onChange={(event) => setNewClientName(event.target.value)}
-                        className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none"
-                        placeholder="Nombre del cliente"
-                        disabled={clientSaving || clientsLoading}
-                      />
-                      <button
-                        type="button"
-                        onClick={handleCreateClient}
-                        disabled={clientSaving || !newClientName.trim()}
-                        className="inline-flex items-center justify-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-300"
-                      >
-                        {clientSaving ? "Creando..." : "Crear"}
-                      </button>
-                    </div>
-                    <p className="mt-1 text-xs text-slate-500">Formulario simple: solo nombre.</p>
-                  </div>
-                </div>
-
-                <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
-                  <div>
-                    <p className="text-sm font-semibold text-slate-800">Clientes creados</p>
-                    <p className="text-xs text-slate-500">Colección: clientes</p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
-                      Total: {clients.length}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={fetchClients}
-                      disabled={clientsLoading || clientSaving}
-                      className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:bg-slate-200"
-                    >
-                      {clientsLoading ? "Actualizando..." : "Refrescar"}
-                    </button>
-                  </div>
-                </div>
-
-                <div className="mt-4 grid gap-3">
-                  {clientsLoading && !clients.length ? (
-                    <div className="grid gap-2">
-                      {[1, 2, 3].map((item) => (
-                        <div key={item} className="h-12 animate-pulse rounded-xl bg-slate-100" />
-                      ))}
-                    </div>
-                  ) : clients.length ? (
-                    clients.map((client) => {
-                      const shortId =
-                        client.id.length > 14
-                          ? `${client.id.slice(0, 8)}...${client.id.slice(-4)}`
-                          : client.id;
-                      return (
-                        <div
-                          key={client.id}
-                          className="flex flex-col gap-2 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 shadow-sm sm:flex-row sm:items-center sm:justify-between"
-                        >
-                          <div>
-                            <p className="text-sm font-semibold text-slate-900">{client.name}</p>
-                            <p className="text-xs text-slate-500">
-                              {client.createdAt ? `Creado ${client.createdAt}` : "Creado"}
-                            </p>
-                          </div>
-                          <span className="inline-flex items-center rounded-full border border-slate-200 bg-white px-3 py-1 text-[11px] font-semibold text-slate-600">
-                            ID: {shortId}
-                          </span>
-                        </div>
-                      );
-                    })
-                  ) : (
-                    <p className="text-sm text-slate-600">Aún no hay clientes creados.</p>
-                  )}
-                </div>
-              </section>
-            ) : null}
-
-            {activeTab === "ingresos" ? (
-              <IngresosSection
-                isCustodio={isCustodio}
-                canUseIngresoForm={canUseIngresoForm}
-                inboundBoxes={isCliente ? inboundClient : inboundBoxes}
-                outboundBoxes={isCliente ? outboundClient : outboundBoxes}
-                ingresoPosition={ingresoPosition}
-                ingresoName={ingresoName}
-                ingresoTemp={ingresoTemp}
-                ingresoClient={ingresoClient}
-                setIngresoName={setIngresoName}
-                setIngresoTemp={setIngresoTemp}
-                setIngresoClient={setIngresoClient}
-                handleIngreso={handleIngreso}
-                sortByPosition={sortByPosition}
-                handleDispatchBox={handleDispatchBox}
-                isCliente={isCliente}
-                clientFilterId={clientFilterId}
-                clientCatalog={clients.map((client) => client.name)}
-                onClientChange={setClientFilterId}
-              />
-            ) : null}
-
-            {(activeTab === "ordenes" || isJefe) && canUseOrderForm ? (
-              <OrdenesJefeSection
-                isJefe={isJefe}
-                inboundBoxes={inboundBoxes}
-                outboundBoxes={outboundBoxes}
-                slots={slots}
-                selectedBoxModal={selectedBoxModal}
-                setSelectedBoxModal={setSelectedBoxModal}
-                editTempModal={editTempModal}
-                setEditTempModal={setEditTempModal}
-                handleUpdateBoxTemperature={handleUpdateBoxTemperature}
-                availableInboundForOrders={availableInboundForOrders}
-                ingresoOrderSourcePosition={ingresoOrderSourcePosition}
-                setIngresoOrderSourcePosition={setIngresoOrderSourcePosition}
-                availableBodegaTargets={availableBodegaTargets}
-                ingresoOrderTargetPosition={ingresoOrderTargetPosition}
-                setIngresoOrderTargetPosition={setIngresoOrderTargetPosition}
-                sortByPosition={sortByPosition}
-                handleCreateOrder={handleCreateOrder}
-                bodegaOrderSourcePosition={bodegaOrderSourcePosition}
-                setBodegaOrderSourcePosition={setBodegaOrderSourcePosition}
-                availableBodegaForOrders={availableBodegaForOrders}
-                bodegaOrderTargetPosition={bodegaOrderTargetPosition}
-                setBodegaOrderTargetPosition={setBodegaOrderTargetPosition}
-                reviewSourcePosition={reviewSourcePosition}
-                setReviewSourcePosition={setReviewSourcePosition}
-                reviewBodegaList={reviewBodegaList}
-                handleCreateReviewOrder={handleCreateReviewOrder}
-                salidaSourcePosition={salidaSourcePosition}
-                setSalidaSourcePosition={setSalidaSourcePosition}
-                salidaTargetPosition={salidaTargetPosition}
-                handleCreateOrderSalida={handleCreateOrder}
-                orderModalType={orderModalType}
-                setOrderModalType={setOrderModalType}
-                llamadasJefe={llamadasJefe}
-                onUpdateLlamadasJefe={setLlamadasJefe}
-              />
-            ) : null}
-
-            {activeTab === "actividades" && isAdmin ? (
-              <section className="grid gap-4 lg:grid-cols-2">
-                <div className="rounded-2xl bg-white p-6 shadow-sm">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div>
-                      <h2 className="text-lg font-semibold text-slate-900">Gestion de alertas</h2>
-                      <p className="mt-1 text-sm text-slate-600">Solo lectura para el administrador.</p>
-                    </div>
-                    <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
-                      Total: {alerts.length}
-                    </span>
-                  </div>
-                  <div className="mt-4 grid gap-3">
-                    {alerts.length === 0 ? (
-                      <p className="text-sm text-slate-500">No hay alertas activas.</p>
-                    ) : (
-                      alerts.map((alert) => (
-                        <div
-                          key={alert.id}
-                          className="rounded-xl border border-slate-200 bg-slate-50 p-4"
-                        >
-                          <div className="flex flex-wrap items-start justify-between gap-3">
-                            <div>
-                              <p className="text-sm font-semibold text-slate-900">{alert.title}</p>
-                              <p className="mt-1 text-sm text-slate-600">{alert.description}</p>
-                              {alert.reason ? (
-                                <p className="mt-2 text-xs font-semibold text-slate-500">
-                                  No gestionada: {ALERT_REASONS.find((r) => r.value === alert.reason)?.label}
-                                </p>
-                              ) : null}
-                            </div>
-                            {canManageAlerts ? (
-                              <div className="flex flex-wrap items-center gap-2">
-                                {assignedAlertIds.has(alert.id) ? (
-                                  <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-800">
-                                    Asignada al operario
-                                  </span>
-                                ) : null}
-                                <button
-                                  type="button"
-                                  onClick={() => handleAssignAlert(alert)}
-                                  disabled={assignedAlertIds.has(alert.id) || getAlertKind(alert) === "otro"}
-                                  className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:bg-slate-300"
-                                >
-                                  Asignar a operario
-                                </button>
-                              </div>
-                            ) : null}
-                          </div>
-                        </div>
-                      ))
+        {!isJefe && tabs.length > 1 ? (
+          <section className="rounded-2xl bg-linear-to-r from-slate-50 to-white border border-slate-200 p-3 shadow-sm">
+            <div className="flex flex-wrap gap-2">
+              {tabs.map((tab) => {
+                let icon = null;
+                if (tab.key === "estado") icon = <span className="mr-2"><AiTwotoneAppstore /></span>;
+                if (tab.key === "ingresos") icon = <span className="mr-2">📦</span>;
+                if (tab.key === "ordenes") icon = <span className="mr-2">📝</span>;
+                if (tab.key === "solicitudes") icon = <span className="mr-2">⏳</span>;
+                if (tab.key === "reportes") icon = <span className="mr-2"><SlGraph /></span>;
+                // Puedes cambiar los iconos por react-icons si prefieres
+                return (
+                  <button
+                    key={tab.key}
+                    type="button"
+                    onClick={() => setActiveTab(tab.key as typeof activeTab)}
+                    className={`relative flex items-center gap-1 rounded-xl px-4 py-2 text-sm font-semibold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 ${
+                      activeTab === tab.key
+                        ? "bg-slate-900 text-white shadow-md scale-105"
+                        : "bg-slate-100 text-slate-700 hover:bg-slate-200"
+                    }`}
+                    style={{ minWidth: 120 }}
+                  >
+                    {icon}
+                    <span>{tab.label}</span>
+                    {activeTab === tab.key && (
+                      <span className="absolute left-2 right-2 -bottom-1 h-1 rounded-b-xl bg-emerald-400/80 animate-fadeIn" />
                     )}
-                  </div>
-                </div>
+                  </button>
+                );
+              })}
+            </div>
+          </section>
+        ) : null}
 
-                <div className="rounded-2xl bg-white p-6 shadow-sm">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div>
-                      <h2 className="text-lg font-semibold text-slate-900">Solicitudes pendientes</h2>
-                      <p className="mt-1 text-sm text-slate-600">Vista consolidada para el administrador.</p>
+        {activeTab === "estado" && canSeeBodega ? (
+          <EstadoBodegaSection
+            inboundBoxes={inboundBoxes}
+            slots={slots}
+            selectedPosition={selectedPosition}
+            handleSelectSlot={handleSelectSlot}
+            renderStatusButtons={renderStatusButtons}
+            selectedSlot={selectedSlot}
+            setSelectedPosition={setSelectedPosition}
+            outboundBoxes={outboundBoxes}
+            sortByPosition={sortByPosition}
+          />
+        ) : null}
+
+        {activeTab === "ingresos" ? (
+          <IngresosSection
+            isCustodio={isCustodio}
+            canUseIngresoForm={canUseIngresoForm}
+            inboundBoxes={isCliente ? inboundClient : inboundBoxes}
+            outboundBoxes={isCliente ? outboundClient : outboundBoxes}
+            ingresoPosition={ingresoPosition}
+            ingresoName={ingresoName}
+            ingresoTemp={ingresoTemp}
+            ingresoClient={ingresoClient}
+            setIngresoName={setIngresoName}
+            setIngresoTemp={setIngresoTemp}
+            setIngresoClient={setIngresoClient}
+            handleIngreso={handleIngreso}
+            sortByPosition={sortByPosition}
+            handleDispatchBox={handleDispatchBox}
+            isCliente={isCliente}
+            clientFilterId={clientFilterId}
+            onClientChange={setClientFilterId}
+          />
+        ) : null}
+
+        {(activeTab === "ordenes" || isJefe) && canUseOrderForm ? (
+          <OrdenesJefeSection
+            isJefe={isJefe}
+            inboundBoxes={inboundBoxes}
+            outboundBoxes={outboundBoxes}
+            slots={slots}
+            selectedBoxModal={selectedBoxModal}
+            setSelectedBoxModal={setSelectedBoxModal}
+            editTempModal={editTempModal}
+            setEditTempModal={setEditTempModal}
+            handleUpdateBoxTemperature={handleUpdateBoxTemperature}
+            availableInboundForOrders={availableInboundForOrders}
+            ingresoOrderSourcePosition={ingresoOrderSourcePosition}
+            setIngresoOrderSourcePosition={setIngresoOrderSourcePosition}
+            availableBodegaTargets={availableBodegaTargets}
+            ingresoOrderTargetPosition={ingresoOrderTargetPosition}
+            setIngresoOrderTargetPosition={setIngresoOrderTargetPosition}
+            sortByPosition={sortByPosition}
+            handleCreateOrder={handleCreateOrder}
+            bodegaOrderSourcePosition={bodegaOrderSourcePosition}
+            setBodegaOrderSourcePosition={setBodegaOrderSourcePosition}
+            availableBodegaForOrders={availableBodegaForOrders}
+            bodegaOrderTargetPosition={bodegaOrderTargetPosition}
+            setBodegaOrderTargetPosition={setBodegaOrderTargetPosition}
+            reviewSourcePosition={reviewSourcePosition}
+            setReviewSourcePosition={setReviewSourcePosition}
+            reviewBodegaList={reviewBodegaList}
+            handleCreateReviewOrder={handleCreateReviewOrder}
+            salidaSourcePosition={salidaSourcePosition}
+            setSalidaSourcePosition={setSalidaSourcePosition}
+            salidaTargetPosition={salidaTargetPosition}
+            handleCreateOrderSalida={handleCreateOrder}
+            orderModalType={orderModalType}
+            setOrderModalType={setOrderModalType}
+          />
+        ) : null}
+
+        {activeTab === "actividades" && isAdmin ? (
+          <section className="grid gap-4 lg:grid-cols-2">
+            <div className="rounded-2xl bg-white p-6 shadow-sm">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <h2 className="text-lg font-semibold text-slate-900">
+                    Gestion de alertas
+                  </h2>
+                  <p className="mt-1 text-sm text-slate-600">
+                    Solo lectura para el administrador.
+                  </p>
+                </div>
+                <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
+                  Total: {alerts.length}
+                </span>
+              </div>
+              <div className="mt-4 grid gap-3">
+                {alerts.length === 0 ? (
+                  <p className="text-sm text-slate-500">
+                    No hay alertas activas.
+                  </p>
+                ) : (
+                  alerts.map((alert) => (
+                    <div
+                      key={alert.id}
+                      className="rounded-xl border border-slate-200 bg-slate-50 p-4"
+                    >
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                          <p className="text-sm font-semibold text-slate-900">
+                            {alert.title}
+                          </p>
+                          <p className="mt-1 text-sm text-slate-600">
+                            {alert.description}
+                          </p>
+                          {alert.reason ? (
+                            <p className="mt-2 text-xs font-semibold text-slate-500">
+                              No gestionada:{" "}
+                              {
+                                ALERT_REASONS.find(
+                                  (r) => r.value === alert.reason,
+                                )?.label
+                              }
+                            </p>
+                          ) : null}
+                        </div>
+                        {canManageAlerts ? (
+                          <div className="flex flex-wrap items-center gap-2">
+                            {assignedAlertIds.has(alert.id) ? (
+                              <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-800">
+                                Asignada al operario
+                              </span>
+                            ) : null}
+                            <button
+                              type="button"
+                              onClick={() => handleAssignAlert(alert)}
+                              disabled={
+                                assignedAlertIds.has(alert.id) ||
+                                getAlertKind(alert) === "otro"
+                              }
+                              className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:bg-slate-300"
+                            >
+                              Asignar a operario
+                            </button>
+                          </div>
+                        ) : null}
+                      </div>
                     </div>
-                    <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
-                      Total: {orders.length}
-                    </span>
-                  </div>
-                  <div className="mt-4">
-                    <RequestsQueue
-                      requests={orders}
-                      canExecute={false}
-                      onExecute={() => undefined}
-                      onReport={() => undefined}
-                      slots={slots}
-                      inboundBoxes={inboundBoxes}
-                      outboundBoxes={outboundBoxes}
-                      alertasOperario={alertasOperario}
-                      alertasOperarioSolved={alertasOperarioSolved}
-                      llamadasJefe={llamadasJefe}
-                      onUpdateAlertasOperario={setAlertasOperario}
-                      onUpdateAlertasOperarioSolved={setAlertasOperarioSolved}
-                      onUpdateLlamadasJefe={setLlamadasJefe}
-                    />
-                  </div>
-                </div>
-              </section>
-            ) : null}
+                  ))
+                )}
+              </div>
+            </div>
 
-            {activeTab === "solicitudes" && isOperario ? (
-              <section className="grid gap-4">
+            <div className="rounded-2xl bg-white p-6 shadow-sm">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <h2 className="text-lg font-semibold text-slate-900">
+                    Solicitudes pendientes
+                  </h2>
+                  <p className="mt-1 text-sm text-slate-600">
+                    Vista consolidada para el administrador.
+                  </p>
+                </div>
+                <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
+                  Total: {orders.length}
+                </span>
+              </div>
+              <div className="mt-4">
                 <RequestsQueue
                   requests={orders}
-                  canExecute
-                  onExecute={executeOrder}
-                  onReport={handleReportOrder}
-                  slots={slots}
-                  inboundBoxes={inboundBoxes}
-                  outboundBoxes={outboundBoxes}
-                  alertasOperario={alertasOperario}
-                  alertasOperarioSolved={alertasOperarioSolved}
-                  llamadasJefe={llamadasJefe}
-                  onUpdateAlertasOperario={setAlertasOperario}
-                  onUpdateAlertasOperarioSolved={setAlertasOperarioSolved}
-                  onUpdateLlamadasJefe={setLlamadasJefe}
+                  canExecute={false}
+                  onExecute={() => undefined}
+                  onReport={() => undefined}
                 />
-              </section>
-            ) : null}
+              </div>
+            </div>
+          </section>
+        ) : null}
 
-            {activeTab === "despachados" && isAdmin ? (
-              <DespachadosSection dispatchedBoxes={dispatchedBoxes} sortByPosition={sortByPosition} />
-            ) : null}
+        {activeTab === "solicitudes" && isOperario ? (
+          <section className="grid gap-4">
+            <RequestsQueue
+              requests={orders}
+              canExecute
+              onExecute={executeOrder}
+              onReport={handleReportOrder}
+            />
+          </section>
+        ) : null}
 
-            {activeTab === "alertas" && (isAdmin || isJefe) ? (
-              <section className="grid gap-4">
-                <div className="rounded-2xl bg-white p-6 shadow-sm">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div>
-                      <h2 className="text-lg font-semibold text-slate-900">Gestion de alertas</h2>
-                      <p className="mt-1 text-sm text-slate-600">
-                        {canManageAlerts
-                          ? "Revisa y asigna las alertas al operario."
-                          : "Revisa las alertas activas (solo lectura)."}
-                      </p>
-                    </div>
-                    <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
-                      Total: {alerts.length}
-                    </span>
-                  </div>
-                  <div className="mt-4 grid gap-3">
-                    {alerts.length === 0 ? (
-                      <p className="text-sm text-slate-500">No hay alertas activas.</p>
-                    ) : (
-                      alerts.map((alert) => (
-                        <div
-                          key={alert.id}
-                          className="rounded-xl border border-slate-200 bg-slate-50 p-4"
-                        >
-                          <div className="flex flex-wrap items-start justify-between gap-3">
-                            <div>
-                              <p className="text-sm font-semibold text-slate-900">{alert.title}</p>
-                              <p className="mt-1 text-sm text-slate-600">{alert.description}</p>
-                              {alert.reason ? (
-                                <p className="mt-2 text-xs font-semibold text-slate-500">
-                                  No gestionada: {ALERT_REASONS.find((r) => r.value === alert.reason)?.label}
-                                </p>
-                              ) : null}
-                            </div>
-                            {canManageAlerts ? (
-                              <div className="flex flex-wrap items-center gap-2">
-                                {assignedAlertIds.has(alert.id) ? (
-                                  <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-800">
-                                    Asignada al operario
-                                  </span>
-                                ) : null}
-                                <button
-                                  type="button"
-                                  onClick={() => handleAssignAlert(alert)}
-                                  disabled={assignedAlertIds.has(alert.id) || getAlertKind(alert) === "otro"}
-                                  className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:bg-slate-300"
-                                >
-                                  Asignar a operario
-                                </button>
-                              </div>
-                            ) : null}
-                          </div>
-                        </div>
-                      ))
-                    )}
-                  </div>
+        {activeTab === "despachados" && isAdmin ? (
+          <DespachadosSection
+            dispatchedBoxes={dispatchedBoxes}
+            sortByPosition={sortByPosition}
+          />
+        ) : null}
+
+        {activeTab === "alertas" && (isAdmin || isJefe) ? (
+          <section className="grid gap-4">
+            <div className="rounded-2xl bg-white p-6 shadow-sm">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <h2 className="text-lg font-semibold text-slate-900">
+                    Gestion de alertas
+                  </h2>
+                  <p className="mt-1 text-sm text-slate-600">
+                    {canManageAlerts
+                      ? "Revisa y asigna las alertas al operario."
+                      : "Revisa las alertas activas (solo lectura)."}
+                  </p>
                 </div>
-              </section>
-            ) : null}
+                <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
+                  Total: {alerts.length}
+                </span>
+              </div>
+              <div className="mt-4 grid gap-3">
+                {alerts.length === 0 ? (
+                  <p className="text-sm text-slate-500">
+                    No hay alertas activas.
+                  </p>
+                ) : (
+                  alerts.map((alert) => (
+                    <div
+                      key={alert.id}
+                      className="rounded-xl border border-slate-200 bg-slate-50 p-4"
+                    >
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                          <p className="text-sm font-semibold text-slate-900">
+                            {alert.title}
+                          </p>
+                          <p className="mt-1 text-sm text-slate-600">
+                            {alert.description}
+                          </p>
+                          {alert.reason ? (
+                            <p className="mt-2 text-xs font-semibold text-slate-500">
+                              No gestionada:{" "}
+                              {
+                                ALERT_REASONS.find(
+                                  (r) => r.value === alert.reason,
+                                )?.label
+                              }
+                            </p>
+                          ) : null}
+                        </div>
+                        {canManageAlerts ? (
+                          <div className="flex flex-wrap items-center gap-2">
+                            {assignedAlertIds.has(alert.id) ? (
+                              <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-800">
+                                Asignada al operario
+                              </span>
+                            ) : null}
+                            <button
+                              type="button"
+                              onClick={() => handleAssignAlert(alert)}
+                              disabled={
+                                assignedAlertIds.has(alert.id) ||
+                                getAlertKind(alert) === "otro"
+                              }
+                              className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:bg-slate-300"
+                            >
+                              Asignar a operario
+                            </button>
+                          </div>
+                        ) : null}
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </section>
+        ) : null}
 
-            {activeTab === "reportes" && (isAdmin || isCliente) ? (
-              <ReportesSection
-                reportData={reportData}
-                inboundBoxes={isCliente ? inboundClient : inboundBoxes}
-                outboundBoxes={isCliente ? outboundClient : outboundBoxes}
-                dispatchedBoxes={isCliente ? dispatchedClient : dispatchedBoxes}
-                orders={isCliente ? ordersClient : orders}
-                slots={isCliente ? slotsClient : slots}
-                sortByPosition={sortByPosition}
-                reportDetailModal={reportDetailModal}
-                setReportDetailModal={setReportDetailModal}
-                isCliente={isCliente}
-                clientId={effectiveClientId ?? undefined}
-                clientFilterId={clientFilterId}
-                onClientChange={setClientFilterId}
-              />
-            ) : null}
-          </>
+        {activeTab === "reportes" && (isAdmin || isCliente) ? (
+          <ReportesSection
+            reportData={reportData}
+            inboundBoxes={isCliente ? inboundClient : inboundBoxes}
+            outboundBoxes={isCliente ? outboundClient : outboundBoxes}
+            dispatchedBoxes={isCliente ? dispatchedClient : dispatchedBoxes}
+            orders={isCliente ? ordersClient : orders}
+            slots={isCliente ? slotsClient : slots}
+            sortByPosition={sortByPosition}
+            reportDetailModal={reportDetailModal}
+            setReportDetailModal={setReportDetailModal}
+            isCliente={isCliente}
+            clientId={effectiveClientId ?? undefined}
+            clientFilterId={clientFilterId}
+            onClientChange={setClientFilterId}
+          />
         ) : null}
 
         {alertsPanelOpen ? (
@@ -2768,7 +2493,9 @@ export default function BodegaDashboard() {
                   <p className="text-xs font-semibold uppercase tracking-[0.25em] text-slate-400">
                     Alertas
                   </p>
-                  <h3 className="mt-2 text-2xl font-semibold text-slate-900">Alertas activas</h3>
+                  <h3 className="mt-2 text-2xl font-semibold text-slate-900">
+                    Alertas activas
+                  </h3>
                   <p className="mt-1 text-sm text-slate-600">
                     {canManageAlerts
                       ? "Revisa y gestiona las alertas activas."
@@ -2790,7 +2517,9 @@ export default function BodegaDashboard() {
               </div>
               <div className="mt-6 grid gap-3">
                 {alerts.length === 0 ? (
-                  <p className="text-sm text-slate-500">No hay alertas activas.</p>
+                  <p className="text-sm text-slate-500">
+                    No hay alertas activas.
+                  </p>
                 ) : (
                   <div
                     key={alerts[0].id}
@@ -2798,18 +2527,32 @@ export default function BodegaDashboard() {
                   >
                     <div className="flex flex-wrap items-start justify-between gap-3">
                       <div>
-                        <p className="text-sm font-semibold text-slate-900">{alerts[0].title}</p>
-                        <p className="mt-1 text-sm text-slate-600">{alerts[0].description}</p>
+                        <p className="text-sm font-semibold text-slate-900">
+                          {alerts[0].title}
+                        </p>
+                        <p className="mt-1 text-sm text-slate-600">
+                          {alerts[0].description}
+                        </p>
                         {alerts[0].reason ? (
                           <p className="mt-2 text-xs font-semibold text-slate-500">
-                            No gestionada: {ALERT_REASONS.find((r) => r.value === alerts[0].reason)?.label}
+                            No gestionada:{" "}
+                            {
+                              ALERT_REASONS.find(
+                                (r) => r.value === alerts[0].reason,
+                              )?.label
+                            }
                           </p>
                         ) : null}
                       </div>
+                      {/* Si es un reporte de fallo, mostrar botón Marchando */}
                       {alerts[0].id.startsWith(ALERT_REPORT_PREFIX) ? (
                         <button
                           type="button"
-                          onClick={() => setAlerts((prev) => prev.filter((a) => a.id !== alerts[0].id))}
+                          onClick={() =>
+                            setAlerts((prev) =>
+                              prev.filter((a) => a.id !== alerts[0].id),
+                            )
+                          }
                           className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-emerald-500"
                         >
                           Solucionado
@@ -2824,7 +2567,10 @@ export default function BodegaDashboard() {
                           <button
                             type="button"
                             onClick={() => handleAssignAlert(alerts[0])}
-                            disabled={assignedAlertIds.has(alerts[0].id) || getAlertKind(alerts[0]) === "otro"}
+                            disabled={
+                              assignedAlertIds.has(alerts[0].id) ||
+                              getAlertKind(alerts[0]) === "otro"
+                            }
                             className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:bg-slate-300"
                           >
                             Asignar a operario
@@ -2855,8 +2601,12 @@ export default function BodegaDashboard() {
                   <p className="text-xs font-semibold uppercase tracking-[0.25em] text-slate-400">
                     Alertas asignadas
                   </p>
-                  <h3 className="mt-2 text-2xl font-semibold text-slate-900">Tareas del jefe</h3>
-                  <p className="mt-1 text-sm text-slate-600">Ejecuta las alertas asignadas por el jefe.</p>
+                  <h3 className="mt-2 text-2xl font-semibold text-slate-900">
+                    Tareas del jefe
+                  </h3>
+                  <p className="mt-1 text-sm text-slate-600">
+                    Ejecuta las alertas asignadas por el jefe.
+                  </p>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
@@ -2873,7 +2623,9 @@ export default function BodegaDashboard() {
               </div>
               <div className="mt-6 grid gap-3">
                 {assignedAlertsForOperario.length === 0 ? (
-                  <p className="text-sm text-slate-500">No hay alertas asignadas.</p>
+                  <p className="text-sm text-slate-500">
+                    No hay alertas asignadas.
+                  </p>
                 ) : (
                   assignedAlertsForOperario.map(({ assignment, alert }) => (
                     <div
@@ -2882,10 +2634,15 @@ export default function BodegaDashboard() {
                     >
                       <div className="flex flex-wrap items-start justify-between gap-3">
                         <div>
-                          <p className="text-sm font-semibold text-slate-900">{alert.title}</p>
-                          <p className="mt-1 text-sm text-slate-600">{alert.description}</p>
+                          <p className="text-sm font-semibold text-slate-900">
+                            {alert.title}
+                          </p>
+                          <p className="mt-1 text-sm text-slate-600">
+                            {alert.description}
+                          </p>
                           <p className="mt-2 text-xs font-semibold text-slate-500">
-                            Asignada por {assignment.assignedBy} · {assignment.assignedAt}
+                            Asignada por {assignment.assignedBy} ·{" "}
+                            {assignment.assignedAt}
                           </p>
                         </div>
                         <div className="flex flex-wrap gap-2">
@@ -2894,7 +2651,9 @@ export default function BodegaDashboard() {
                             onClick={() => handleExecuteAssignedAlert(alert)}
                             className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-emerald-500"
                           >
-                            {assignment.kind === "reporte" ? "Reprogramar" : "Ejecutar"}
+                            {assignment.kind === "reporte"
+                              ? "Reprogramar"
+                              : "Ejecutar"}
                           </button>
                         </div>
                       </div>
@@ -2917,10 +2676,11 @@ export default function BodegaDashboard() {
               className="w-full max-w-lg sm:max-w-2xl rounded-3xl bg-white p-0 shadow-2xl border border-blue-100 relative overflow-hidden"
               onClick={(event) => event.stopPropagation()}
             >
+              {/* Header sticky con icono */}
               <div className="sticky top-0 z-10 flex items-center justify-between gap-3 bg-blue-50/80 px-6 py-4 border-b border-blue-100">
                 <div className="flex items-center gap-3">
-                  <span className={`inline-flex items-center justify-center w-10 h-10 rounded-full ${statusModal.kind === "alertas" ? "bg-red-100" : "bg-amber-100"}`}>
-                    {statusModal.kind === "alertas" ? (
+                  <span className={`inline-flex items-center justify-center w-10 h-10 rounded-full ${statusModal.kind === 'alertas' ? 'bg-red-100' : 'bg-amber-100'}`}>
+                    {statusModal.kind === 'alertas' ? (
                       <svg className="w-6 h-6 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
                     ) : (
                       <svg className="w-6 h-6 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17v-2a4 4 0 118 0v2M12 9v2m0 4h.01" /></svg>
@@ -2948,6 +2708,7 @@ export default function BodegaDashboard() {
                   Cerrar
                 </button>
               </div>
+              {/* Lista de items */}
               <div className="p-6 grid gap-4 max-h-[60vh] overflow-y-auto bg-white">
                 {(statusModal.kind === "alertas"
                   ? zoneAlertItems[statusModal.zone]
@@ -2967,10 +2728,16 @@ export default function BodegaDashboard() {
                       className="rounded-xl border border-slate-200 bg-slate-50 p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 shadow-sm hover:shadow-md transition"
                     >
                       <div className="flex-1 min-w-0">
-                        <p className="text-base font-semibold text-slate-900 truncate">{item.title}</p>
-                        <p className="mt-1 text-sm text-slate-600 truncate">{item.description}</p>
+                        <p className="text-base font-semibold text-slate-900 truncate">
+                          {item.title}
+                        </p>
+                        <p className="mt-1 text-sm text-slate-600 truncate">
+                          {item.description}
+                        </p>
                         {item.meta ? (
-                          <p className="mt-2 text-xs font-semibold text-slate-500">{item.meta}</p>
+                          <p className="mt-2 text-xs font-semibold text-slate-500">
+                            {item.meta}
+                          </p>
                         ) : null}
                       </div>
                     </div>
@@ -2997,8 +2764,12 @@ export default function BodegaDashboard() {
                   <p className="text-xs font-semibold uppercase tracking-[0.25em] text-slate-400">
                     Solucionar alerta
                   </p>
-                  <h3 className="mt-2 text-2xl font-semibold text-slate-900">{resolveModalAlert.title}</h3>
-                  <p className="mt-1 text-sm text-slate-600">{resolveModalAlert.description}</p>
+                  <h3 className="mt-2 text-2xl font-semibold text-slate-900">
+                    {resolveModalAlert.title}
+                  </h3>
+                  <p className="mt-1 text-sm text-slate-600">
+                    {resolveModalAlert.description}
+                  </p>
                 </div>
                 <button
                   type="button"
@@ -3013,11 +2784,14 @@ export default function BodegaDashboard() {
                 {isTemperatureAlert(resolveModalAlert.id) ? (
                   <>
                     <div>
-                      <label className="text-sm font-medium text-slate-600">Caja con temperatura alta</label>
+                      <label className="text-sm font-medium text-slate-600">
+                        Caja con temperatura alta
+                      </label>
                       <select
                         value={`${tempFixZone}:${tempFixPosition}`}
                         onChange={(event) => {
-                          const [zone, position] = event.target.value.split(":");
+                          const [zone, position] =
+                            event.target.value.split(":");
                           setTempFixZone(zone as OrderSource);
                           setTempFixPosition(Number(position));
                         }}
@@ -3027,7 +2801,10 @@ export default function BodegaDashboard() {
                           <option value="ingresos:1">Sin cajas</option>
                         ) : (
                           tempFixOptions.map((option) => (
-                            <option key={`${option.zone}-${option.position}`} value={`${option.zone}:${option.position}`}>
+                            <option
+                              key={`${option.zone}-${option.position}`}
+                              value={`${option.zone}:${option.position}`}
+                            >
                               {option.label}
                             </option>
                           ))
@@ -3035,10 +2812,14 @@ export default function BodegaDashboard() {
                       </select>
                     </div>
                     <div>
-                      <label className="text-sm font-medium text-slate-600">Nueva temperatura (°C)</label>
+                      <label className="text-sm font-medium text-slate-600">
+                        Nueva temperatura (°C)
+                      </label>
                       <input
                         value={tempFixValue}
-                        onChange={(event) => setTempFixValue(event.target.value)}
+                        onChange={(event) =>
+                          setTempFixValue(event.target.value)
+                        }
                         type="number"
                         className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
                         placeholder="Ej: -5"

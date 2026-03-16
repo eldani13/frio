@@ -15,6 +15,8 @@ export default function Header({
   totalSlots,
   dateLabel,
   warehouseId,
+  warehouses,
+  onSelectWarehouse,
   canSearch,
   searchValue,
   onSearchChange,
@@ -24,6 +26,8 @@ export default function Header({
   role,
 }: ExtendedHeaderProps) {
   const [menuOpen, setMenuOpen] = useState(false);
+  const canSelectWarehouse =
+    role === "administrador" && Array.isArray(warehouses) && warehouses.length > 0 && onSelectWarehouse;
 
   return (
     <header className="w-full bg-white rounded-xl shadow-sm border border-slate-200 px-4 py-2">
@@ -34,9 +38,25 @@ export default function Header({
 
         {/* Centro: meta */}
         <div className="flex items-center gap-6 text-sm">
-          <div>
+          <div className="flex flex-col gap-1">
             <span className="text-xs text-slate-500">ID Bodega</span>
-            <div className="font-semibold">{warehouseId}</div>
+            {canSelectWarehouse ? (
+              <div className="flex items-center gap-2">
+                <select
+                  className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm shadow-sm focus:border-emerald-500 focus:outline-none"
+                  value={warehouseId}
+                  onChange={(event) => onSelectWarehouse?.(event.target.value)}
+                >
+                  {warehouses?.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.name ? `${item.name} (${item.id})` : item.id}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            ) : (
+              <div className="font-semibold">{warehouseId ?? "--"}</div>
+            )}
           </div>
           <div>
             <span className="text-xs text-slate-500">Fecha</span>
@@ -93,9 +113,25 @@ export default function Header({
       {menuOpen && (
         <div className="md:hidden mt-4 border-t pt-4 flex flex-col gap-4">
           <div className="flex gap-6 text-sm">
-            <div>
+            <div className="flex flex-col gap-1">
               <span className="text-xs text-slate-500">ID Bodega</span>
-              <div className="font-semibold">{warehouseId}</div>
+              {canSelectWarehouse ? (
+                <div className="flex items-center gap-2">
+                  <select
+                    className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm shadow-sm focus:border-emerald-500 focus:outline-none"
+                    value={warehouseId}
+                    onChange={(event) => onSelectWarehouse?.(event.target.value)}
+                  >
+                    {warehouses?.map((item) => (
+                      <option key={item.id} value={item.id}>
+                        {item.name ? `${item.name} (${item.id})` : item.id}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              ) : (
+                <div className="font-semibold">{warehouseId ?? "--"}</div>
+              )}
             </div>
             <div>
               <span className="text-xs text-slate-500">Fecha</span>
