@@ -2426,6 +2426,15 @@ export default function BodegaDashboard() {
                   canExecute={false}
                   onExecute={() => undefined}
                   onReport={() => undefined}
+                  slots={slots}
+                  inboundBoxes={inboundBoxes}
+                  outboundBoxes={outboundBoxes}
+                  alertasOperario={alertasOperario}
+                  alertasOperarioSolved={alertasOperarioSolved}
+                  llamadasJefe={llamadasJefe}
+                  onUpdateAlertasOperario={setAlertasOperario}
+                  onUpdateAlertasOperarioSolved={setAlertasOperarioSolved}
+                  onUpdateLlamadasJefe={setLlamadasJefe}
                 />
               </div>
             </div>
@@ -2439,6 +2448,15 @@ export default function BodegaDashboard() {
               canExecute
               onExecute={executeOrder}
               onReport={handleReportOrder}
+              slots={slots}
+              inboundBoxes={inboundBoxes}
+              outboundBoxes={outboundBoxes}
+              alertasOperario={alertasOperario}
+              alertasOperarioSolved={alertasOperarioSolved}
+              llamadasJefe={llamadasJefe}
+              onUpdateAlertasOperario={setAlertasOperario}
+              onUpdateAlertasOperarioSolved={setAlertasOperarioSolved}
+              onUpdateLlamadasJefe={setLlamadasJefe}
             />
           </section>
         ) : null}
