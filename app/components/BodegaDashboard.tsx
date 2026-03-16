@@ -1868,6 +1868,48 @@ export default function BodegaDashboard() {
     setMessage(`Caja en salida ${position} enviada.`);
   };
 
+  const createReturnOrder = useCallback(
+    (box: Box, targetPosition: number): string | null => {
+      if (!targetPosition || !availableBodegaTargets.includes(targetPosition)) {
+        return "Selecciona una posición libre en bodega.";
+      }
+
+      const targetSlot = slots.find((item) => item.position === targetPosition);
+      if (!targetSlot || targetSlot.autoId.trim()) {
+        return "La posición de bodega ya está ocupada.";
+      }
+
+      const pending = orders.some(
+        (order) =>
+          order.type === "a_bodega" &&
+          order.sourceZone === "salida" &&
+          Number(order.sourcePosition) === Number(box.position),
+      );
+      if (pending) {
+        return "Ya existe una tarea para esta caja.";
+      }
+
+      const newOrder: BodegaOrder = {
+        id: createOrderId(),
+        type: "a_bodega",
+        sourcePosition: box.position,
+        sourceZone: "salida",
+        targetPosition,
+        createdAt: new Date().toLocaleString("es-CO"),
+        createdAtMs: Date.now(),
+        createdBy: role,
+        client: box.client,
+        autoId: box.autoId,
+        boxName: box.name,
+      };
+
+      setOrders((prev) => [newOrder, ...prev]);
+      setMessage("Se creó una tarea para devolver la caja a bodega.");
+      return null;
+    },
+    [availableBodegaTargets, orders, role, slots],
+  );
+
   const handleReportOrder = (orderId: string) => {
     if (role !== "operario") {
       setMessage("Solo el operario puede reportar fallos.");
@@ -2503,6 +2545,8 @@ export default function BodegaDashboard() {
               <IngresosSection
                 isCustodio={isCustodio}
                 canUseIngresoForm={canUseIngresoForm}
+                slots={slots}
+                orders={orders}
                 inboundBoxes={isCliente ? inboundClient : inboundBoxes}
                 outboundBoxes={isCliente ? outboundClient : outboundBoxes}
                 ingresoPosition={ingresoPosition}
@@ -2513,8 +2557,10 @@ export default function BodegaDashboard() {
                 setIngresoTemp={setIngresoTemp}
                 setIngresoClient={setIngresoClient}
                 handleIngreso={handleIngreso}
+                createReturnOrder={createReturnOrder}
                 sortByPosition={sortByPosition}
                 handleDispatchBox={handleDispatchBox}
+                availableBodegaTargets={availableBodegaTargets}
                 isCliente={isCliente}
                 clientFilterId={clientFilterId}
                 clientCatalog={clients.map((client) => client.name)}
