@@ -91,6 +91,7 @@ import type {
   OrderType,
   Role,
   Slot,
+  WarehouseMeta,
 } from "./app/interfaces/bodega";
 import SelectedSlotCard from "./app/components/bodega/SelectedSlotCard";
 import WarehouseSelector from "./app/components/bodega/WarehouseSelector";
@@ -468,6 +469,7 @@ export default function BodegaDashboard() {
   const [message, setMessage] = useState<string>("");
   const [warehouseId, setWarehouseId] = useState<string>("");
   const [warehouseName, setWarehouseName] = useState<string>("");
+  const [warehouses, setWarehouses] = useState<WarehouseMeta[]>([]);
   const [inboundBoxes, setInboundBoxes] = useState<Box[]>([]);
   const [outboundBoxes, setOutboundBoxes] = useState<Box[]>([]);
   const [dispatchedBoxes, setDispatchedBoxes] = useState<Box[]>([]);
