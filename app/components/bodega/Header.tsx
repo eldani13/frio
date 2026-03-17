@@ -34,115 +34,24 @@ export default function Header({
     onSelectWarehouse;
 
   return (
-    <header className="w-full bg-white rounded-xl shadow-sm border border-slate-200 px-4 py-2">
+    <header className="w-full bg-white shadow-md border-b border-slate-200">
+      <div className="max-w-7xl mx-auto px-4 py-3">
 
-      {/* ===== HEADER DESKTOP ===== */}
-      <div className="hidden md:flex items-center justify-between gap-6">
+        {/* ===== DESKTOP ===== */}
+        <div className="hidden md:flex items-center justify-between">
 
-        {/* IZQUIERDA */}
-        <div className="flex items-center gap-6 text-sm">
+          {/* LEFT SECTION */}
+          <div className="flex items-center gap-8">
 
-          {/* ID BODEGA */}
-          <div className="flex flex-col gap-1">
-            <span className="text-xs text-slate-500">ID Bodega</span>
-
-            {canSelectWarehouse ? (
-              <select
-                className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm shadow-sm focus:border-emerald-500 focus:outline-none"
-                value={warehouseId}
-                onChange={(event) =>
-                  onSelectWarehouse?.(event.target.value)
-                }
-              >
-                {warehouses?.map((item) => (
-                  <option key={item.id} value={item.id}>
-                    {item.name ? `${item.name} (${item.id})` : item.id}
-                  </option>
-                ))}
-              </select>
-            ) : (
-              <div className="font-semibold">{warehouseId ?? "--"}</div>
-            )}
-          </div>
-
-          {/* FECHA */}
-          <div>
-            <span className="text-xs text-slate-500">Fecha</span>
-            <div className="font-semibold">{dateLabel}</div>
-          </div>
-
-          {/* BOTÓN VOLVER */}
-          <button
-            type="button"
-            onClick={() => onGoMenu?.()}
-            className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
-          >
-            Volver al menú
-          </button>
-
-        </div>
-
-        {/* DERECHA */}
-        <div className="flex items-center gap-3">
-
-          {canSearch &&
-            searchValue !== undefined &&
-            onSearchChange &&
-            onSearchSubmit && (
-              <div className="w-56">
-                <SearchForm
-                  value={searchValue}
-                  onChange={onSearchChange}
-                  onSubmit={onSearchSubmit}
-                />
-              </div>
-            )}
-
-          <div className="mx-2 h-8 w-px bg-slate-200" />
-
-          {userDisplayName && (
-            <span className="bg-slate-100 px-3 py-1.5 rounded text-sm font-semibold">
-              {userDisplayName}
-            </span>
-          )}
-
-          {onLogout && (
-            <button
-              onClick={onLogout}
-              className="bg-red-500 hover:bg-red-600 text-white px-3 py-1.5 rounded flex items-center gap-2 text-sm"
-            >
-              <FiLogOut className="w-4 h-4" />
-              Cerrar sesión
-            </button>
-          )}
-
-        </div>
-      </div>
-
-      {/* ===== HEADER MÓVIL ===== */}
-      <div className="md:hidden flex items-center justify-between">
-
-        <button
-          onClick={() => setMenuOpen(!menuOpen)}
-          className="p-2 rounded-lg hover:bg-slate-100"
-        >
-          {menuOpen ? <FiX size={20} /> : <FiMenu size={20} />}
-        </button>
-
-      </div>
-
-      {/* ===== MENÚ MÓVIL ===== */}
-      {menuOpen && (
-        <div className="md:hidden mt-4 border-t pt-4 flex flex-col gap-4">
-
-          <div className="flex gap-6 text-sm">
-
-            <div className="flex flex-col gap-1">
-              <span className="text-xs text-slate-500">ID Bodega</span>
+            {/* Warehouse */}
+            <div className="flex flex-col">
+              <span className="text-xs text-slate-400 uppercase tracking-wide">
+                Bodega
+              </span>
 
               {canSelectWarehouse ? (
                 <select
-                  className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm shadow-sm focus:border-emerald-500 focus:outline-none"
+                  className="mt-1 rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium shadow-sm focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 outline-none"
                   value={warehouseId}
                   onChange={(event) =>
                     onSelectWarehouse?.(event.target.value)
@@ -155,55 +64,171 @@ export default function Header({
                   ))}
                 </select>
               ) : (
-                <div className="font-semibold">{warehouseId ?? "--"}</div>
+                <div className="font-semibold text-slate-700 mt-1">
+                  {warehouseId ?? "--"}
+                </div>
               )}
             </div>
 
-            <div>
-              <span className="text-xs text-slate-500">Fecha</span>
-              <div className="font-semibold">{dateLabel}</div>
+            {/* Date */}
+            <div className="flex flex-col">
+              <span className="text-xs text-slate-400 uppercase tracking-wide">
+                Fecha
+              </span>
+              <span className="font-semibold text-slate-700 mt-1">
+                {dateLabel}
+              </span>
             </div>
+
+            {/* Menu button */}
+            <button
+              type="button"
+              onClick={() => onGoMenu?.()}
+              className="ml-4 flex items-center gap-2 px-4 py-2 rounded-lg bg-slate-100 hover:bg-slate-200 text-sm font-semibold text-slate-700 transition"
+            >
+              <span className="text-base">🏠</span>
+              Menú
+            </button>
 
           </div>
 
-          {/* BOTÓN VOLVER EN MÓVIL */}
-          <button
-            onClick={() => onGoMenu?.()}
-            className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700"
-          >
-            Volver al menú
-          </button>
+          {/* RIGHT SECTION */}
+          <div className="flex items-center gap-3 flex-nowrap">
 
-          {canSearch &&
-            searchValue !== undefined &&
-            onSearchChange &&
-            onSearchSubmit && (
-              <SearchForm
-                value={searchValue}
-                onChange={onSearchChange}
-                onSubmit={onSearchSubmit}
-              />
+            {canSearch &&
+              searchValue !== undefined &&
+              onSearchChange &&
+              onSearchSubmit && (
+                <div className="w-60 bg-slate-50 rounded-lg px-2 py-1 border border-slate-200">
+                  <SearchForm
+                    value={searchValue}
+                    onChange={onSearchChange}
+                    onSubmit={onSearchSubmit}
+                  />
+                </div>
+              )}
+
+            <div className="h-8 w-px bg-slate-200" />
+
+            {/* USER */}
+            {userDisplayName && (
+              <div className="flex items-center gap-2 whitespace-nowrap">
+
+                <div className="w-8 h-8 rounded-full bg-emerald-500 flex items-center justify-center text-white text-xs font-bold">
+                  {userDisplayName.charAt(0).toUpperCase()}
+                </div>
+
+                <span className="font-medium text-slate-700 text-sm">
+                  {userDisplayName}
+                </span>
+
+              </div>
             )}
 
-          {userDisplayName && (
-            <span className="bg-slate-100 px-3 py-2 rounded font-semibold text-sm">
-              {userDisplayName}
-            </span>
-          )}
+            {/* LOGOUT */}
+            {onLogout && (
+              <button
+                onClick={onLogout}
+                className="flex items-center gap-2 bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition whitespace-nowrap"
+              >
+                <FiLogOut size={16} />
+                Cerrar sesión
+              </button>
+            )}
 
-          {onLogout && (
-            <button
-              onClick={onLogout}
-              className="bg-red-500 text-white px-4 py-2 rounded flex items-center gap-2"
-            >
-              <FiLogOut />
-              Cerrar sesión
-            </button>
+          </div>
+
+        </div>
+
+        {/* ===== MOBILE HEADER ===== */}
+        <div className="md:hidden flex items-center justify-between">
+
+          <button
+            onClick={() => setMenuOpen(!menuOpen)}
+            className="p-2 rounded-lg hover:bg-slate-100"
+          >
+            {menuOpen ? <FiX size={22} /> : <FiMenu size={22} />}
+          </button>
+
+          {userDisplayName && (
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 rounded-full bg-emerald-500 flex items-center justify-center text-white text-sm font-bold">
+                {userDisplayName.charAt(0).toUpperCase()}
+              </div>
+            </div>
           )}
 
         </div>
-      )}
 
+        {/* ===== MOBILE MENU ===== */}
+        {menuOpen && (
+          <div className="md:hidden mt-4 pt-4 border-t flex flex-col gap-4">
+
+            {/* Warehouse */}
+            <div className="flex flex-col">
+              <span className="text-xs text-slate-400 uppercase">Bodega</span>
+
+              {canSelectWarehouse ? (
+                <select
+                  className="rounded-lg border border-slate-300 px-3 py-2 mt-1"
+                  value={warehouseId}
+                  onChange={(event) =>
+                    onSelectWarehouse?.(event.target.value)
+                  }
+                >
+                  {warehouses?.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.name ? `${item.name} (${item.id})` : item.id}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <div className="font-semibold mt-1">
+                  {warehouseId ?? "--"}
+                </div>
+              )}
+            </div>
+
+            {/* Date */}
+            <div>
+              <span className="text-xs text-slate-400 uppercase">Fecha</span>
+              <div className="font-semibold">{dateLabel}</div>
+            </div>
+
+            {/* Mobile Menu Button */}
+            <button
+              onClick={() => onGoMenu?.()}
+              className="flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-slate-100 hover:bg-slate-200 font-medium transition"
+            >
+              <span className="text-base">🏠</span>
+              Volver al menú
+            </button>
+
+            {canSearch &&
+              searchValue !== undefined &&
+              onSearchChange &&
+              onSearchSubmit && (
+                <SearchForm
+                  value={searchValue}
+                  onChange={onSearchChange}
+                  onSubmit={onSearchSubmit}
+                />
+              )}
+
+            {onLogout && (
+              <button
+                onClick={onLogout}
+                className="flex items-center justify-center gap-2 border border-red-200 text-red-600 hover:bg-red-50 py-2 rounded-lg transition"
+              >
+                <FiLogOut size={16} />
+                Cerrar sesión
+              </button>
+            )}
+
+          </div>
+        )}
+
+      </div>
     </header>
   );
 }
