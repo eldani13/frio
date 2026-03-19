@@ -4,6 +4,8 @@ export type WarehouseMeta = {
 	id: string;
 	name?: string;
 	status?: string;
+	capacity?: number;
+	disabled?: boolean;
 };
 
 export type WarehouseSelectorProps = {

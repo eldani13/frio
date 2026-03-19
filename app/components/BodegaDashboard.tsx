@@ -25,11 +25,18 @@ import {
   getDocs,
   serverTimestamp,
   setDoc,
+  updateDoc,
 } from "firebase/firestore";
-import { onAuthStateChanged, signInWithEmailAndPassword, signOut } from "firebase/auth";
-import { auth, db } from "../../lib/firebaseClient";
+import {
+  createUserWithEmailAndPassword,
+  onAuthStateChanged,
+  signInWithEmailAndPassword,
+  signOut,
+} from "firebase/auth";
+import { auth, db, getSecondaryAuth } from "../../lib/firebaseClient";
 import Header from "./bodega/Header";
 import MessageBanner from "./bodega/MessageBanner";
+import ConfiguratorPanel from "./bodega/ConfiguratorPanel";
 import type {
   AlertAssignment,
   AlertHistoryEntry,
@@ -37,6 +44,7 @@ import type {
   BodegaOrder,
   BodegaStats,
   Client,
+  ConfigUser,
   Box,
   OrderSource,
   OrderType,
@@ -89,6 +97,10 @@ type WarehouseMeta = {
   id: string;
   name?: string;
   status?: string;
+  capacity?: number;
+  disabled?: boolean;
+  createdAt?: string;
+  disabledAt?: string;
 };
 
 type ZoneKey = "entrada" | "bodega" | "salida";
@@ -352,18 +364,32 @@ const getNextSalidaPosition = (boxes: Box[], reserved?: Set<number>) => {
 };
 
 const loadUserProfile = async (uid: string): Promise<UserProfile> => {
-  const ref = doc(db, "users", uid);
-  const snap = await getDoc(ref);
-  if (!snap.exists()) {
-    throw new Error("El perfil de usuario no existe en Firestore (colección users)");
+  const primaryRef = doc(db, "users", uid);
+  const primarySnap = await getDoc(primaryRef);
+  if (primarySnap.exists()) {
+    const data = primarySnap.data() as Partial<UserProfile>;
+    if (!data.role) {
+      throw new Error("El perfil de usuario no tiene rol definido");
+    }
+    return {
+      role: data.role as Role,
+      displayName: data.displayName ?? "Usuario",
+      clientId: data.clientId,
+    };
   }
-  const data = snap.data() as Partial<UserProfile>;
+
+  const secondaryRef = doc(db, "usuarios", uid);
+  const secondarySnap = await getDoc(secondaryRef);
+  if (!secondarySnap.exists()) {
+    throw new Error("El perfil de usuario no existe en Firestore (users o usuarios)");
+  }
+  const data = secondarySnap.data() as Partial<UserProfile> & { name?: string };
   if (!data.role) {
     throw new Error("El perfil de usuario no tiene rol definido");
   }
   return {
     role: data.role as Role,
-    displayName: data.displayName ?? "Usuario",
+    displayName: data.displayName ?? data.name ?? "Usuario",
     clientId: data.clientId,
   };
 };
@@ -477,6 +503,9 @@ export default function BodegaDashboard() {
   const [warehouseId, setWarehouseId] = useState<string>(WAREHOUSE_ID);
   const [warehouseName, setWarehouseName] = useState<string>("");
   const [warehouses, setWarehouses] = useState<WarehouseMeta[]>([]);
+  const [newWarehouseName, setNewWarehouseName] = useState<string>("");
+  const [newWarehouseCapacity, setNewWarehouseCapacity] = useState<string>("");
+  const [warehouseSaving, setWarehouseSaving] = useState<boolean>(false);
   const isExternalWarehouse = warehouseId === FRIDEM_WAREHOUSE_ID;
   const [warehousesLoading, setWarehousesLoading] = useState<boolean>(false);
   const [inboundBoxes, setInboundBoxes] = useState<Box[]>([]);
@@ -510,8 +539,18 @@ export default function BodegaDashboard() {
   const [clientFilterId, setClientFilterId] = useState<string>("cliente1");
   const [clients, setClients] = useState<Client[]>([]);
   const [newClientName, setNewClientName] = useState<string>("");
+  const [newClientCode, setNewClientCode] = useState<string>("");
   const [clientsLoading, setClientsLoading] = useState<boolean>(false);
   const [clientSaving, setClientSaving] = useState<boolean>(false);
+
+  const [users, setUsers] = useState<ConfigUser[]>([]);
+  const [newUserName, setNewUserName] = useState<string>("");
+  const [newUserRole, setNewUserRole] = useState<Role>("operario");
+  const [newUserClientId, setNewUserClientId] = useState<string>("");
+  const [newUserEmail, setNewUserEmail] = useState<string>("");
+  const [newUserPassword, setNewUserPassword] = useState<string>("");
+  const [usersLoading, setUsersLoading] = useState<boolean>(false);
+  const [userSaving, setUserSaving] = useState<boolean>(false);
 
   const [bodegaOrderSourcePosition, setBodegaOrderSourcePosition] = useState<number>(1);
   const [bodegaOrderTargetPosition, setBodegaOrderTargetPosition] = useState<number>(1);
@@ -535,8 +574,31 @@ export default function BodegaDashboard() {
     try {
       const snapshot = await getDocs(collection(db, "warehouses"));
       let items = snapshot.docs.map((docSnap) => {
-        const data = docSnap.data() as { name?: string; status?: string };
-        return { id: docSnap.id, name: data.name, status: data.status } satisfies WarehouseMeta;
+        const data = docSnap.data() as {
+          name?: string;
+          status?: string;
+          capacity?: number;
+          disabled?: boolean;
+          createdAt?: { toMillis?: () => number };
+          disabledAt?: { toMillis?: () => number };
+        };
+        const createdAtMs =
+          data.createdAt && typeof data.createdAt.toMillis === "function"
+            ? data.createdAt.toMillis()
+            : undefined;
+        const disabledAtMs =
+          data.disabledAt && typeof data.disabledAt.toMillis === "function"
+            ? data.disabledAt.toMillis()
+            : undefined;
+        return {
+          id: docSnap.id,
+          name: data.name,
+          status: data.status,
+          capacity: typeof data.capacity === "number" ? data.capacity : undefined,
+          disabled: Boolean(data.disabled),
+          createdAt: createdAtMs ? new Date(createdAtMs).toLocaleString("es-CO") : undefined,
+          disabledAt: disabledAtMs ? new Date(disabledAtMs).toLocaleString("es-CO") : undefined,
+        } satisfies WarehouseMeta;
       });
 
       // Ensure default exists and is present in the list
@@ -547,11 +609,24 @@ export default function BodegaDashboard() {
           await setDoc(defaultRef, {
             name: "default",
             status: "active",
+            capacity: 0,
+            disabled: false,
             createdAt: serverTimestamp(),
           });
         }
         if (!items.some((item) => item.id === DEFAULT_WAREHOUSE_ID)) {
-          items = [{ id: DEFAULT_WAREHOUSE_ID, name: "default", status: "active" }, ...items];
+          items = [
+            {
+              id: DEFAULT_WAREHOUSE_ID,
+              name: "default",
+              status: "active",
+              capacity: 0,
+              disabled: false,
+              createdAt: undefined,
+              disabledAt: undefined,
+            },
+            ...items,
+          ];
         }
       };
 
@@ -568,6 +643,10 @@ export default function BodegaDashboard() {
             id: FRIDEM_WAREHOUSE_ID,
             name: FRIDEM_WAREHOUSE_NAME,
             status: "external",
+            capacity: undefined,
+            disabled: false,
+            createdAt: undefined,
+            disabledAt: undefined,
           },
         ];
       }
@@ -580,8 +659,24 @@ export default function BodegaDashboard() {
       console.warn("No se pudo cargar la lista de bodegas", err);
       // Fallback: ensure at least the default and the external entry so the selector is usable
       setWarehouses([
-        { id: DEFAULT_WAREHOUSE_ID, name: "default", status: "active" },
-        { id: FRIDEM_WAREHOUSE_ID, name: FRIDEM_WAREHOUSE_NAME, status: "external" },
+        {
+          id: DEFAULT_WAREHOUSE_ID,
+          name: "default",
+          status: "active",
+          capacity: 0,
+          disabled: false,
+          createdAt: undefined,
+          disabledAt: undefined,
+        },
+        {
+          id: FRIDEM_WAREHOUSE_ID,
+          name: FRIDEM_WAREHOUSE_NAME,
+          status: "external",
+          capacity: undefined,
+          disabled: false,
+          createdAt: undefined,
+          disabledAt: undefined,
+        },
       ]);
       if (!warehouseId) {
         setWarehouseId(DEFAULT_WAREHOUSE_ID);
@@ -615,30 +710,48 @@ export default function BodegaDashboard() {
   );
 
   const handleCreateWarehouse = useCallback(
-    async (name: string) => {
+    async (nameInput?: string, capacityInput?: number) => {
       if (!session) {
         setMessage("Debes iniciar sesión para crear bodegas.");
         return;
       }
+      const name = (nameInput ?? newWarehouseName).trim();
+      const capacityRaw = capacityInput ?? Number(newWarehouseCapacity);
+      const capacity = Number.isFinite(capacityRaw) && capacityRaw >= 0 ? capacityRaw : 0;
+      if (!name) {
+        setMessage("Ingresa un nombre para la bodega.");
+        return;
+      }
+
+      setWarehouseSaving(true);
       setWarehousesLoading(true);
       try {
         const ref = await addDoc(collection(db, "warehouses"), {
-          name: name.trim() || "Nueva bodega",
+          name: name || "Nueva bodega",
           status: "active",
+          capacity,
+          disabled: false,
           createdAt: serverTimestamp(),
         });
         await Promise.all([ensureWarehouseState(ref.id), ensureHistoryState(ref.id)]);
+        const createdAtMs = Date.now();
         const meta: WarehouseMeta = {
           id: ref.id,
-          name: name.trim() || "Nueva bodega",
+          name: name || "Nueva bodega",
           status: "active",
+          capacity,
+          disabled: false,
+          createdAt: new Date(createdAtMs).toLocaleString("es-CO"),
         };
         setWarehouses((prev) => {
           const exists = prev.some((item) => item.id === ref.id);
           return exists ? prev : [...prev, meta];
         });
+        setNewWarehouseName("");
+        setNewWarehouseCapacity("");
         await loadWarehouses();
         handleSelectWarehouse(ref.id);
+        setMessage("Bodega creada correctamente.");
       } catch (err) {
         const code =
           typeof err === "object" && err && "code" in err
@@ -651,11 +764,28 @@ export default function BodegaDashboard() {
             : "No se pudo crear la bodega. Revisa permisos o conexión.",
         );
       } finally {
+        setWarehouseSaving(false);
         setWarehousesLoading(false);
       }
     },
-    [handleSelectWarehouse, loadWarehouses, session],
+    [handleSelectWarehouse, loadWarehouses, newWarehouseCapacity, newWarehouseName, session],
   );
+
+  const generateClientCode = useCallback((value: string) => {
+    const normalized = value
+      .normalize("NFD")
+      .replace(/[^\w\s-]/g, "")
+      .replace(/\s+/g, " ")
+      .trim()
+      .toLowerCase();
+    const base = normalized.replace(/\s+/g, "-").slice(0, 12) || "cliente";
+    const rand = Math.floor(1000 + Math.random() * 9000);
+    return `${base}-${rand}`;
+  }, []);
+
+  const fetchWarehouses = useCallback(async () => {
+    await loadWarehouses();
+  }, [loadWarehouses]);
 
   const fetchClients = useCallback(async () => {
     setClientsLoading(true);
@@ -664,21 +794,31 @@ export default function BodegaDashboard() {
       const items: Client[] = snapshot.docs.map((docSnap) => {
         const data = docSnap.data() as {
           name?: string;
+          code?: string;
           createdAt?: { toMillis?: () => number };
           createdBy?: string | null;
           createdByRole?: Role | null;
+          disabled?: boolean;
+          disabledAt?: { toMillis?: () => number };
         };
         const createdAtMs =
           data.createdAt && typeof data.createdAt.toMillis === "function"
             ? data.createdAt.toMillis()
             : undefined;
+        const disabledAtMs =
+          data.disabledAt && typeof data.disabledAt.toMillis === "function"
+            ? data.disabledAt.toMillis()
+            : undefined;
         return {
           id: docSnap.id,
           name: (data.name ?? "").toString().trim() || "Sin nombre",
+          code: (data.code ?? "").toString().trim() || docSnap.id,
           createdAtMs,
           createdAt: createdAtMs ? new Date(createdAtMs).toLocaleString("es-CO") : undefined,
           createdBy: data.createdBy ?? null,
           createdByRole: data.createdByRole ?? null,
+          disabled: Boolean(data.disabled),
+          disabledAt: disabledAtMs ? new Date(disabledAtMs).toLocaleString("es-CO") : undefined,
         } satisfies Client;
       });
 
@@ -710,23 +850,29 @@ export default function BodegaDashboard() {
 
     setClientSaving(true);
     try {
+      const code = (newClientCode || generateClientCode(value)).trim();
       const docRef = await addDoc(collection(db, "clientes"), {
         name: value,
+        code,
         createdAt: serverTimestamp(),
         createdBy: session.uid,
         createdByRole: session.role,
+        disabled: false,
       });
       const createdAtMs = Date.now();
       const newClient: Client = {
         id: docRef.id,
         name: value,
+        code,
         createdAt: new Date(createdAtMs).toLocaleString("es-CO"),
         createdAtMs,
         createdBy: session.uid,
         createdByRole: session.role,
+        disabled: false,
       };
       setClients((prev) => [newClient, ...prev]);
       setNewClientName("");
+      setNewClientCode("");
       clientsLoadedRef.current = true;
       setMessage("Cliente creado correctamente.");
     } catch (err) {
@@ -735,7 +881,281 @@ export default function BodegaDashboard() {
     } finally {
       setClientSaving(false);
     }
-  }, [newClientName, session]);
+  }, [generateClientCode, newClientCode, newClientName, session]);
+
+  const fetchUsers = useCallback(async () => {
+    setUsersLoading(true);
+    try {
+      const snapshot = await getDocs(collection(db, "usuarios"));
+      const items: ConfigUser[] = snapshot.docs.map((docSnap) => {
+        const data = docSnap.data() as {
+          name?: string;
+          displayName?: string;
+          role?: Role;
+          clientId?: string;
+          email?: string;
+          createdAt?: { toMillis?: () => number };
+          createdBy?: string | null;
+          createdByRole?: Role | null;
+          disabled?: boolean;
+          disabledAt?: { toMillis?: () => number };
+        };
+        const createdAtMs =
+          data.createdAt && typeof data.createdAt.toMillis === "function"
+            ? data.createdAt.toMillis()
+            : undefined;
+        const disabledAtMs =
+          data.disabledAt && typeof data.disabledAt.toMillis === "function"
+            ? data.disabledAt.toMillis()
+            : undefined;
+        return {
+          id: docSnap.id,
+          name: (data.name ?? data.displayName ?? "").toString().trim() || "Sin nombre",
+          role: (data.role ?? "operario") as Role,
+          clientId: data.clientId ?? "",
+          email: data.email ?? "",
+          createdAtMs,
+          createdAt: createdAtMs ? new Date(createdAtMs).toLocaleString("es-CO") : undefined,
+          createdBy: data.createdBy ?? null,
+          createdByRole: data.createdByRole ?? null,
+          disabled: Boolean(data.disabled),
+          disabledAt: disabledAtMs ? new Date(disabledAtMs).toLocaleString("es-CO") : undefined,
+        } satisfies ConfigUser;
+      });
+
+      items.sort(
+        (a, b) =>
+          (b.createdAtMs ?? 0) - (a.createdAtMs ?? 0) || a.name.localeCompare(b.name, "es"),
+      );
+      setUsers(items);
+    } catch (err) {
+      console.error("No se pudieron cargar los usuarios", err);
+      setMessage("No se pudieron cargar los usuarios. Revisa permisos de Firestore.");
+    } finally {
+      setUsersLoading(false);
+    }
+  }, []);
+
+  const handleCreateUser = useCallback(async () => {
+    const name = newUserName.trim();
+    const email = newUserEmail.trim();
+    const password = newUserPassword.trim();
+    if (!name) {
+      setMessage("Ingresa un nombre de usuario.");
+      return;
+    }
+    if (!email) {
+      setMessage("Ingresa un correo para el usuario.");
+      return;
+    }
+    if (!password) {
+      setMessage("Ingresa una clave para el usuario.");
+      return;
+    }
+    if (!session) {
+      setMessage("Debes iniciar sesión como configurador para crear usuarios.");
+      return;
+    }
+
+    setUserSaving(true);
+    try {
+      const secondaryAuth = getSecondaryAuth();
+      const credentials = await createUserWithEmailAndPassword(secondaryAuth, email, password);
+
+      await setDoc(doc(db, "usuarios", credentials.user.uid), {
+        name,
+        role: newUserRole,
+        clientId: newUserClientId.trim(),
+        email,
+        displayName: name,
+        createdAt: serverTimestamp(),
+        createdBy: session.uid,
+        createdByRole: session.role,
+        disabled: false,
+      });
+
+      const createdAtMs = Date.now();
+      const newUser: ConfigUser = {
+        id: credentials.user.uid,
+        name,
+        role: newUserRole,
+        clientId: newUserClientId.trim(),
+        email,
+        createdAt: new Date(createdAtMs).toLocaleString("es-CO"),
+        createdAtMs,
+        createdBy: session.uid,
+        createdByRole: session.role,
+        disabled: false,
+      };
+      setUsers((prev) => [newUser, ...prev]);
+      setNewUserName("");
+      setNewUserClientId("");
+      setNewUserEmail("");
+      setNewUserPassword("");
+      setMessage("Usuario creado correctamente.");
+
+      await signOut(secondaryAuth);
+    } catch (err) {
+      console.error("No se pudo crear el usuario", err);
+      setMessage("No se pudo crear el usuario. Revisa permisos o conexión.");
+    } finally {
+      setUserSaving(false);
+    }
+  }, [newUserClientId, newUserEmail, newUserName, newUserPassword, newUserRole, session]);
+
+  const toggleUserDisabled = useCallback(
+    async (userId: string, nextDisabled: boolean) => {
+      try {
+        await updateDoc(doc(db, "usuarios", userId), {
+          disabled: nextDisabled,
+          disabledAt: nextDisabled ? serverTimestamp() : null,
+        });
+        setUsers((prev) =>
+          prev.map((user) =>
+            user.id === userId
+              ? {
+                  ...user,
+                  disabled: nextDisabled,
+                  disabledAt: nextDisabled ? new Date().toLocaleString("es-CO") : undefined,
+                }
+              : user,
+          ),
+        );
+        setMessage(nextDisabled ? "Usuario deshabilitado." : "Usuario habilitado.");
+      } catch (err) {
+        console.error("No se pudo actualizar el usuario", err);
+        setMessage("No se pudo actualizar el usuario. Revisa permisos o conexión.");
+      }
+    },
+    [],
+  );
+
+  const handleUpdateUser = useCallback(
+    async (userId: string, payload: { name: string; role: Role; clientId: string }) => {
+      const name = payload.name.trim();
+      const clientId = payload.clientId.trim();
+      if (!name) {
+        setMessage("El nombre es requerido.");
+        return;
+      }
+      try {
+        await updateDoc(doc(db, "usuarios", userId), {
+          name,
+          role: payload.role,
+          clientId,
+        });
+        setUsers((prev) =>
+          prev.map((user) =>
+            user.id === userId ? { ...user, name, role: payload.role, clientId } : user,
+          ),
+        );
+        setMessage("Usuario actualizado.");
+      } catch (err) {
+        console.error("No se pudo editar el usuario", err);
+        setMessage("No se pudo editar el usuario. Revisa permisos o conexión.");
+      }
+    },
+    [],
+  );
+
+  const toggleClientDisabled = useCallback(
+    async (clientId: string, nextDisabled: boolean) => {
+      try {
+        await updateDoc(doc(db, "clientes", clientId), {
+          disabled: nextDisabled,
+          disabledAt: nextDisabled ? serverTimestamp() : null,
+        });
+        setClients((prev) =>
+          prev.map((client) =>
+            client.id === clientId
+              ? {
+                  ...client,
+                  disabled: nextDisabled,
+                  disabledAt: nextDisabled ? new Date().toLocaleString("es-CO") : undefined,
+                }
+              : client,
+          ),
+        );
+        setMessage(nextDisabled ? "Cliente deshabilitado." : "Cliente habilitado.");
+      } catch (err) {
+        console.error("No se pudo actualizar el cliente", err);
+        setMessage("No se pudo actualizar el cliente. Revisa permisos o conexión.");
+      }
+    },
+    [],
+  );
+
+  const handleUpdateClient = useCallback(
+    async (clientId: string, payload: { name: string; code: string }) => {
+      const name = payload.name.trim();
+      const code = payload.code.trim();
+      if (!name || !code) {
+        setMessage("Nombre y código son requeridos.");
+        return;
+      }
+
+      try {
+        await updateDoc(doc(db, "clientes", clientId), { name, code });
+        setClients((prev) =>
+          prev.map((client) => (client.id === clientId ? { ...client, name, code } : client)),
+        );
+        setMessage("Cliente actualizado.");
+      } catch (err) {
+        console.error("No se pudo editar el cliente", err);
+        setMessage("No se pudo editar el cliente. Revisa permisos o conexión.");
+      }
+    },
+    [],
+  );
+
+  const handleUpdateWarehouse = useCallback(
+    async (warehouseId: string, payload: { name: string; capacity: number }) => {
+      const name = payload.name.trim();
+      const capacity = Number.isFinite(payload.capacity) && payload.capacity >= 0 ? payload.capacity : 0;
+      if (!name) {
+        setMessage("Nombre de bodega requerido.");
+        return;
+      }
+      try {
+        await updateDoc(doc(db, "warehouses", warehouseId), { name, capacity });
+        setWarehouses((prev) =>
+          prev.map((item) => (item.id === warehouseId ? { ...item, name, capacity } : item)),
+        );
+        setMessage("Bodega actualizada.");
+      } catch (err) {
+        console.error("No se pudo editar la bodega", err);
+        setMessage("No se pudo editar la bodega. Revisa permisos o conexión.");
+      }
+    },
+    [],
+  );
+
+  const toggleWarehouseDisabled = useCallback(
+    async (warehouseId: string, nextDisabled: boolean) => {
+      try {
+        await updateDoc(doc(db, "warehouses", warehouseId), {
+          disabled: nextDisabled,
+          disabledAt: nextDisabled ? serverTimestamp() : null,
+        });
+        setWarehouses((prev) =>
+          prev.map((item) =>
+            item.id === warehouseId
+              ? {
+                  ...item,
+                  disabled: nextDisabled,
+                  disabledAt: nextDisabled ? new Date().toLocaleString("es-CO") : undefined,
+                }
+              : item,
+          ),
+        );
+        setMessage(nextDisabled ? "Bodega deshabilitada." : "Bodega habilitada.");
+      } catch (err) {
+        console.error("No se pudo actualizar la bodega", err);
+        setMessage("No se pudo actualizar la bodega. Revisa permisos o conexión.");
+      }
+    },
+    [],
+  );
 
   const loadFridemData = useCallback(async () => {
     setCloudReady(false);
@@ -1408,9 +1828,21 @@ export default function BodegaDashboard() {
     if (!session) {
       setClients([]);
       setNewClientName("");
+      setNewClientCode("");
+      setUsers([]);
+      setNewUserName("");
+      setNewUserClientId("");
       clientsLoadedRef.current = false;
     }
   }, [session]);
+
+  useEffect(() => {
+    if (!newClientName) {
+      setNewClientCode("");
+      return;
+    }
+    setNewClientCode((prev) => (prev ? prev : generateClientCode(newClientName)));
+  }, [generateClientCode, newClientName]);
 
   useEffect(() => {
     if (!isConfigurator || activeTab !== "configuracion") {
@@ -1429,6 +1861,11 @@ export default function BodegaDashboard() {
     clientsLoadedRef.current = true;
     fetchClients();
   }, [fetchClients, session]);
+
+  useEffect(() => {
+    if (!session) return;
+    fetchUsers();
+  }, [fetchUsers, session]);
 
   const filterByClient = <T extends { client?: string }>(items: T[]) =>
     isCliente && effectiveClientId ? items.filter((item) => item.client === effectiveClientId) : items;
@@ -2441,97 +2878,47 @@ export default function BodegaDashboard() {
             ) : null}
 
             {activeTab === "configuracion" && isConfigurator ? (
-              <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-                <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-                  <div className="flex-1 space-y-2">
-                    <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
-                      Configuración
-                    </p>
-                    <h2 className="text-lg font-semibold text-slate-900">Panel de configurador</h2>
-                    <p className="text-sm text-slate-600">
-                      Primera herramienta: crear clientes con un formulario simple. Los registros se guardan en la
-                      colección clientes de Firestore.
-                    </p>
-                  </div>
-                  <div className="w-full md:w-96">
-                    <label className="text-sm font-semibold text-slate-700">Nuevo cliente</label>
-                    <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center">
-                      <input
-                        type="text"
-                        value={newClientName}
-                        onChange={(event) => setNewClientName(event.target.value)}
-                        className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none"
-                        placeholder="Nombre del cliente"
-                        disabled={clientSaving || clientsLoading}
-                      />
-                      <button
-                        type="button"
-                        onClick={handleCreateClient}
-                        disabled={clientSaving || !newClientName.trim()}
-                        className="inline-flex items-center justify-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-300"
-                      >
-                        {clientSaving ? "Creando..." : "Crear"}
-                      </button>
-                    </div>
-                    <p className="mt-1 text-xs text-slate-500">Formulario simple: solo nombre.</p>
-                  </div>
-                </div>
-
-                <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
-                  <div>
-                    <p className="text-sm font-semibold text-slate-800">Clientes creados</p>
-                    <p className="text-xs text-slate-500">Colección: clientes</p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
-                      Total: {clients.length}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={fetchClients}
-                      disabled={clientsLoading || clientSaving}
-                      className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:bg-slate-200"
-                    >
-                      {clientsLoading ? "Actualizando..." : "Refrescar"}
-                    </button>
-                  </div>
-                </div>
-
-                <div className="mt-4 grid gap-3">
-                  {clientsLoading && !clients.length ? (
-                    <div className="grid gap-2">
-                      {[1, 2, 3].map((item) => (
-                        <div key={item} className="h-12 animate-pulse rounded-xl bg-slate-100" />
-                      ))}
-                    </div>
-                  ) : clients.length ? (
-                    clients.map((client) => {
-                      const shortId =
-                        client.id.length > 14
-                          ? `${client.id.slice(0, 8)}...${client.id.slice(-4)}`
-                          : client.id;
-                      return (
-                        <div
-                          key={client.id}
-                          className="flex flex-col gap-2 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 shadow-sm sm:flex-row sm:items-center sm:justify-between"
-                        >
-                          <div>
-                            <p className="text-sm font-semibold text-slate-900">{client.name}</p>
-                            <p className="text-xs text-slate-500">
-                              {client.createdAt ? `Creado ${client.createdAt}` : "Creado"}
-                            </p>
-                          </div>
-                          <span className="inline-flex items-center rounded-full border border-slate-200 bg-white px-3 py-1 text-[11px] font-semibold text-slate-600">
-                            ID: {shortId}
-                          </span>
-                        </div>
-                      );
-                    })
-                  ) : (
-                    <p className="text-sm text-slate-600">Aún no hay clientes creados.</p>
-                  )}
-                </div>
-              </section>
+              <ConfiguratorPanel
+                warehouses={warehouses}
+                warehousesLoading={warehousesLoading}
+                warehouseSaving={warehouseSaving}
+                fetchWarehouses={fetchWarehouses}
+                newWarehouseName={newWarehouseName}
+                setNewWarehouseName={setNewWarehouseName}
+                newWarehouseCapacity={newWarehouseCapacity}
+                setNewWarehouseCapacity={setNewWarehouseCapacity}
+                handleCreateWarehouse={handleCreateWarehouse}
+                handleUpdateWarehouse={handleUpdateWarehouse}
+                toggleWarehouseDisabled={toggleWarehouseDisabled}
+                newClientName={newClientName}
+                setNewClientName={setNewClientName}
+                newClientCode={newClientCode}
+                setNewClientCode={setNewClientCode}
+                clientSaving={clientSaving}
+                clientsLoading={clientsLoading}
+                handleCreateClient={handleCreateClient}
+                fetchClients={fetchClients}
+                clients={clients}
+                toggleClientDisabled={toggleClientDisabled}
+                handleUpdateClient={handleUpdateClient}
+                fetchUsers={fetchUsers}
+                users={users}
+                newUserName={newUserName}
+                setNewUserName={setNewUserName}
+                newUserRole={newUserRole}
+                setNewUserRole={setNewUserRole}
+                newUserClientId={newUserClientId}
+                setNewUserClientId={setNewUserClientId}
+                newUserEmail={newUserEmail}
+                setNewUserEmail={setNewUserEmail}
+                newUserPassword={newUserPassword}
+                setNewUserPassword={setNewUserPassword}
+                usersLoading={usersLoading}
+                userSaving={userSaving}
+                handleCreateUser={handleCreateUser}
+                toggleUserDisabled={toggleUserDisabled}
+                handleUpdateUser={handleUpdateUser}
+              />
             ) : null}
 
             {activeTab === "ingresos" ? (

@@ -17,4 +17,10 @@ const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 export const db = getFirestore(app);
 export const storage = getStorage(app);
+
+export const getSecondaryAuth = () => {
+  const secondaryApp =
+    getApps().find((item) => item.name === "Secondary") ?? initializeApp(firebaseConfig, "Secondary");
+  return getAuth(secondaryApp);
+};
 export default app;
