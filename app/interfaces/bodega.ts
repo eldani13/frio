@@ -11,10 +11,28 @@ export type Role = "custodio" | "administrador" | "operario" | "jefe" | "cliente
 export type Client = {
 	id: string;
 	name: string;
+	code: string;
 	createdAt?: string;
 	createdAtMs?: number;
 	createdBy?: string | null;
 	createdByRole?: Role | null;
+	disabled?: boolean;
+	disabledAt?: string;
+};
+
+export type ConfigUser = {
+	id: string;
+	name: string;
+	role: Role;
+	clientId?: string;
+	email?: string;
+	password?: string;
+	createdAt?: string;
+	createdAtMs?: number;
+	createdBy?: string | null;
+	createdByRole?: Role | null;
+	disabled?: boolean;
+	disabledAt?: string;
 };
 
 export type Box = {
@@ -90,4 +108,8 @@ export type WarehouseMeta = {
 	id: string;
 	name?: string;
 	status?: string;
+	capacity?: number;
+	disabled?: boolean;
+	createdAt?: string;
+	disabledAt?: string;
 };

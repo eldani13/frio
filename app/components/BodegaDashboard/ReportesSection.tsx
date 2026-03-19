@@ -10,6 +10,8 @@ import {
   MdEdit,
   MdDelete,
 } from "react-icons/md";
+import { BiBarChartAlt2, BiCollection, BiUserCheck } from "react-icons/bi";
+import { FiUsers } from "react-icons/fi";
 import { useBodegaHistory } from "./BodegaHistoryContext";
 import {
   addDoc,
@@ -713,56 +715,50 @@ const ReportesSection: React.FC<ReportesSectionProps> = ({
     selectedBoxInfo,
   ]);
 
-  // Vista inicial para clientes: solo dos botones (Ver reporte / Ver catálogo)
+  // Vista inicial para clientes: opciones de reporte, catálogo y asignación
   if (isCliente && viewMode === null) {
     return (
       <section className="rounded-2xl bg-white p-8 shadow-sm border border-slate-200">
         <div className="flex flex-col items-center text-center gap-4">
           <div>
-            <h2 className="text-xl font-bold text-slate-900">Reportes</h2>
-            <p className="mt-1 text-sm text-slate-600 max-w-2xl">
-              Elige qué quieres ver: el reporte completo con gráficas y detalle,
-              o el catálogo del cliente.
-            </p>
+            <h2 className="text-xl font-bold text-slate-900">Opciones</h2>
+            
           </div>
-          <div className="grid w-full max-w-3xl gap-4 sm:grid-cols-2">
+          <div className="grid w-full max-w-4xl gap-4 md:grid-cols-3">
             <button
               type="button"
               onClick={() => setViewMode("reporte")}
-              className="group h-full rounded-3xl border-2 border-slate-200 bg-slate-50/80 p-6 sm:p-8 shadow-sm transition hover:-translate-y-0.5 hover:border-slate-300 hover:bg-white hover:shadow-md focus:outline-none focus:ring-2 focus:ring-slate-200"
+              className="group h-full rounded-3xl bg-[#b8d1f6] p-6 sm:p-8 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md focus:outline-none"
             >
               <div className="flex flex-col items-center gap-3">
-                <span className="inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-blue-100 text-blue-600 shadow-inner ring-1 ring-blue-200">
-                  <MdBarChart size={28} />
+                <span className="inline-flex h-14 w-14 items-center justify-center text-slate-800">
+                  <BiBarChartAlt2 size={32} />
                 </span>
-                <div className="space-y-1">
-                  <p className="text-lg font-bold text-slate-900">
-                    Ver reporte
-                  </p>
-                  <p className="text-sm text-slate-600">
-                    Gráficas, totales y detalle filtrado por tu cliente.
-                  </p>
-                </div>
+                <p className="text-lg font-bold text-slate-900">Reporte</p>
               </div>
             </button>
             <button
               type="button"
               onClick={() => setViewMode("catalogo")}
-              className="group h-full rounded-3xl border-2 border-slate-200 bg-slate-50/80 p-6 sm:p-8 shadow-sm transition hover:-translate-y-0.5 hover:border-slate-300 hover:bg-white hover:shadow-md focus:outline-none focus:ring-2 focus:ring-slate-200"
+              className="group h-full rounded-3xl bg-[#f8edb1] p-6 sm:p-8 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md focus:outline-none"
             >
               <div className="flex flex-col items-center gap-3">
-                <span className="inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-amber-100 text-amber-600 shadow-inner ring-1 ring-amber-200">
-                  <MdInbox size={28} />
+                <span className="inline-flex h-14 w-14 items-center justify-center text-slate-800">
+                  <BiCollection size={32} />
                 </span>
-                <div className="space-y-1">
-                  <p className="text-lg font-bold text-slate-900">
-                    Ver catálogo
-                  </p>
-                  <p className="text-sm text-slate-600">
-                    Listado de productos/ítems disponibles. (Contenido
-                    pendiente)
-                  </p>
-                </div>
+                <p className="text-lg font-bold text-slate-900">Catálogo</p>
+              </div>
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode("reporte")}
+              className="group h-full rounded-3xl bg-[#b0d6c3] p-6 sm:p-8 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md focus:outline-none"
+            >
+              <div className="flex flex-col items-center gap-3">
+                <span className="inline-flex h-14 w-14 items-center justify-center text-slate-800">
+                  <BiUserCheck size={32} />
+                </span>
+                <p className="text-lg font-bold text-slate-900">Asignar</p>
               </div>
             </button>
           </div>
