@@ -3,6 +3,7 @@ import { useState } from "react";
 import type { HeaderProps } from "../../interfaces/bodega/Header";
 import type { Role } from "../../interfaces/bodega";
 import SearchForm from "./SearchForm";
+import {  HiOutlineSquares2X2 } from 'react-icons/hi2';
 
 interface ExtendedHeaderProps extends HeaderProps {
   userDisplayName?: string;
@@ -33,6 +34,7 @@ export default function Header({
     warehouses.length > 0 &&
     onSelectWarehouse;
 
+   
   return (
     <header className="w-full bg-white shadow-md border-b border-slate-200">
       <div className="max-w-7xl mx-auto px-4 py-3">
@@ -45,13 +47,10 @@ export default function Header({
 
             {/* Warehouse */}
             <div className="flex flex-col">
-              <span className="text-xs text-slate-400 uppercase tracking-wide">
-                Bodega
-              </span>
-
+             
               {canSelectWarehouse ? (
-                <select
-                  className="mt-1 rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium shadow-sm focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 outline-none"
+                <select 
+                  className="hidden mt-1 rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium shadow-sm focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 outline-none"
                   value={warehouseId}
                   onChange={(event) =>
                     onSelectWarehouse?.(event.target.value)
@@ -63,9 +62,17 @@ export default function Header({
                     </option>
                   ))}
                 </select>
-              ) : (
-                <div className="font-semibold text-slate-700 mt-1">
-                  {warehouseId ?? "--"}
+              ) : (                
+                <div className="flex flex-col">
+                  {/* Etiqueta superior */}
+                  <span className="text-xs text-slate-400 uppercase tracking-wide">
+                    Bodega
+                  </span>
+                  
+                  {/* Valor debajo */}
+                  <span className="font-semibold text-slate-700 mt-1">
+                    {warehouseId ?? "--"}
+                  </span>
                 </div>
               )}
             </div>
@@ -80,56 +87,53 @@ export default function Header({
               </span>
             </div>
 
+
             {/* Menu button */}
             <button
               type="button"
               onClick={() => onGoMenu?.()}
-              className="ml-4 flex items-center gap-2 px-4 py-2 rounded-lg bg-slate-100 hover:bg-slate-200 text-sm font-semibold text-slate-700 transition"
+              
+              className="flex items-center gap-2 px-4 py-2 border-4 border-[#A8D5BA] rounded-[10px] text-[#2D5A3F] transition-all hover:bg-[#A8D5BA]/10 cursor-pointer active:scale-95"
             >
-              <span className="text-base">🏠</span>
-              Menú
+              
+              <HiOutlineSquares2X2 size={24} />
+              <span className="text-[14px] font-medium">Menú</span>
             </button>
 
+          
           </div>
 
           {/* RIGHT SECTION */}
           <div className="flex items-center gap-3 flex-nowrap">
 
-            {canSearch &&
-              searchValue !== undefined &&
-              onSearchChange &&
-              onSearchSubmit && (
-                <div className="w-60 bg-slate-50 rounded-lg px-2 py-1 border border-slate-200">
-                  <SearchForm
-                    value={searchValue}
-                    onChange={onSearchChange}
-                    onSubmit={onSearchSubmit}
-                  />
-                </div>
-              )}
-
             <div className="h-8 w-px bg-slate-200" />
-
-            {/* USER */}
-            {userDisplayName && (
-              <div className="flex items-center gap-2 whitespace-nowrap">
-
-                <div className="w-8 h-8 rounded-full bg-emerald-500 flex items-center justify-center text-white text-xs font-bold">
+       
+            {/* PERFIL DE USUARIO */}
+            <div className="flex items-center gap-3">
+              {userDisplayName && (
+                <div className="w-10 h-10 rounded-full bg-[#A8D5BA] flex items-center justify-center text-[#1B3B29] font-bold text-[16px]">
                   {userDisplayName.charAt(0).toUpperCase()}
                 </div>
-
-                <span className="font-medium text-slate-700 text-sm">
-                  {userDisplayName}
+              )}
+              
+              <div className="flex flex-col">
+                <h3 className="text-[16px] font-semibold text-gray-800 leading-tight">
+                {userDisplayName}
+                </h3>
+                <span className="text-[12px] text-gray-400 font-normal">
+                {role}
                 </span>
-
               </div>
-            )}
+
+              
+            </div>
+            
 
             {/* LOGOUT */}
             {onLogout && (
               <button
                 onClick={onLogout}
-                className="flex items-center gap-2 bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition whitespace-nowrap"
+                className="flex items-center gap-2 bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition whitespace-nowrap cursor-pointer active:scale-95 "
               >
                 <FiLogOut size={16} />
                 Cerrar sesión
