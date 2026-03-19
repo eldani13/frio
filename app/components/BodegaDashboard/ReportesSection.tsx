@@ -109,16 +109,17 @@ const catalogFields: Array<{
   label: string;
   multiline?: boolean;
   inputType?: string;
+  required?: boolean;
 }> = [
-  { key: "title", label: "Título" },
+  { key: "title", label: "Título", required: true},
   { key: "slug", label: "Identificador URL" },
-  { key: "description", label: "Descripción", multiline: true },
-  { key: "provider", label: "Proveedor" },
-  { key: "category", label: "Categoría producto" },
-  { key: "productType", label: "Tipo" },
+  { key: "description", label: "Descripción", multiline: true,required: true },
+  { key: "provider", label: "Proveedor" ,required: true},
+  { key: "category", label: "Categoría producto" ,required: true},
+  { key: "productType", label: "Tipo" ,required: true},
   { key: "tags", label: "Etiquetas" },
   { key: "publishedOnline", label: "Publicado en tienda online" },
-  { key: "status", label: "Estado" },
+  { key: "status", label: "Estado" ,required: true},
   { key: "sku", label: "SKU" },
   { key: "barcode", label: "Código de barras" },
   { key: "optionName1", label: "Nombre opción 1" },
@@ -263,6 +264,31 @@ const ReportesSection: React.FC<ReportesSectionProps> = ({
 
   const handleCatalogSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+
+    // --- NUEVA LÓGICA DE VALIDACIÓN ---
+  const requiredKeys: (keyof CatalogItemData)[] = [
+    "title", 
+    "description", 
+    "provider", 
+    "category", 
+    "productType", 
+    "status"
+  ];
+
+  const missingFields = requiredKeys.filter(key => !catalogForm[key] || catalogForm[key].trim() === "");
+
+  if (missingFields.length > 0) {
+    const labels = catalogFields
+      .filter(f => missingFields.includes(f.key))
+      .map(f => f.label);
+    
+    alert(`Los siguientes campos son obligatorios: \n- ${labels.join("\n- ")}`);
+    return; // Detiene la ejecución si falta algo
+  }
+  // ----------------------------------
+
+
+
     setCatalogSaving(true);
     const persist = async () => {
       if (editingItemId) {
@@ -1570,6 +1596,7 @@ const ReportesSection: React.FC<ReportesSectionProps> = ({
                   onSubmit={handleCatalogSubmit}
                   className="max-h-[70vh] overflow-y-auto px-6 py-4 space-y-4"
                 >
+                 {/* Dentro del form en catalogModalOpen */}
                   <div className="grid gap-4 md:grid-cols-2">
                     {catalogFields.map((field) => (
                       <label
@@ -1578,33 +1605,37 @@ const ReportesSection: React.FC<ReportesSectionProps> = ({
                       >
                         <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
                           {field.label}
+                          {/* Agregamos asterisco rojo si es obligatorio */}
+                          {field.required && <span className="text-red-500 ml-1">*</span>}
                         </span>
                         {field.multiline ? (
                           <textarea
                             value={catalogForm[field.key]}
                             onChange={(event) =>
-                              handleCatalogFieldChange(
-                                field.key,
-                                event.target.value,
-                              )
+                              handleCatalogFieldChange(field.key, event.target.value)
                             }
                             disabled={catalogSaving}
-                            className="min-h-[88px] rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-inner focus:outline-none focus:ring-2 focus:ring-blue-200"
-                            placeholder={field.label}
+                            // Validación nativa del navegador
+                            required={field.required}
+                            className={`min-h-[88px] rounded-xl border px-3 py-2 text-sm text-slate-900 shadow-inner focus:outline-none focus:ring-2 focus:ring-blue-200 ${
+                              field.required && !catalogForm[field.key] ? 'border-amber-200' : 'border-slate-200'
+                            }`}
+                            placeholder={field.required ? `${field.label} (Obligatorio)` : field.label}
                           />
                         ) : (
                           <input
                             type={field.inputType ?? "text"}
                             value={catalogForm[field.key]}
                             onChange={(event) =>
-                              handleCatalogFieldChange(
-                                field.key,
-                                event.target.value,
-                              )
+                              handleCatalogFieldChange(field.key, event.target.value)
                             }
                             disabled={catalogSaving}
-                            className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-inner focus:outline-none focus:ring-2 focus:ring-blue-200"
-                            placeholder={field.label}
+                            // Validación nativa del navegador
+                            required={field.required}
+                            className={`rounded-xl border px-3 py-2 text-sm text-slate-900 shadow-inner focus:outline-none focus:ring-2 focus:ring-blue-200 ${
+                              field.required && !catalogForm[field.key] ? 'border-amber-200' : 'border-slate-200'
+                            }`}
+                            placeholder={field.required ? `${field.label} (Obligatorio)` : field.label}
                           />
                         )}
                       </label>
