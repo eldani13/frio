@@ -1,4 +1,7 @@
 import React from "react";
+import ProvidersPage from "@/app/proveedores/page"; 
+import PlantasPage from "@/app/plantas/page"; 
+import CompradoresPage from "@/app/compradores/page"; 
 import {
   MdBarChart,
   MdMoveToInbox,
@@ -795,8 +798,7 @@ const ReportesSection: React.FC<ReportesSectionProps> = ({
             <button
               type="button"
               onClick={() => {
-                setViewMode("proveedores");
-                window.location.href = "/proveedores";
+                setViewMode("proveedores");             
               }}
               className="group h-full rounded-3xl bg-[#e2d5f3] p-6 sm:p-8 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md focus:outline-none"
             >
@@ -812,8 +814,7 @@ const ReportesSection: React.FC<ReportesSectionProps> = ({
             <button
               type="button"
               onClick={() => {
-                setViewMode("plantas");
-                window.location.href = "/plantas";
+                setViewMode("plantas");            
               }}
               className="group h-full rounded-3xl bg-[#ffdce5] p-6 sm:p-8 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md focus:outline-none"
             >
@@ -829,8 +830,7 @@ const ReportesSection: React.FC<ReportesSectionProps> = ({
             <button
               type="button"
               onClick={() => {
-                setViewMode("compradores");
-                window.location.href = "/compradores";
+                setViewMode("compradores");                
               }}
               className="group h-full rounded-3xl bg-[#d1f2fb] p-6 sm:p-8 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md focus:outline-none"
             >
@@ -1725,9 +1725,33 @@ const ReportesSection: React.FC<ReportesSectionProps> = ({
             </div>
           ) : null}
         </div>
+      )
+      }
+
+      {viewMode === "proveedores" && (
+        <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-6 text-slate-700 shadow-sm">
+          <h3 className="text-base font-bold text-slate-900">Proveedores</h3>
+          <p className="text-sm text-slate-600">
+          <ProvidersPage />
+          </p>
+        </div>
       )}
-
-
+      {viewMode === "plantas" && (
+        <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-6 text-slate-700 shadow-sm">
+          <h3 className="text-base font-bold text-slate-900">Proveedores</h3>
+          <p className="text-sm text-slate-600">
+          <PlantasPage />
+          </p>
+        </div>
+      )}
+      {viewMode === "compradores" && (
+        <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-6 text-slate-700 shadow-sm">
+          <h3 className="text-base font-bold text-slate-900">Proveedores</h3>
+          <p className="text-sm text-slate-600">
+          <CompradoresPage />
+          </p>
+        </div>
+      )}
       
 
 
