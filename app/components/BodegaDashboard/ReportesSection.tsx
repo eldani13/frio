@@ -66,6 +66,8 @@ interface ReportesSectionProps {
   clientId?: string;
   clientFilterId?: string;
   onClientChange?: (id: string) => void;
+  /** Incrementado desde el Header (cliente) para volver al submenú de vistas */
+  menuResetNonce?: number;
 }
 
 const ReportesSection: React.FC<ReportesSectionProps> = ({
@@ -82,6 +84,7 @@ const ReportesSection: React.FC<ReportesSectionProps> = ({
   clientId,
   clientFilterId,
   onClientChange,
+  menuResetNonce,
 }) => {
   const { ingresos, salidas, movimientosBodega, alertas } = useBodegaHistory();
 
@@ -100,6 +103,21 @@ const ReportesSection: React.FC<ReportesSectionProps> = ({
     setSelectedBoxId("");
     setBoxHistoryModalOpen(false);
   }, [isCliente]);
+
+  const prevMenuNonce = React.useRef<number | null>(null);
+  React.useEffect(() => {
+    if (!isCliente || menuResetNonce === undefined) return;
+    if (prevMenuNonce.current === null) {
+      prevMenuNonce.current = menuResetNonce;
+      return;
+    }
+    if (prevMenuNonce.current === menuResetNonce) return;
+    prevMenuNonce.current = menuResetNonce;
+    setViewMode(null);
+    setSelectedBoxId("");
+    setBoxHistoryModalOpen(false);
+    setReportDetailModal(null);
+  }, [isCliente, menuResetNonce, setReportDetailModal]);
 
   const catalogCollection = React.useMemo(
     () => collection(db, "warehouses", warehouseId, "catalog"),
@@ -514,7 +532,7 @@ const ReportesSection: React.FC<ReportesSectionProps> = ({
             <button
               type="button"
               onClick={() => setViewMode("reporte")}
-              className="group w-full rounded-2xl bg-[#b8d1f6] p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md focus:outline-none flex items-center justify-between"
+              className="group w-full rounded-2xl bg-[#b8d1f6] p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md focus:outline-none flex items-center justify-between cursor-pointer active:scale-95"
             >
               <div className="flex items-center gap-4">
                 <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-white/50 text-slate-800 shadow-sm">
@@ -531,7 +549,7 @@ const ReportesSection: React.FC<ReportesSectionProps> = ({
             <button
               type="button"
               onClick={() => setViewMode("catalogo")}
-              className="group w-full rounded-2xl bg-[#f8edb1] p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md focus:outline-none flex items-center justify-between"
+              className="group w-full rounded-2xl bg-[#f8edb1] p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md focus:outline-none flex items-center justify-between cursor-pointer active:scale-95"
             >
               <div className="flex items-center gap-4">
                 <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-white/50 text-slate-800 shadow-sm">
@@ -544,11 +562,11 @@ const ReportesSection: React.FC<ReportesSectionProps> = ({
               </span>
             </button>
 
-            {/* Botón Asignar (o el que corresponda a Bodegas Internas según tu imagen) */}
+            {/* Botón Asignar bodegas*/}
             <button
               type="button"
               onClick={() => setViewMode("asignarBodegas")}
-              className="group w-full rounded-2xl bg-[#b0d6c3] p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md focus:outline-none flex items-center justify-between"
+              className="group w-full rounded-2xl bg-[#b0d6c3] p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md focus:outline-none flex items-center justify-between cursor-pointer active:scale-95"
             >
               <div className="flex items-center gap-4">
                 <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-white/50 text-slate-800 shadow-sm">
@@ -565,7 +583,7 @@ const ReportesSection: React.FC<ReportesSectionProps> = ({
             <button
               type="button"
               onClick={() => setViewMode("proveedores")}
-              className="group w-full rounded-2xl bg-[#e2d5f3] p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md focus:outline-none flex items-center justify-between"
+              className="group w-full rounded-2xl bg-[#e2d5f3] p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md focus:outline-none flex items-center justify-between cursor-pointer active:scale-95"
             >
               <div className="flex items-center gap-4">
                 <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-white/50 text-slate-800 shadow-sm">
@@ -581,7 +599,7 @@ const ReportesSection: React.FC<ReportesSectionProps> = ({
             {/* Botón Plantas */}
             <button
             onClick={() => setViewMode("plantas")}
-            className="group w-full rounded-2xl bg-[#e2d5f3] p-4 transition-all hover:-translate-y-0.5 hover:shadow-md flex items-center justify-between"
+            className="group w-full rounded-2xl bg-[#e2d5f3] p-4 transition-all hover:-translate-y-0.5 hover:shadow-md flex items-center justify-between cursor-pointer active:scale-95"
           >
             <div className="flex items-center gap-4">
               <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-white/40 text-slate-800 shadow-sm">
@@ -595,7 +613,7 @@ const ReportesSection: React.FC<ReportesSectionProps> = ({
             {/* Botón Compradores */}
             <button
               onClick={() => setViewMode("compradores")}
-              className="group w-full rounded-2xl bg-[#d1f2fb] p-4 transition-all hover:-translate-y-0.5 hover:shadow-md flex items-center justify-between"
+              className="group w-full rounded-2xl bg-[#d1f2fb] p-4 transition-all hover:-translate-y-0.5 hover:shadow-md flex items-center justify-between cursor-pointer active:scale-95"
             >
               <div className="flex items-center gap-4">
                 <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-white/40 text-slate-800 shadow-sm">
@@ -1300,33 +1318,33 @@ const ReportesSection: React.FC<ReportesSectionProps> = ({
 
       {viewMode === "catalogo" && (
         <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-6 text-slate-700 shadow-sm">         
-          <p className="text-sm text-slate-600">
+          <div className="text-sm text-slate-600">
           <CatalogosPage />
-          </p>
+          </div>
         </div>
       )}
 
       {viewMode === "proveedores" && (
         <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-6 text-slate-700 shadow-sm">       
-          <p className="text-sm text-slate-600">
+          <div className="text-sm text-slate-600">
           <ProvidersPage />
-          </p>
+          </div>
         </div>
       )}
 
       {viewMode === "plantas" && (
         <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-6 text-slate-700 shadow-sm">          
-          <p className="text-sm text-slate-600">
+          <div className="text-sm text-slate-600">
           <PlantasPage />
-          </p>
+          </div>
         </div>
       )}
 
       {viewMode === "compradores" && (
         <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-6 text-slate-700 shadow-sm">          
-          <p className="text-sm text-slate-600">
+          <div className="text-sm text-slate-600">
           <CompradoresPage />
-          </p>
+          </div>
         </div>
       )}
       

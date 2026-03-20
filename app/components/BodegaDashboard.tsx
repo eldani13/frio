@@ -462,6 +462,8 @@ export default function BodegaDashboard() {
   const [loginPassword, setLoginPassword] = useState<string>("");
   const [loginError, setLoginError] = useState<string>("");
   const [adminSection, setAdminSection] = useState<AdminSection>("bodega_interna");
+  /** Pulso para que clientes en Reportes vuelvan al submenú de vistas al pulsar Menú en el header */
+  const [reportesClienteMenuNonce, setReportesClienteMenuNonce] = useState(0);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
@@ -710,14 +712,18 @@ export default function BodegaDashboard() {
   );
 
   const handleCreateWarehouse = useCallback(
-    async (nameInput?: string, capacityInput?: number) => {
+    async (arg?: string | { status: "interna" | "externa" }, capacityInput?: number) => {
       if (!session) {
         setMessage("Debes iniciar sesión para crear bodegas.");
         return;
       }
-      const name = (nameInput ?? newWarehouseName).trim();
+      const name =
+        typeof arg === "string" ? arg.trim() : (newWarehouseName ?? "").trim();
       const capacityRaw = capacityInput ?? Number(newWarehouseCapacity);
       const capacity = Number.isFinite(capacityRaw) && capacityRaw >= 0 ? capacityRaw : 0;
+      const isExterna =
+        typeof arg === "object" && arg !== null && arg.status === "externa";
+      const firestoreStatus = isExterna ? "externa" : "active";
       if (!name) {
         setMessage("Ingresa un nombre para la bodega.");
         return;
@@ -728,7 +734,7 @@ export default function BodegaDashboard() {
       try {
         const ref = await addDoc(collection(db, "warehouses"), {
           name: name || "Nueva bodega",
-          status: "active",
+          status: firestoreStatus,
           capacity,
           disabled: false,
           createdAt: serverTimestamp(),
@@ -738,7 +744,7 @@ export default function BodegaDashboard() {
         const meta: WarehouseMeta = {
           id: ref.id,
           name: name || "Nueva bodega",
-          status: "active",
+          status: firestoreStatus,
           capacity,
           disabled: false,
           createdAt: new Date(createdAtMs).toLocaleString("es-CO"),
@@ -1109,17 +1115,34 @@ export default function BodegaDashboard() {
   );
 
   const handleUpdateWarehouse = useCallback(
-    async (warehouseId: string, payload: { name: string; capacity: number }) => {
+    async (
+      warehouseId: string,
+      payload: { name: string; capacity: number; status?: "interna" | "externa" },
+    ) => {
       const name = payload.name.trim();
       const capacity = Number.isFinite(payload.capacity) && payload.capacity >= 0 ? payload.capacity : 0;
       if (!name) {
         setMessage("Nombre de bodega requerido.");
         return;
       }
+      const nextStatus =
+        payload.status === undefined
+          ? undefined
+          : payload.status === "externa"
+            ? "externa"
+            : "active";
       try {
-        await updateDoc(doc(db, "warehouses", warehouseId), { name, capacity });
+        await updateDoc(doc(db, "warehouses", warehouseId), {
+          name,
+          capacity,
+          ...(nextStatus !== undefined ? { status: nextStatus } : {}),
+        });
         setWarehouses((prev) =>
-          prev.map((item) => (item.id === warehouseId ? { ...item, name, capacity } : item)),
+          prev.map((item) =>
+            item.id === warehouseId
+              ? { ...item, name, capacity, ...(nextStatus !== undefined ? { status: nextStatus } : {}) }
+              : item,
+          ),
         );
         setMessage("Bodega actualizada.");
       } catch (err) {
@@ -2787,7 +2810,15 @@ export default function BodegaDashboard() {
           onSearchSubmit={handleSearch}
           userDisplayName={session?.displayName}
           onLogout={handleLogout}
-          onGoMenu={() => setAdminSection("menu")}
+          onGoMenu={() => {
+            if (isAdmin) {
+              setAdminSection("menu");
+              return;
+            }
+            if (isCliente && activeTab === "reportes") {
+              setReportesClienteMenuNonce((n) => n + 1);
+            }
+          }}
           role={role}
         />
         {showAdminMenu ? (
@@ -3176,6 +3207,7 @@ export default function BodegaDashboard() {
                 clientId={effectiveClientId ?? undefined}
                 clientFilterId={clientFilterId}
                 onClientChange={setClientFilterId}
+                menuResetNonce={isCliente ? reportesClienteMenuNonce : undefined}
               />
             ) : null}
           </>
