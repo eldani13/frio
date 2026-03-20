@@ -45,7 +45,7 @@ import {
 } from "recharts";
 import type { Box, BodegaOrder, Slot } from "../../interfaces/bodega";
 import { IoAlert } from "react-icons/io5";
-
+import { HiOutlineArrowRight } from "react-icons/hi2";
 interface ReportesSectionProps {
   reportData: Array<{ name: string; value: number; fill: string }>;
   inboundBoxes: Box[];
@@ -68,140 +68,6 @@ interface ReportesSectionProps {
   onClientChange?: (id: string) => void;
 }
 
-type CatalogItemData = {
-  title: string;
-  slug: string;
-  description: string;
-  provider: string;
-  category: string;
-  productType: string;
-  tags: string;
-  publishedOnline: string;
-  status: string;
-  sku: string;
-  barcode: string;
-  optionName1: string;
-  optionValue1: string;
-  linkedOption1: string;
-  price: string;
-  internationalPrice: string;
-  compareAtPrice: string;
-  compareAtPriceIntl: string;
-  costPerItem: string;
-  chargeTax: string;
-  inventoryTracker: string;
-  inventoryQty: string;
-  continueSelling: string;
-  weightValue: string;
-  weightUnit: string;
-  requiresShipping: string;
-  logisticService: string;
-  includedPrimary: string;
-  includedInternational: string;
-  productImageUrl: string;
-  imagePosition: string;
-  imageAlt: string;
-  variantImageUrl: string;
-  giftCard: string;
-  seoTitle: string;
-  seoDescription: string;
-  googleShoppingCategory: string;
-  metacampos: string;
-};
-
-type CatalogItem = CatalogItemData & { id: string };
-
-const catalogFields: Array<{
-  key: keyof CatalogItemData;
-  label: string;
-  multiline?: boolean;
-  inputType?: string;
-  required?: boolean;
-}> = [
-  { key: "title", label: "Título", required: true},
-  { key: "slug", label: "Identificador URL" },
-  { key: "description", label: "Descripción", multiline: true,required: true },
-  { key: "provider", label: "Proveedor" ,required: true},
-  { key: "category", label: "Categoría producto" ,required: true},
-  { key: "productType", label: "Tipo" ,required: true},
-  { key: "tags", label: "Etiquetas" },
-  { key: "publishedOnline", label: "Publicado en tienda online" },
-  { key: "status", label: "Estado" ,required: true},
-  { key: "sku", label: "SKU" },
-  { key: "barcode", label: "Código de barras" },
-  { key: "optionName1", label: "Nombre opción 1" },
-  { key: "optionValue1", label: "Valor opción 1" },
-  { key: "linkedOption1", label: "Vinculado a opción 1" },
-  { key: "price", label: "Precio" },
-  { key: "internationalPrice", label: "Precio internacional" },
-  { key: "compareAtPrice", label: "Precio comparación" },
-  { key: "compareAtPriceIntl", label: "Precio comparación internacional" },
-  { key: "costPerItem", label: "Costo por artículo" },
-  { key: "chargeTax", label: "Cobrar impuesto" },
-  { key: "inventoryTracker", label: "Rastreador inventario" },
-  { key: "inventoryQty", label: "Cantidad inventario", inputType: "number" },
-  { key: "continueSelling", label: "Continuar vendiendo sin stock" },
-  { key: "weightValue", label: "Valor peso (g)", inputType: "number" },
-  { key: "weightUnit", label: "Unidad peso visualización" },
-  { key: "requiresShipping", label: "Requiere envío" },
-  { key: "logisticService", label: "Servicio logística" },
-  { key: "includedPrimary", label: "Incluido primario" },
-  { key: "includedInternational", label: "Incluido internacional" },
-  { key: "productImageUrl", label: "URL imagen producto" },
-  { key: "imagePosition", label: "Posición imagen", inputType: "number" },
-  { key: "imageAlt", label: "Texto alt imagen" },
-  { key: "variantImageUrl", label: "URL imagen variante" },
-  { key: "giftCard", label: "Tarjeta regalo" },
-  { key: "seoTitle", label: "Título SEO" },
-  { key: "seoDescription", label: "Descripción SEO", multiline: true },
-  {
-    key: "googleShoppingCategory",
-    label: "Google Shopping categoría producto",
-  },
-  { key: "metacampos", label: "Metacampos", multiline: true },
-];
-
-const emptyCatalogItem: CatalogItemData = {
-  title: "",
-  slug: "",
-  description: "",
-  provider: "",
-  category: "",
-  productType: "",
-  tags: "",
-  publishedOnline: "",
-  status: "",
-  sku: "",
-  barcode: "",
-  optionName1: "",
-  optionValue1: "",
-  linkedOption1: "",
-  price: "",
-  internationalPrice: "",
-  compareAtPrice: "",
-  compareAtPriceIntl: "",
-  costPerItem: "",
-  chargeTax: "",
-  inventoryTracker: "",
-  inventoryQty: "",
-  continueSelling: "",
-  weightValue: "",
-  weightUnit: "",
-  requiresShipping: "",
-  logisticService: "",
-  includedPrimary: "",
-  includedInternational: "",
-  productImageUrl: "",
-  imagePosition: "",
-  imageAlt: "",
-  variantImageUrl: "",
-  giftCard: "",
-  seoTitle: "",
-  seoDescription: "",
-  googleShoppingCategory: "",
-  metacampos: "",
-};
-
 const ReportesSection: React.FC<ReportesSectionProps> = ({
   reportData,
   inboundBoxes,
@@ -219,17 +85,12 @@ const ReportesSection: React.FC<ReportesSectionProps> = ({
 }) => {
   const { ingresos, salidas, movimientosBodega, alertas } = useBodegaHistory();
 
-  const [viewMode, setViewMode] = React.useState<"reporte" | "catalogo" | "proveedores" | "plantas" | "compradores" | null>(
+  const [viewMode, setViewMode] = React.useState<"reporte" | "catalogo" |
+   "proveedores" | "plantas" | "compradores" | "asignarBodegas" | null>(
     isCliente ? null : "reporte",
   );
   const [selectedBoxId, setSelectedBoxId] = React.useState<string>("");
-  const [boxHistoryModalOpen, setBoxHistoryModalOpen] = React.useState(false);
-  const [catalogItems, setCatalogItems] = React.useState<CatalogItem[]>([]);
-  const [catalogForm, setCatalogForm] = React.useState<CatalogItemData>({
-    ...emptyCatalogItem,
-  });
-  const [catalogModalOpen, setCatalogModalOpen] = React.useState(false);
-  const [catalogSaving, setCatalogSaving] = React.useState(false);
+  const [boxHistoryModalOpen, setBoxHistoryModalOpen] = React.useState(false);  
   const [editingItemId, setEditingItemId] = React.useState<string | null>(null);
   const warehouseId = DEFAULT_WAREHOUSE_ID;
   const boxHistoryContentRef = React.useRef<HTMLDivElement | null>(null);
@@ -244,114 +105,6 @@ const ReportesSection: React.FC<ReportesSectionProps> = ({
     () => collection(db, "warehouses", warehouseId, "catalog"),
     [warehouseId],
   );
-
-  React.useEffect(() => {
-    const unsubscribe = onSnapshot(catalogCollection, (snapshot) => {
-      const docs: CatalogItem[] = snapshot.docs.map((docSnap) => {
-        const data = docSnap.data() as Partial<CatalogItemData>;
-        return { ...emptyCatalogItem, ...data, id: docSnap.id };
-      });
-      setCatalogItems(docs);
-    });
-    return () => unsubscribe();
-  }, [catalogCollection]);
-
-  const handleCatalogFieldChange = (
-    key: keyof CatalogItemData,
-    value: string,
-  ) => {
-    setCatalogForm((prev) => ({ ...prev, [key]: value }));
-  };
-
-  const handleOpenCatalogModal = () => {
-    setCatalogForm({ ...emptyCatalogItem });
-    setEditingItemId(null);
-    setCatalogModalOpen(true);
-  };
-
-  const handleCatalogSubmit = (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-
-    // --- NUEVA LÓGICA DE VALIDACIÓN ---
-  const requiredKeys: (keyof CatalogItemData)[] = [
-    "title", 
-    "description", 
-    "provider", 
-    "category", 
-    "productType", 
-    "status"
-  ];
-
-  const missingFields = requiredKeys.filter(key => !catalogForm[key] || catalogForm[key].trim() === "");
-
-  if (missingFields.length > 0) {
-    const labels = catalogFields
-      .filter(f => missingFields.includes(f.key))
-      .map(f => f.label);
-    
-    alert(`Los siguientes campos son obligatorios: \n- ${labels.join("\n- ")}`);
-    return; // Detiene la ejecución si falta algo
-  }
-  // ----------------------------------
-
-
-
-    setCatalogSaving(true);
-    const persist = async () => {
-      if (editingItemId) {
-        await updateDoc(doc(catalogCollection, editingItemId), {
-          ...catalogForm,
-          updatedAt: serverTimestamp(),
-        });
-      } else {
-        await addDoc(catalogCollection, {
-          ...catalogForm,
-          createdAt: serverTimestamp(),
-          updatedAt: serverTimestamp(),
-        });
-      }
-    };
-
-    persist()
-      .then(() => {
-        handleCloseCatalogModal();
-      })
-      .catch((error) => {
-        console.error("Error guardando ítem de catálogo", error);
-        alert("No se pudo guardar el ítem. Intenta de nuevo.");
-      })
-      .finally(() => setCatalogSaving(false));
-  };
-
-  const handleEditCatalog = (item: CatalogItem) => {
-    const { id, ...data } = item;
-    setCatalogForm({ ...emptyCatalogItem, ...data });
-    setEditingItemId(id);
-    setCatalogModalOpen(true);
-  };
-
-  const handleDeleteCatalog = async (item: CatalogItem) => {
-    if (typeof window !== "undefined") {
-      const confirmed = window.confirm("¿Eliminar este ítem de catálogo?");
-      if (!confirmed) return;
-    }
-    try {
-      await deleteDoc(doc(catalogCollection, item.id));
-      if (editingItemId === item.id) {
-        setEditingItemId(null);
-        setCatalogForm({ ...emptyCatalogItem });
-      }
-    } catch (error) {
-      console.error("Error eliminando ítem de catálogo", error);
-      alert("No se pudo eliminar el ítem. Intenta de nuevo.");
-    }
-  };
-
-  const handleCloseCatalogModal = () => {
-    setCatalogModalOpen(false);
-    setEditingItemId(null);
-    setCatalogForm({ ...emptyCatalogItem });
-  };
 
   const activeClientId = isCliente ? clientFilterId || clientId : clientId;
   const clientOptions = ["cliente1", "cliente2", "cliente3"];
@@ -748,110 +501,115 @@ const ReportesSection: React.FC<ReportesSectionProps> = ({
     selectedBoxInfo,
   ]);
 
-  // Vista inicial para clientes: opciones de reporte, catálogo y asignación
   if (isCliente && viewMode === null) {
     return (
       <section className="rounded-2xl bg-white p-8 shadow-sm border border-slate-200">
-        <div className="flex flex-col items-center text-center gap-4">
-          <div>
-            <h2 className="text-xl font-bold text-slate-900">Opciones</h2>
+        
+        <div className="flex flex-col items-center text-center gap-6 w-full px-4">
+          
+          {/* Contenedor principal ajustado a columna única */}
+          <div className="flex flex-col w-full max-w-4xl gap-3">
             
-          </div>
-          <div className="grid w-full max-w-4xl gap-4 md:grid-cols-3">
-            
-             {/* Botón Reporte */}            
+            {/* Botón Reporte */}
             <button
               type="button"
               onClick={() => setViewMode("reporte")}
-              className="group h-full rounded-3xl bg-[#b8d1f6] p-6 sm:p-8 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md focus:outline-none"
+              className="group w-full rounded-2xl bg-[#b8d1f6] p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md focus:outline-none flex items-center justify-between"
             >
-              <div className="flex flex-col items-center gap-3">
-                <span className="inline-flex h-14 w-14 items-center justify-center text-slate-800">
-                  <BiBarChartAlt2 size={32} />
+              <div className="flex items-center gap-4">
+                <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-white/50 text-slate-800 shadow-sm">
+                  <BiBarChartAlt2 size={24} />
                 </span>
                 <p className="text-lg font-bold text-slate-900">Reporte</p>
               </div>
+              <span className="h-8 w-8 flex items-center justify-center rounded-full bg-black/5 group-hover:bg-black/10 transition-colors">
+                <HiOutlineArrowRight size={18} />
+              </span>
             </button>
-            
+
             {/* Botón Catálogo */}
             <button
               type="button"
-              onClick={() => setViewMode("catalogo")  }
-              className="group h-full rounded-3xl bg-[#f8edb1] p-6 sm:p-8 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md focus:outline-none"
+              onClick={() => setViewMode("catalogo")}
+              className="group w-full rounded-2xl bg-[#f8edb1] p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md focus:outline-none flex items-center justify-between"
             >
-              <div className="flex flex-col items-center gap-3">
-                <span className="inline-flex h-14 w-14 items-center justify-center text-slate-800">
-                  <BiCollection size={32} />
+              <div className="flex items-center gap-4">
+                <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-white/50 text-slate-800 shadow-sm">
+                  <BiCollection size={24} />
                 </span>
                 <p className="text-lg font-bold text-slate-900">Catálogo</p>
               </div>
+              <span className="h-8 w-8 flex items-center justify-center rounded-full bg-black/5 group-hover:bg-black/10 transition-colors">
+                <HiOutlineArrowRight size={18} />
+              </span>
             </button>
 
-            {/* Botón Asignar */}
+            {/* Botón Asignar (o el que corresponda a Bodegas Internas según tu imagen) */}
             <button
               type="button"
-              onClick={() => setViewMode("reporte")}
-              className="group h-full rounded-3xl bg-[#b0d6c3] p-6 sm:p-8 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md focus:outline-none"
+              onClick={() => setViewMode("asignarBodegas")}
+              className="group w-full rounded-2xl bg-[#b0d6c3] p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md focus:outline-none flex items-center justify-between"
             >
-              <div className="flex flex-col items-center gap-3">
-                <span className="inline-flex h-14 w-14 items-center justify-center text-slate-800">
-                  <BiUserCheck size={32} />
+              <div className="flex items-center gap-4">
+                <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-white/50 text-slate-800 shadow-sm">
+                  <BiUserCheck size={24} />
                 </span>
-                <p className="text-lg font-bold text-slate-900">Asignar</p>
+                <p className="text-lg font-bold text-slate-900">Asignar Bodegas</p>
               </div>
+              <span className="h-8 w-8 flex items-center justify-center rounded-full bg-black/5 group-hover:bg-black/10 transition-colors">
+                <HiOutlineArrowRight size={18} />
+              </span>
             </button>
 
-             {/* Botón Proveedores */}
+            {/* Botón Proveedores */}
             <button
               type="button"
-              onClick={() => {              
-                setViewMode("proveedores");             
-              }}
-              className="group h-full rounded-3xl bg-[#e2d5f3] p-6 sm:p-8 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md focus:outline-none"
+              onClick={() => setViewMode("proveedores")}
+              className="group w-full rounded-2xl bg-[#e2d5f3] p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md focus:outline-none flex items-center justify-between"
             >
-              <div className="flex flex-col items-center gap-3">
-                <span className="inline-flex h-14 w-14 items-center justify-center text-slate-800">
-                  <MdBusiness size={32} />
+              <div className="flex items-center gap-4">
+                <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-white/50 text-slate-800 shadow-sm">
+                  <MdBusiness size={24} />
                 </span>
                 <p className="text-lg font-bold text-slate-900">Proveedores</p>
               </div>
+              <span className="h-8 w-8 flex items-center justify-center rounded-full bg-black/5 group-hover:bg-black/10 transition-colors">
+                <HiOutlineArrowRight size={18} />
+              </span>
             </button>
 
             {/* Botón Plantas */}
             <button
-              type="button"
-              onClick={() => {
-                setViewMode("plantas");            
-              }}
-              className="group h-full rounded-3xl bg-[#ffdce5] p-6 sm:p-8 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md focus:outline-none"
-            >
-              <div className="flex flex-col items-center gap-3">
-                <span className="inline-flex h-14 w-14 items-center justify-center text-slate-800">
-                  <MdFactory size={32} />
-                </span>
-                <p className="text-lg font-bold text-slate-900">Plantas</p>
-              </div>
+            onClick={() => setViewMode("plantas")}
+            className="group w-full rounded-2xl bg-[#e2d5f3] p-4 transition-all hover:-translate-y-0.5 hover:shadow-md flex items-center justify-between"
+          >
+            <div className="flex items-center gap-4">
+              <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-white/40 text-slate-800 shadow-sm">
+                <MdFactory size={24} />
+              </span>
+              <p className="text-lg font-bold text-slate-900">Plantas</p>
+            </div>
+            <HiOutlineArrowRight size={20} className="text-slate-500 group-hover:translate-x-1 transition-transform" />
             </button>
 
             {/* Botón Compradores */}
             <button
-              type="button"
-              onClick={() => {
-                setViewMode("compradores");                
-              }}
-              className="group h-full rounded-3xl bg-[#d1f2fb] p-6 sm:p-8 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md focus:outline-none"
+              onClick={() => setViewMode("compradores")}
+              className="group w-full rounded-2xl bg-[#d1f2fb] p-4 transition-all hover:-translate-y-0.5 hover:shadow-md flex items-center justify-between"
             >
-              <div className="flex flex-col items-center gap-3">
-                <span className="inline-flex h-14 w-14 items-center justify-center text-slate-800">
-                  <MdShoppingCart size={32} />
+              <div className="flex items-center gap-4">
+                <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-white/40 text-slate-800 shadow-sm">
+                  <MdShoppingCart size={24} />
                 </span>
                 <p className="text-lg font-bold text-slate-900">Compradores</p>
               </div>
-            </button>
-
+              <HiOutlineArrowRight size={20} className="text-slate-500 group-hover:translate-x-1 transition-transform" />
+            </button> 
 
           </div>
         </div>
+
+
       </section>
     );
   }
@@ -924,7 +682,7 @@ const ReportesSection: React.FC<ReportesSectionProps> = ({
       </div>
 
 
-      {viewMode === "reporte" ? (
+      {viewMode === "reporte" && (
         <>
           <div className="mt-6 grid gap-8 lg:grid-cols-[1.4fr_1fr]">
             <div className="rounded-3xl border border-slate-200 bg-linear-to-br from-slate-50 to-white p-6 shadow-sm flex flex-col">
@@ -1538,10 +1296,7 @@ const ReportesSection: React.FC<ReportesSectionProps> = ({
             </div>
           )}
         </>
-      ) : (
-        <div>  sd  </div>
-      )
-      }
+      )}
 
       {viewMode === "catalogo" && (
         <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-6 text-slate-700 shadow-sm">         
@@ -1550,6 +1305,7 @@ const ReportesSection: React.FC<ReportesSectionProps> = ({
           </p>
         </div>
       )}
+
       {viewMode === "proveedores" && (
         <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-6 text-slate-700 shadow-sm">       
           <p className="text-sm text-slate-600">
@@ -1557,6 +1313,7 @@ const ReportesSection: React.FC<ReportesSectionProps> = ({
           </p>
         </div>
       )}
+
       {viewMode === "plantas" && (
         <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-6 text-slate-700 shadow-sm">          
           <p className="text-sm text-slate-600">
@@ -1564,6 +1321,7 @@ const ReportesSection: React.FC<ReportesSectionProps> = ({
           </p>
         </div>
       )}
+
       {viewMode === "compradores" && (
         <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-6 text-slate-700 shadow-sm">          
           <p className="text-sm text-slate-600">
