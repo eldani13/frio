@@ -2,6 +2,7 @@ import React from "react";
 import ProvidersPage from "@/app/proveedores/page"; 
 import PlantasPage from "@/app/plantas/page"; 
 import CompradoresPage from "@/app/compradores/page"; 
+import CatalogosPage from "@/app/catalogos/page"; 
 import {
   MdBarChart,
   MdMoveToInbox,
@@ -757,6 +758,8 @@ const ReportesSection: React.FC<ReportesSectionProps> = ({
             
           </div>
           <div className="grid w-full max-w-4xl gap-4 md:grid-cols-3">
+            
+             {/* Botón Reporte */}            
             <button
               type="button"
               onClick={() => setViewMode("reporte")}
@@ -769,9 +772,11 @@ const ReportesSection: React.FC<ReportesSectionProps> = ({
                 <p className="text-lg font-bold text-slate-900">Reporte</p>
               </div>
             </button>
+            
+            {/* Botón Catálogo */}
             <button
               type="button"
-              onClick={() => setViewMode("catalogo")}
+              onClick={() => setViewMode("catalogo")  }
               className="group h-full rounded-3xl bg-[#f8edb1] p-6 sm:p-8 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md focus:outline-none"
             >
               <div className="flex flex-col items-center gap-3">
@@ -781,6 +786,8 @@ const ReportesSection: React.FC<ReportesSectionProps> = ({
                 <p className="text-lg font-bold text-slate-900">Catálogo</p>
               </div>
             </button>
+
+            {/* Botón Asignar */}
             <button
               type="button"
               onClick={() => setViewMode("reporte")}
@@ -797,7 +804,7 @@ const ReportesSection: React.FC<ReportesSectionProps> = ({
              {/* Botón Proveedores */}
             <button
               type="button"
-              onClick={() => {
+              onClick={() => {              
                 setViewMode("proveedores");             
               }}
               className="group h-full rounded-3xl bg-[#e2d5f3] p-6 sm:p-8 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md focus:outline-none"
@@ -915,6 +922,8 @@ const ReportesSection: React.FC<ReportesSectionProps> = ({
           </div>
         ) : null}
       </div>
+
+
       {viewMode === "reporte" ? (
         <>
           <div className="mt-6 grid gap-8 lg:grid-cols-[1.4fr_1fr]">
@@ -1530,223 +1539,33 @@ const ReportesSection: React.FC<ReportesSectionProps> = ({
           )}
         </>
       ) : (
-        <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-6 text-slate-700 shadow-sm">
-          <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
-            <div>
-              <h3 className="text-base font-bold text-slate-900">Catálogo</h3>
-              <p className="text-sm text-slate-600">
-                Listado de productos del cliente.
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={handleOpenCatalogModal}
-              className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-200"
-            >
-              <MdAdd size={18} />
-              Crear ítem de catálogo
-            </button>
-          </div>
-
-          <div className="overflow-x-auto">
-            <table className="min-w-full border border-slate-200 text-xs text-left text-slate-700">
-              <thead className="bg-slate-50 text-[11px] uppercase tracking-wide text-slate-500">
-                <tr>
-                  {catalogFields.map((field) => (
-                    <th
-                      key={field.key}
-                      className="whitespace-nowrap border-b border-slate-200 px-3 py-2"
-                    >
-                      {field.label}
-                    </th>
-                  ))}
-                  <th className="whitespace-nowrap border-b border-slate-200 px-3 py-2 text-center">
-                    Acciones
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {catalogItems.length === 0 ? (
-                  <tr>
-                    <td
-                      colSpan={catalogFields.length + 1}
-                      className="border-b border-slate-100 px-3 py-3 text-center text-slate-500"
-                    >
-                      No hay productos en el catálogo.
-                    </td>
-                  </tr>
-                ) : (
-                  catalogItems.map((item, idx) => (
-                    <tr
-                      key={`${item.sku || item.slug || item.title || idx}`}
-                      className={idx % 2 === 0 ? "bg-white" : "bg-slate-50"}
-                    >
-                      {catalogFields.map((field) => (
-                        <td
-                          key={field.key}
-                          className={`whitespace-nowrap border-b border-slate-100 px-3 py-2${field.key === "title" ? " font-semibold text-slate-900" : ""}`}
-                        >
-                          {item[field.key] || "—"}
-                        </td>
-                      ))}
-                      <td className="whitespace-nowrap border-b border-slate-100 px-3 py-2 text-center">
-                        <div className="flex items-center justify-center gap-2">
-                          <button
-                            type="button"
-                            onClick={() => handleEditCatalog(item)}
-                            className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2 py-1 text-[11px] font-semibold text-slate-700 shadow-sm transition hover:bg-slate-100"
-                          >
-                            <MdEdit size={14} /> Editar
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleDeleteCatalog(item)}
-                            className="inline-flex items-center gap-1 rounded-lg border border-rose-200 bg-white px-2 py-1 text-[11px] font-semibold text-rose-600 shadow-sm transition hover:bg-rose-50"
-                          >
-                            <MdDelete size={14} /> Borrar
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-
-          {catalogModalOpen ? (
-            <div
-              className="fixed inset-0 z-50 flex items-center justify-center backdrop-blur-sm p-3 sm:p-4"
-              style={{ background: "rgba(0,0,0,0.1)" }}
-              role="dialog"
-              aria-modal="true"
-              onClick={handleCloseCatalogModal}
-            >
-              <div
-                className="w-full max-w-5xl rounded-3xl border border-blue-100 bg-white/95 shadow-2xl animate-fade-in-up"
-                onClick={(event) => event.stopPropagation()}
-              >
-                <div className="flex items-center justify-between border-b border-blue-100 px-6 py-4">
-                  <div>
-                    <h3 className="text-lg font-bold text-slate-900">
-                      {editingItemId
-                        ? "Editar ítem de catálogo"
-                        : "Crear ítem de catálogo"}
-                    </h3>
-                    <p className="text-sm text-slate-600">
-                      Completa los campos para{" "}
-                      {editingItemId ? "actualizar" : "registrar"} el producto.
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={handleCloseCatalogModal}
-                    className="text-slate-400 hover:text-blue-500 transition-colors"
-                    aria-label="Cerrar"
-                  >
-                    <MdClose size={28} />
-                  </button>
-                </div>
-
-                <form
-                  onSubmit={handleCatalogSubmit}
-                  className="max-h-[70vh] overflow-y-auto px-6 py-4 space-y-4"
-                >
-                 {/* Dentro del form en catalogModalOpen */}
-                  <div className="grid gap-4 md:grid-cols-2">
-                    {catalogFields.map((field) => (
-                      <label
-                        key={field.key}
-                        className="flex flex-col gap-2 text-sm text-slate-700"
-                      >
-                        <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                          {field.label}
-                          {/* Agregamos asterisco rojo si es obligatorio */}
-                          {field.required && <span className="text-red-500 ml-1">*</span>}
-                        </span>
-                        {field.multiline ? (
-                          <textarea
-                            value={catalogForm[field.key]}
-                            onChange={(event) =>
-                              handleCatalogFieldChange(field.key, event.target.value)
-                            }
-                            disabled={catalogSaving}
-                            // Validación nativa del navegador
-                            required={field.required}
-                            className={`min-h-[88px] rounded-xl border px-3 py-2 text-sm text-slate-900 shadow-inner focus:outline-none focus:ring-2 focus:ring-blue-200 ${
-                              field.required && !catalogForm[field.key] ? 'border-amber-200' : 'border-slate-200'
-                            }`}
-                            placeholder={field.required ? `${field.label} (Obligatorio)` : field.label}
-                          />
-                        ) : (
-                          <input
-                            type={field.inputType ?? "text"}
-                            value={catalogForm[field.key]}
-                            onChange={(event) =>
-                              handleCatalogFieldChange(field.key, event.target.value)
-                            }
-                            disabled={catalogSaving}
-                            // Validación nativa del navegador
-                            required={field.required}
-                            className={`rounded-xl border px-3 py-2 text-sm text-slate-900 shadow-inner focus:outline-none focus:ring-2 focus:ring-blue-200 ${
-                              field.required && !catalogForm[field.key] ? 'border-amber-200' : 'border-slate-200'
-                            }`}
-                            placeholder={field.required ? `${field.label} (Obligatorio)` : field.label}
-                          />
-                        )}
-                      </label>
-                    ))}
-                  </div>
-
-                  <div className="flex items-center justify-end gap-3 pt-2">
-                    <button
-                      type="button"
-                      onClick={handleCloseCatalogModal}
-                      disabled={catalogSaving}
-                      className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-100"
-                    >
-                      Cancelar
-                    </button>
-                    <button
-                      type="submit"
-                      disabled={catalogSaving}
-                      className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-200"
-                    >
-                      <MdAdd size={18} />
-                      {catalogSaving
-                        ? "Guardando..."
-                        : editingItemId
-                          ? "Actualizar"
-                          : "Guardar ítem"}
-                    </button>
-                  </div>
-                </form>
-              </div>
-            </div>
-          ) : null}
-        </div>
+        <div>  sd  </div>
       )
       }
 
+      {viewMode === "catalogo" && (
+        <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-6 text-slate-700 shadow-sm">         
+          <p className="text-sm text-slate-600">
+          <CatalogosPage />
+          </p>
+        </div>
+      )}
       {viewMode === "proveedores" && (
-        <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-6 text-slate-700 shadow-sm">
-          <h3 className="text-base font-bold text-slate-900">Proveedores</h3>
+        <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-6 text-slate-700 shadow-sm">       
           <p className="text-sm text-slate-600">
           <ProvidersPage />
           </p>
         </div>
       )}
       {viewMode === "plantas" && (
-        <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-6 text-slate-700 shadow-sm">
-          <h3 className="text-base font-bold text-slate-900">Proveedores</h3>
+        <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-6 text-slate-700 shadow-sm">          
           <p className="text-sm text-slate-600">
           <PlantasPage />
           </p>
         </div>
       )}
       {viewMode === "compradores" && (
-        <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-6 text-slate-700 shadow-sm">
-          <h3 className="text-base font-bold text-slate-900">Proveedores</h3>
+        <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-6 text-slate-700 shadow-sm">          
           <p className="text-sm text-slate-600">
           <CompradoresPage />
           </p>
