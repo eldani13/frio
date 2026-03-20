@@ -9,6 +9,9 @@ import {
   MdAdd,
   MdEdit,
   MdDelete,
+  MdBusiness, 
+  MdFactory,    
+  MdShoppingCart, 
 } from "react-icons/md";
 import { BiBarChartAlt2, BiCollection, BiUserCheck } from "react-icons/bi";
 import { FiUsers } from "react-icons/fi";
@@ -212,7 +215,7 @@ const ReportesSection: React.FC<ReportesSectionProps> = ({
 }) => {
   const { ingresos, salidas, movimientosBodega, alertas } = useBodegaHistory();
 
-  const [viewMode, setViewMode] = React.useState<"reporte" | "catalogo" | null>(
+  const [viewMode, setViewMode] = React.useState<"reporte" | "catalogo" | "proveedores" | "plantas" | "compradores" | null>(
     isCliente ? null : "reporte",
   );
   const [selectedBoxId, setSelectedBoxId] = React.useState<string>("");
@@ -787,6 +790,59 @@ const ReportesSection: React.FC<ReportesSectionProps> = ({
                 <p className="text-lg font-bold text-slate-900">Asignar</p>
               </div>
             </button>
+
+             {/* Botón Proveedores */}
+            <button
+              type="button"
+              onClick={() => {
+                setViewMode("proveedores");
+                window.location.href = "/proveedores";
+              }}
+              className="group h-full rounded-3xl bg-[#e2d5f3] p-6 sm:p-8 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md focus:outline-none"
+            >
+              <div className="flex flex-col items-center gap-3">
+                <span className="inline-flex h-14 w-14 items-center justify-center text-slate-800">
+                  <MdBusiness size={32} />
+                </span>
+                <p className="text-lg font-bold text-slate-900">Proveedores</p>
+              </div>
+            </button>
+
+            {/* Botón Plantas */}
+            <button
+              type="button"
+              onClick={() => {
+                setViewMode("plantas");
+                window.location.href = "/plantas";
+              }}
+              className="group h-full rounded-3xl bg-[#ffdce5] p-6 sm:p-8 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md focus:outline-none"
+            >
+              <div className="flex flex-col items-center gap-3">
+                <span className="inline-flex h-14 w-14 items-center justify-center text-slate-800">
+                  <MdFactory size={32} />
+                </span>
+                <p className="text-lg font-bold text-slate-900">Plantas</p>
+              </div>
+            </button>
+
+            {/* Botón Compradores */}
+            <button
+              type="button"
+              onClick={() => {
+                setViewMode("compradores");
+                window.location.href = "/compradores";
+              }}
+              className="group h-full rounded-3xl bg-[#d1f2fb] p-6 sm:p-8 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md focus:outline-none"
+            >
+              <div className="flex flex-col items-center gap-3">
+                <span className="inline-flex h-14 w-14 items-center justify-center text-slate-800">
+                  <MdShoppingCart size={32} />
+                </span>
+                <p className="text-lg font-bold text-slate-900">Compradores</p>
+              </div>
+            </button>
+
+
           </div>
         </div>
       </section>
@@ -1670,8 +1726,15 @@ const ReportesSection: React.FC<ReportesSectionProps> = ({
           ) : null}
         </div>
       )}
+
+
+      
+
+
     </section>
   );
+
+  
 };
 
 export default ReportesSection;
