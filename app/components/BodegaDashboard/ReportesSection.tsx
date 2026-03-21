@@ -9,6 +9,9 @@ import {
   MdAdd,
   MdEdit,
   MdDelete,
+  MdBusiness, 
+  MdFactory,    
+  MdShoppingCart, 
 } from "react-icons/md";
 import { BiBarChartAlt2, BiCollection, BiUserCheck } from "react-icons/bi";
 import { FiUsers } from "react-icons/fi";
@@ -109,16 +112,17 @@ const catalogFields: Array<{
   label: string;
   multiline?: boolean;
   inputType?: string;
+  required?: boolean;
 }> = [
-  { key: "title", label: "Título" },
+  { key: "title", label: "Título", required: true},
   { key: "slug", label: "Identificador URL" },
-  { key: "description", label: "Descripción", multiline: true },
-  { key: "provider", label: "Proveedor" },
-  { key: "category", label: "Categoría producto" },
-  { key: "productType", label: "Tipo" },
+  { key: "description", label: "Descripción", multiline: true,required: true },
+  { key: "provider", label: "Proveedor" ,required: true},
+  { key: "category", label: "Categoría producto" ,required: true},
+  { key: "productType", label: "Tipo" ,required: true},
   { key: "tags", label: "Etiquetas" },
   { key: "publishedOnline", label: "Publicado en tienda online" },
-  { key: "status", label: "Estado" },
+  { key: "status", label: "Estado" ,required: true},
   { key: "sku", label: "SKU" },
   { key: "barcode", label: "Código de barras" },
   { key: "optionName1", label: "Nombre opción 1" },
@@ -211,7 +215,7 @@ const ReportesSection: React.FC<ReportesSectionProps> = ({
 }) => {
   const { ingresos, salidas, movimientosBodega, alertas } = useBodegaHistory();
 
-  const [viewMode, setViewMode] = React.useState<"reporte" | "catalogo" | null>(
+  const [viewMode, setViewMode] = React.useState<"reporte" | "catalogo" | "proveedores" | "plantas" | "compradores" | null>(
     isCliente ? null : "reporte",
   );
   const [selectedBoxId, setSelectedBoxId] = React.useState<string>("");
@@ -263,6 +267,31 @@ const ReportesSection: React.FC<ReportesSectionProps> = ({
 
   const handleCatalogSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+
+    // --- NUEVA LÓGICA DE VALIDACIÓN ---
+  const requiredKeys: (keyof CatalogItemData)[] = [
+    "title", 
+    "description", 
+    "provider", 
+    "category", 
+    "productType", 
+    "status"
+  ];
+
+  const missingFields = requiredKeys.filter(key => !catalogForm[key] || catalogForm[key].trim() === "");
+
+  if (missingFields.length > 0) {
+    const labels = catalogFields
+      .filter(f => missingFields.includes(f.key))
+      .map(f => f.label);
+    
+    alert(`Los siguientes campos son obligatorios: \n- ${labels.join("\n- ")}`);
+    return; // Detiene la ejecución si falta algo
+  }
+  // ----------------------------------
+
+
+
     setCatalogSaving(true);
     const persist = async () => {
       if (editingItemId) {
@@ -761,6 +790,59 @@ const ReportesSection: React.FC<ReportesSectionProps> = ({
                 <p className="text-lg font-bold text-slate-900">Asignar</p>
               </div>
             </button>
+
+             {/* Botón Proveedores */}
+            <button
+              type="button"
+              onClick={() => {
+                setViewMode("proveedores");
+                window.location.href = "/proveedores";
+              }}
+              className="group h-full rounded-3xl bg-[#e2d5f3] p-6 sm:p-8 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md focus:outline-none"
+            >
+              <div className="flex flex-col items-center gap-3">
+                <span className="inline-flex h-14 w-14 items-center justify-center text-slate-800">
+                  <MdBusiness size={32} />
+                </span>
+                <p className="text-lg font-bold text-slate-900">Proveedores</p>
+              </div>
+            </button>
+
+            {/* Botón Plantas */}
+            <button
+              type="button"
+              onClick={() => {
+                setViewMode("plantas");
+                window.location.href = "/plantas";
+              }}
+              className="group h-full rounded-3xl bg-[#ffdce5] p-6 sm:p-8 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md focus:outline-none"
+            >
+              <div className="flex flex-col items-center gap-3">
+                <span className="inline-flex h-14 w-14 items-center justify-center text-slate-800">
+                  <MdFactory size={32} />
+                </span>
+                <p className="text-lg font-bold text-slate-900">Plantas</p>
+              </div>
+            </button>
+
+            {/* Botón Compradores */}
+            <button
+              type="button"
+              onClick={() => {
+                setViewMode("compradores");
+                window.location.href = "/compradores";
+              }}
+              className="group h-full rounded-3xl bg-[#d1f2fb] p-6 sm:p-8 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md focus:outline-none"
+            >
+              <div className="flex flex-col items-center gap-3">
+                <span className="inline-flex h-14 w-14 items-center justify-center text-slate-800">
+                  <MdShoppingCart size={32} />
+                </span>
+                <p className="text-lg font-bold text-slate-900">Compradores</p>
+              </div>
+            </button>
+
+
           </div>
         </div>
       </section>
@@ -1570,6 +1652,7 @@ const ReportesSection: React.FC<ReportesSectionProps> = ({
                   onSubmit={handleCatalogSubmit}
                   className="max-h-[70vh] overflow-y-auto px-6 py-4 space-y-4"
                 >
+                 {/* Dentro del form en catalogModalOpen */}
                   <div className="grid gap-4 md:grid-cols-2">
                     {catalogFields.map((field) => (
                       <label
@@ -1578,33 +1661,37 @@ const ReportesSection: React.FC<ReportesSectionProps> = ({
                       >
                         <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
                           {field.label}
+                          {/* Agregamos asterisco rojo si es obligatorio */}
+                          {field.required && <span className="text-red-500 ml-1">*</span>}
                         </span>
                         {field.multiline ? (
                           <textarea
                             value={catalogForm[field.key]}
                             onChange={(event) =>
-                              handleCatalogFieldChange(
-                                field.key,
-                                event.target.value,
-                              )
+                              handleCatalogFieldChange(field.key, event.target.value)
                             }
                             disabled={catalogSaving}
-                            className="min-h-[88px] rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-inner focus:outline-none focus:ring-2 focus:ring-blue-200"
-                            placeholder={field.label}
+                            // Validación nativa del navegador
+                            required={field.required}
+                            className={`min-h-[88px] rounded-xl border px-3 py-2 text-sm text-slate-900 shadow-inner focus:outline-none focus:ring-2 focus:ring-blue-200 ${
+                              field.required && !catalogForm[field.key] ? 'border-amber-200' : 'border-slate-200'
+                            }`}
+                            placeholder={field.required ? `${field.label} (Obligatorio)` : field.label}
                           />
                         ) : (
                           <input
                             type={field.inputType ?? "text"}
                             value={catalogForm[field.key]}
                             onChange={(event) =>
-                              handleCatalogFieldChange(
-                                field.key,
-                                event.target.value,
-                              )
+                              handleCatalogFieldChange(field.key, event.target.value)
                             }
                             disabled={catalogSaving}
-                            className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-inner focus:outline-none focus:ring-2 focus:ring-blue-200"
-                            placeholder={field.label}
+                            // Validación nativa del navegador
+                            required={field.required}
+                            className={`rounded-xl border px-3 py-2 text-sm text-slate-900 shadow-inner focus:outline-none focus:ring-2 focus:ring-blue-200 ${
+                              field.required && !catalogForm[field.key] ? 'border-amber-200' : 'border-slate-200'
+                            }`}
+                            placeholder={field.required ? `${field.label} (Obligatorio)` : field.label}
                           />
                         )}
                       </label>
@@ -1639,8 +1726,15 @@ const ReportesSection: React.FC<ReportesSectionProps> = ({
           ) : null}
         </div>
       )}
+
+
+      
+
+
     </section>
   );
+
+  
 };
 
 export default ReportesSection;

@@ -24,6 +24,7 @@ export type ConfigUser = {
 	id: string;
 	name: string;
 	role: Role;
+	code?: string;
 	clientId?: string;
 	email?: string;
 	password?: string;
