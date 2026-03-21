@@ -58,7 +58,7 @@ export default function CatalogoPage() {
           </div>
           <div>
             <h1 className="text-[28px] font-extrabold text-gray-900 tracking-tight">Catálogo</h1>
-            <p className="text-gray-500 text-[14px]">Gestión de inventario y productos</p>
+           
           </div>
         </div>
 

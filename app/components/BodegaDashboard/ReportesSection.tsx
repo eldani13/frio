@@ -3,6 +3,7 @@ import ProvidersPage from "@/app/proveedores/page";
 import PlantasPage from "@/app/plantas/page"; 
 import CompradoresPage from "@/app/compradores/page"; 
 import CatalogosPage from "@/app/catalogos/page"; 
+import CamionesPage from "@/app/camiones/page"; 
 import {
   MdBarChart,
   MdMoveToInbox,
@@ -16,6 +17,7 @@ import {
   MdBusiness, 
   MdFactory,    
   MdShoppingCart, 
+  
 } from "react-icons/md";
 import { BiBarChartAlt2, BiCollection, BiUserCheck } from "react-icons/bi";
 import { FiUsers } from "react-icons/fi";
@@ -45,7 +47,7 @@ import {
 } from "recharts";
 import type { Box, BodegaOrder, Slot } from "../../interfaces/bodega";
 import { IoAlert } from "react-icons/io5";
-import { HiOutlineArrowRight } from "react-icons/hi2";
+import { HiOutlineArrowRight,HiOutlineTruck } from "react-icons/hi2";
 interface ReportesSectionProps {
   reportData: Array<{ name: string; value: number; fill: string }>;
   inboundBoxes: Box[];
@@ -89,7 +91,7 @@ const ReportesSection: React.FC<ReportesSectionProps> = ({
   const { ingresos, salidas, movimientosBodega, alertas } = useBodegaHistory();
 
   const [viewMode, setViewMode] = React.useState<"reporte" | "catalogo" |
-   "proveedores" | "plantas" | "compradores" | "asignarBodegas" | null>(
+   "proveedores" | "plantas" | "compradores" | "asignarBodegas" | "camiones"  | null>(
     isCliente ? null : "reporte",
   );
   const [selectedBoxId, setSelectedBoxId] = React.useState<string>("");
@@ -119,11 +121,7 @@ const ReportesSection: React.FC<ReportesSectionProps> = ({
     setReportDetailModal(null);
   }, [isCliente, menuResetNonce, setReportDetailModal]);
 
-  const catalogCollection = React.useMemo(
-    () => collection(db, "warehouses", warehouseId, "catalog"),
-    [warehouseId],
-  );
-
+  
   const activeClientId = isCliente ? clientFilterId || clientId : clientId;
   const clientOptions = ["cliente1", "cliente2", "cliente3"];
 
@@ -624,6 +622,21 @@ const ReportesSection: React.FC<ReportesSectionProps> = ({
               <HiOutlineArrowRight size={20} className="text-slate-500 group-hover:translate-x-1 transition-transform" />
             </button> 
 
+            {/* Botón Camiones */}
+            <button
+              onClick={() => setViewMode("camiones")}
+              className="group w-full rounded-2xl bg-[#d1f2fb] p-4 transition-all hover:-translate-y-0.5 hover:shadow-md flex items-center justify-between cursor-pointer active:scale-95"
+            >
+              <div className="flex items-center gap-4">
+                <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-white/40 text-slate-800 shadow-sm">
+                  <HiOutlineTruck size={24} />
+                </span>
+                <p className="text-lg font-bold text-slate-900">Camiones</p>
+              </div>
+              <HiOutlineArrowRight size={20} className="text-slate-500 group-hover:translate-x-1 transition-transform" />
+            </button>
+          
+          
           </div>
         </div>
 
@@ -1348,7 +1361,14 @@ const ReportesSection: React.FC<ReportesSectionProps> = ({
         </div>
       )}
       
-
+      {viewMode === "camiones" && (
+        <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-6 text-slate-700 shadow-sm">          
+          <div className="text-sm text-slate-600">
+          <CamionesPage />
+          </div>
+        </div>
+      )}
+      
 
     </section>
   );

@@ -4,7 +4,7 @@ import { PlantaService } from "@/app/services/plantaService";
 import { Planta } from "@/app/types/planta";
 import { PlantaTable } from "@/app/components/ui/plantas/PlantaTable";
 import { PlantaForm } from "@/app/components/ui/plantas/PlantaForm";
-import { HiOutlinePlus } from "react-icons/hi2";
+import { HiOutlinePlus, HiOutlineSquares2X2 } from "react-icons/hi2";
 
 export default function PlantasPage() {
   const [plantas, setPlantas] = useState<Planta[]>([]);
@@ -40,9 +40,13 @@ export default function PlantasPage() {
   return (
     <main className="max-w-5xl mx-auto p-8 font-['Inter']">
       <header className="mb-10 flex justify-between items-center">
-        <div>
-          <h1 className="text-[32px] font-bold text-gray-900 tracking-tight">Plantas</h1>
-          <p className="text-[#2D5A3F]/60 text-[14px]">Gestión de plantas</p>
+        <div className="flex items-center gap-4">
+          <div className="p-3 bg-[#f8edb1] rounded-2xl text-[#2D5A3F]">
+            <HiOutlineSquares2X2 size={28} />
+          </div>
+          <div>
+            <h1 className="text-[28px] font-extrabold text-gray-900 tracking-tight">Gestión de Plantas</h1>
+          </div>
         </div>
         <button 
           onClick={() => { setSelectedPlanta(null); setIsModalOpen(true); }}
