@@ -1,9 +1,10 @@
 export default function ListadoCargue() {
-    const datos = [
-      { lote: 'L-992', descripcion: 'HAMBURGUESA DE CARNE', cantidad: 45, estado: 'Buen estado' },
-      { lote: 'L-995', descripcion: 'CARNE DE RES FRANCESA', cantidad: 12, estado: 'Buen estado' },
-      { lote: 'L-996', descripcion: 'MUSLO DE POLLO', cantidad: 12, estado: 'Buen estado' },
-    ];
+  const datos = [
+    { lote: 'L-992', descripcion: 'HAMBURGUESA DE CARNE', cantidad: 45, estado: 'Buen estado' },
+    { lote: 'L-995', descripcion: 'CARNE DE RES FRANCESA', cantidad: 12, estado: 'Buen estado' },
+    { lote: 'L-996', descripcion: 'MUSLO DE POLLO', cantidad: 12, estado: 'Buen estado' },
+    { lote: 'L-996', descripcion: 'PECHUGA DE PAVO', cantidad: 12, estado: 'Buen estado' },
+  ];
   
     const totalKg = datos.reduce((acc, current) => acc + current.cantidad, 0);
   
