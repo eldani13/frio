@@ -4,7 +4,7 @@ import { ProviderService } from "@/app/services/providerService";
 import { Provider } from "@/app/types/provider";
 import { ProviderTable } from "@/app/components/ui/providers/ProviderTable";
 import { ProviderForm } from "@/app/components/ui/providers/ProviderForm";
-import { HiOutlinePlus } from "react-icons/hi2";
+import { HiOutlinePlus, HiOutlineSquares2X2 } from "react-icons/hi2";
 
 export default function ProvidersPage() {
   const [providers, setProviders] = useState<Provider[]>([]);
@@ -33,9 +33,13 @@ export default function ProvidersPage() {
   return (
     <main className="max-w-4xl mx-auto p-8 font-['Inter']">
       <header className="mb-10 flex justify-between items-center">
-        <div>
-          <h1 className="text-[32px] font-bold text-gray-900 tracking-tight">Proveedores</h1>
-          <p className="text-[#2D5A3F]/60 text-[14px]">Listado de proveedores</p>
+        <div className="flex items-center gap-4">
+          <div className="p-3 bg-[#f8edb1] rounded-2xl text-[#2D5A3F]">
+            <HiOutlineSquares2X2 size={28} />
+          </div>
+          <div>
+            <h1 className="text-[28px] font-extrabold text-gray-900 tracking-tight">Proveedores</h1>
+          </div>
         </div>
         <button 
           onClick={() => { setSelectedProvider(null); setIsModalOpen(true); }}
