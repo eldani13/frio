@@ -57,6 +57,7 @@ const ReportesSection: React.FC<ReportesSectionProps> = ({
     return (
       <section className="rounded-2xl bg-white p-8 shadow-sm border border-slate-200">
         <div className="flex flex-col items-center text-center gap-6 w-full px-4">
+          
           <div className="flex flex-col w-full max-w-4xl gap-3">
             
             {/* Botón Reporte */}
@@ -69,7 +70,7 @@ const ReportesSection: React.FC<ReportesSectionProps> = ({
                 <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-white/50 text-slate-800 shadow-sm">
                   <BiBarChartAlt2 size={24} />
                 </span>
-                <p className="text-lg font-bold text-slate-900">Reporte</p>
+                <p className="text-lg font-bold text-slate-900">Reportes</p>
               </div>
               <HiOutlineArrowRight size={18} className="text-slate-500 group-hover:translate-x-1 transition-transform" />
             </button>
@@ -160,7 +161,9 @@ const ReportesSection: React.FC<ReportesSectionProps> = ({
               </div>
               <HiOutlineArrowRight size={20} className="text-slate-500 group-hover:translate-x-1 transition-transform" />
             </button>
+          
           </div>
+
         </div>
       </section>
     );
@@ -168,8 +171,8 @@ const ReportesSection: React.FC<ReportesSectionProps> = ({
 
   // Renderizado de las Sub-páginas seleccionadas
   return (
-    <section className="rounded-2xl bg-white p-6 shadow-sm">
-      <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-6 text-slate-700 shadow-sm">
+    <section className="rounded-2xl bg-white p-0 shadow-sm">
+      
         <div className="text-sm text-slate-600">
           {viewMode === "reporte" && <ReportesPage />}
           {viewMode === "catalogo" && <CatalogosPage />}
@@ -178,7 +181,7 @@ const ReportesSection: React.FC<ReportesSectionProps> = ({
           {viewMode === "compradores" && <CompradoresPage />}
           {viewMode === "camiones" && <CamionesPage />}
         </div>
-      </div>
+      
     </section>
   );
 };
