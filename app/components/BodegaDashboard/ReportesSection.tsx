@@ -5,6 +5,7 @@ import CompradoresPage from "@/app/compradores/page";
 import CatalogosPage from "@/app/catalogos/page";
 import CamionesPage from "@/app/camiones/page";
 import ReportesPage from "@/app/reportes/page";
+import AsignarBodegasPage from "@/app/asignarbodegas/page";
 
 import { MdBusiness, MdFactory, MdShoppingCart } from "react-icons/md";
 import { BiBarChartAlt2, BiCollection, BiUserCheck } from "react-icons/bi";
@@ -180,6 +181,7 @@ const ReportesSection: React.FC<ReportesSectionProps> = ({
           {viewMode === "plantas" && <PlantasPage />}
           {viewMode === "compradores" && <CompradoresPage />}
           {viewMode === "camiones" && <CamionesPage />}
+          {viewMode === "asignarBodegas" && <AsignarBodegasPage />}
         </div>
       
     </section>
