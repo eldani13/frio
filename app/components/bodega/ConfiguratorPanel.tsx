@@ -300,9 +300,10 @@ export default function ConfiguratorPanel({
           </div>
         </div>
 
-        <div className="grid grid-cols-[2fr_1.5fr_2fr] border-y border-[#edf1f5] bg-white px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-[#7c8087]">
+        <div className="grid grid-cols-[2fr_1.5fr_1.7fr_2fr] border-y border-[#edf1f5] bg-white px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-[#7c8087]">
           <span>Nombre</span>
           <span>Capacidad</span>
+          <span>Bodega asignada</span>
           <span>Acciones</span>
         </div>
         {warehousesLoading && !list.length ? (
@@ -319,10 +320,11 @@ export default function ConfiguratorPanel({
                 ? warehouse.capacity
                 : "-";
             const effectiveStatus = warehouse.status === "externa" ? "externa" : "interna";
+            const assignedLabel = warehouse.codeCuenta?.trim() ? warehouse.codeCuenta.trim() : "Sin asignar";
             return (
               <div
                 key={warehouse.id}
-                className="grid grid-cols-[2fr_1.5fr_2fr] items-center gap-3 border-t border-[#edf1f5] bg-white px-4 py-3 text-sm text-[#3f3f3f]"
+                className="grid grid-cols-[2fr_1.5fr_1.7fr_2fr] items-center gap-3 border-t border-[#edf1f5] bg-white px-4 py-3 text-sm text-[#3f3f3f]"
               >
                 <div className="flex flex-col">
                   <span className={`font-semibold ${warehouse.disabled ? "text-[#9ca3af]" : "text-[#2d2d2d]"}`}>
@@ -334,6 +336,7 @@ export default function ConfiguratorPanel({
                   </span>
                 </div>
                 <span className="text-sm font-semibold text-[#3f3f3f]">{capacityLabel}</span>
+                <span className="text-sm text-[#3f3f3f]">{assignedLabel}</span>
                 <div className="flex flex-wrap items-center gap-2">
                   <button
                     type="button"

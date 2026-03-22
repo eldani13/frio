@@ -101,6 +101,7 @@ type WarehouseMeta = {
   disabled?: boolean;
   createdAt?: string;
   disabledAt?: string;
+  codeCuenta?: string;
 };
 
 type ZoneKey = "entrada" | "bodega" | "salida";
@@ -583,6 +584,7 @@ export default function BodegaDashboard() {
           disabled?: boolean;
           createdAt?: { toMillis?: () => number };
           disabledAt?: { toMillis?: () => number };
+          codeCuenta?: string;
         };
         const createdAtMs =
           data.createdAt && typeof data.createdAt.toMillis === "function"
@@ -600,6 +602,7 @@ export default function BodegaDashboard() {
           disabled: Boolean(data.disabled),
           createdAt: createdAtMs ? new Date(createdAtMs).toLocaleString("es-CO") : undefined,
           disabledAt: disabledAtMs ? new Date(disabledAtMs).toLocaleString("es-CO") : undefined,
+          codeCuenta: (data.codeCuenta ?? "").toString(),
         } satisfies WarehouseMeta;
       });
 
@@ -614,6 +617,7 @@ export default function BodegaDashboard() {
             capacity: 0,
             disabled: false,
             createdAt: serverTimestamp(),
+            codeCuenta: "",
           });
         }
         if (!items.some((item) => item.id === DEFAULT_WAREHOUSE_ID)) {
@@ -626,6 +630,7 @@ export default function BodegaDashboard() {
               disabled: false,
               createdAt: undefined,
               disabledAt: undefined,
+              codeCuenta: "",
             },
             ...items,
           ];
@@ -649,6 +654,7 @@ export default function BodegaDashboard() {
             disabled: false,
             createdAt: undefined,
             disabledAt: undefined,
+            codeCuenta: "",
           },
         ];
       }
@@ -669,6 +675,7 @@ export default function BodegaDashboard() {
           disabled: false,
           createdAt: undefined,
           disabledAt: undefined,
+          codeCuenta: "",
         },
         {
           id: FRIDEM_WAREHOUSE_ID,
@@ -678,6 +685,7 @@ export default function BodegaDashboard() {
           disabled: false,
           createdAt: undefined,
           disabledAt: undefined,
+          codeCuenta: "",
         },
       ]);
       if (!warehouseId) {
@@ -724,6 +732,7 @@ export default function BodegaDashboard() {
       const isExterna =
         typeof arg === "object" && arg !== null && arg.status === "externa";
       const firestoreStatus = isExterna ? "externa" : "active";
+      const codeCuenta = (session.clientId ?? "").toString();
       if (!name) {
         setMessage("Ingresa un nombre para la bodega.");
         return;
@@ -738,6 +747,7 @@ export default function BodegaDashboard() {
           capacity,
           disabled: false,
           createdAt: serverTimestamp(),
+          codeCuenta,
         });
         await Promise.all([ensureWarehouseState(ref.id), ensureHistoryState(ref.id)]);
         const createdAtMs = Date.now();
@@ -748,6 +758,7 @@ export default function BodegaDashboard() {
           capacity,
           disabled: false,
           createdAt: new Date(createdAtMs).toLocaleString("es-CO"),
+          codeCuenta,
         };
         setWarehouses((prev) => {
           const exists = prev.some((item) => item.id === ref.id);

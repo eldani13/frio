@@ -113,4 +113,5 @@ export type WarehouseMeta = {
 	disabled?: boolean;
 	createdAt?: string;
 	disabledAt?: string;
+	codeCuenta?: string;
 };
