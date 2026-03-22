@@ -462,6 +462,8 @@ export default function BodegaDashboard() {
   const [loginPassword, setLoginPassword] = useState<string>("");
   const [loginError, setLoginError] = useState<string>("");
   const [adminSection, setAdminSection] = useState<AdminSection>("bodega_interna");
+  /** Pulso para que clientes en Reportes vuelvan al submenú de vistas al pulsar Menú en el header */
+  const [reportesClienteMenuNonce, setReportesClienteMenuNonce] = useState(0);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
@@ -545,7 +547,6 @@ export default function BodegaDashboard() {
 
   const [users, setUsers] = useState<ConfigUser[]>([]);
   const [newUserName, setNewUserName] = useState<string>("");
-  const [newUserCode, setNewUserCode] = useState<string>("");
   const [newUserRole, setNewUserRole] = useState<Role>("operario");
   const [newUserClientId, setNewUserClientId] = useState<string>("");
   const [newUserEmail, setNewUserEmail] = useState<string>("");
@@ -711,14 +712,18 @@ export default function BodegaDashboard() {
   );
 
   const handleCreateWarehouse = useCallback(
-    async (nameInput?: string, capacityInput?: number) => {
+    async (arg?: string | { status: "interna" | "externa" }, capacityInput?: number) => {
       if (!session) {
         setMessage("Debes iniciar sesión para crear bodegas.");
         return;
       }
-      const name = (nameInput ?? newWarehouseName).trim();
+      const name =
+        typeof arg === "string" ? arg.trim() : (newWarehouseName ?? "").trim();
       const capacityRaw = capacityInput ?? Number(newWarehouseCapacity);
       const capacity = Number.isFinite(capacityRaw) && capacityRaw >= 0 ? capacityRaw : 0;
+      const isExterna =
+        typeof arg === "object" && arg !== null && arg.status === "externa";
+      const firestoreStatus = isExterna ? "externa" : "active";
       if (!name) {
         setMessage("Ingresa un nombre para la bodega.");
         return;
@@ -729,7 +734,7 @@ export default function BodegaDashboard() {
       try {
         const ref = await addDoc(collection(db, "warehouses"), {
           name: name || "Nueva bodega",
-          status: "active",
+          status: firestoreStatus,
           capacity,
           disabled: false,
           createdAt: serverTimestamp(),
@@ -739,7 +744,7 @@ export default function BodegaDashboard() {
         const meta: WarehouseMeta = {
           id: ref.id,
           name: name || "Nueva bodega",
-          status: "active",
+          status: firestoreStatus,
           capacity,
           disabled: false,
           createdAt: new Date(createdAtMs).toLocaleString("es-CO"),
@@ -772,66 +777,17 @@ export default function BodegaDashboard() {
     [handleSelectWarehouse, loadWarehouses, newWarehouseCapacity, newWarehouseName, session],
   );
 
-  const normalizeBase36 = useCallback((value: string) => value.toUpperCase().replace(/[^0-9A-Z]/g, ""), []);
-
-  const ensureFiveClientCode = useCallback(
-    (value: string) => {
-      const normalized = normalizeBase36(value);
-      if (!normalized) return "";
-      return normalized.padEnd(5, "0").slice(0, 5);
-    },
-    [normalizeBase36],
-  );
-
-  const randomFive = useCallback(
-    () =>
-      Math.floor(Math.random() * 36 ** 5)
-        .toString(36)
-        .toUpperCase()
-        .padStart(5, "0"),
-    [],
-  );
-
-  const generateClientCode = useCallback(
-    (value: string) => {
-      const normalized = value
-        .normalize("NFD")
-        .replace(/[^\w\s-]/g, "")
-        .replace(/\s+/g, " ")
-        .trim()
-        .toLowerCase();
-      const base = normalizeBase36(normalized.replace(/\s+/g, ""));
-      return ensureFiveClientCode(base || randomFive());
-    },
-    [ensureFiveClientCode, normalizeBase36, randomFive],
-  );
-
-  const generateUniqueClientCode = useCallback(
-    (value: string, existingCodes: string[]) => {
-      const existing = new Set(existingCodes.map((item) => normalizeBase36(item)));
-      let candidate = "";
-      let attempts = 0;
-      const isMixed = (code: string) => /[A-Z]/.test(code) && /\d/.test(code);
-      while (attempts < 8) {
-        candidate = ensureFiveClientCode(generateClientCode(value) + (attempts ? randomFive() : ""));
-        if (candidate && isMixed(candidate) && !existing.has(candidate)) break;
-        attempts += 1;
-      }
-      if (!candidate || !isMixed(candidate) || existing.has(candidate)) {
-        candidate = ensureFiveClientCode(randomFive() + Date.now().toString(36));
-        if (!isMixed(candidate) || existing.has(candidate)) {
-          candidate = ensureFiveClientCode(randomFive() + randomFive());
-        }
-      }
-      return candidate;
-    },
-    [ensureFiveClientCode, generateClientCode, normalizeBase36, randomFive],
-  );
-
-  const generateUniqueUserCode = useCallback(
-    (value: string) => generateUniqueClientCode(value, users.map((user) => user.code ?? user.id)),
-    [generateUniqueClientCode, users],
-  );
+  const generateClientCode = useCallback((value: string) => {
+    const normalized = value
+      .normalize("NFD")
+      .replace(/[^\w\s-]/g, "")
+      .replace(/\s+/g, " ")
+      .trim()
+      .toLowerCase();
+    const base = normalized.replace(/\s+/g, "-").slice(0, 12) || "cliente";
+    const rand = Math.floor(1000 + Math.random() * 9000);
+    return `${base}-${rand}`;
+  }, []);
 
   const fetchWarehouses = useCallback(async () => {
     await loadWarehouses();
@@ -850,7 +806,6 @@ export default function BodegaDashboard() {
           createdByRole?: Role | null;
           disabled?: boolean;
           disabledAt?: { toMillis?: () => number };
-          code?: string;
         };
         const createdAtMs =
           data.createdAt && typeof data.createdAt.toMillis === "function"
@@ -901,7 +856,7 @@ export default function BodegaDashboard() {
 
     setClientSaving(true);
     try {
-      const code = generateUniqueClientCode(value, clients.map((client) => client.code));
+      const code = (newClientCode || generateClientCode(value)).trim();
       const docRef = await addDoc(collection(db, "clientes"), {
         name: value,
         code,
@@ -932,7 +887,7 @@ export default function BodegaDashboard() {
     } finally {
       setClientSaving(false);
     }
-  }, [clients, generateUniqueClientCode, newClientName, session]);
+  }, [generateClientCode, newClientCode, newClientName, session]);
 
   const fetchUsers = useCallback(async () => {
     setUsersLoading(true);
@@ -963,7 +918,6 @@ export default function BodegaDashboard() {
           id: docSnap.id,
           name: (data.name ?? data.displayName ?? "").toString().trim() || "Sin nombre",
           role: (data.role ?? "operario") as Role,
-          code: ensureFiveClientCode((data.code ?? docSnap.id).toString()),
           clientId: data.clientId ?? "",
           email: data.email ?? "",
           createdAtMs,
@@ -986,13 +940,12 @@ export default function BodegaDashboard() {
     } finally {
       setUsersLoading(false);
     }
-  }, [ensureFiveClientCode]);
+  }, []);
 
   const handleCreateUser = useCallback(async () => {
     const name = newUserName.trim();
     const email = newUserEmail.trim();
     const password = newUserPassword.trim();
-    let code = ensureFiveClientCode(newUserCode || generateUniqueUserCode(newUserName));
     if (!name) {
       setMessage("Ingresa un nombre de usuario.");
       return;
@@ -1010,20 +963,6 @@ export default function BodegaDashboard() {
       return;
     }
 
-    const isMixed = /[A-Z]/.test(code) && /\d/.test(code);
-    if (!code || !isMixed) {
-      code = ensureFiveClientCode(generateUniqueUserCode(name || "user"));
-    }
-    const duplicated = users.some((user) => normalizeBase36(user.code ?? user.id) === code);
-    if (!code) {
-      setMessage("No se pudo generar un código para el usuario.");
-      return;
-    }
-    if (duplicated) {
-      setMessage("El código de usuario ya existe. Genera otro.");
-      return;
-    }
-
     setUserSaving(true);
     try {
       const secondaryAuth = getSecondaryAuth();
@@ -1033,7 +972,6 @@ export default function BodegaDashboard() {
         name,
         role: newUserRole,
         clientId: newUserClientId.trim(),
-        code,
         email,
         displayName: name,
         createdAt: serverTimestamp(),
@@ -1047,7 +985,6 @@ export default function BodegaDashboard() {
         id: credentials.user.uid,
         name,
         role: newUserRole,
-        code,
         clientId: newUserClientId.trim(),
         email,
         createdAt: new Date(createdAtMs).toLocaleString("es-CO"),
@@ -1058,7 +995,6 @@ export default function BodegaDashboard() {
       };
       setUsers((prev) => [newUser, ...prev]);
       setNewUserName("");
-      setNewUserCode("");
       setNewUserClientId("");
       setNewUserEmail("");
       setNewUserPassword("");
@@ -1071,19 +1007,7 @@ export default function BodegaDashboard() {
     } finally {
       setUserSaving(false);
     }
-  }, [
-    ensureFiveClientCode,
-    generateUniqueUserCode,
-    newUserClientId,
-    newUserCode,
-    newUserEmail,
-    newUserName,
-    newUserPassword,
-    newUserRole,
-    normalizeBase36,
-    session,
-    users,
-  ]);
+  }, [newUserClientId, newUserEmail, newUserName, newUserPassword, newUserRole, session]);
 
   const toggleUserDisabled = useCallback(
     async (userId: string, nextDisabled: boolean) => {
@@ -1170,23 +1094,9 @@ export default function BodegaDashboard() {
   const handleUpdateClient = useCallback(
     async (clientId: string, payload: { name: string; code: string }) => {
       const name = payload.name.trim();
-      const code = ensureFiveClientCode(payload.code.trim());
+      const code = payload.code.trim();
       if (!name || !code) {
         setMessage("Nombre y código son requeridos.");
-        return;
-      }
-
-      const isMixed = /[A-Z]/.test(code) && /\d/.test(code);
-      if (!isMixed) {
-        setMessage("El código debe tener letras y números (base 36).");
-        return;
-      }
-
-      const duplicated = clients.some(
-        (client) => client.id !== clientId && normalizeBase36(client.code) === code,
-      );
-      if (duplicated) {
-        setMessage("El código ya existe. Usa otro.");
         return;
       }
 
@@ -1201,21 +1111,38 @@ export default function BodegaDashboard() {
         setMessage("No se pudo editar el cliente. Revisa permisos o conexión.");
       }
     },
-    [clients, ensureFiveClientCode, setMessage],
+    [],
   );
 
   const handleUpdateWarehouse = useCallback(
-    async (warehouseId: string, payload: { name: string; capacity: number }) => {
+    async (
+      warehouseId: string,
+      payload: { name: string; capacity: number; status?: "interna" | "externa" },
+    ) => {
       const name = payload.name.trim();
       const capacity = Number.isFinite(payload.capacity) && payload.capacity >= 0 ? payload.capacity : 0;
       if (!name) {
         setMessage("Nombre de bodega requerido.");
         return;
       }
+      const nextStatus =
+        payload.status === undefined
+          ? undefined
+          : payload.status === "externa"
+            ? "externa"
+            : "active";
       try {
-        await updateDoc(doc(db, "warehouses", warehouseId), { name, capacity });
+        await updateDoc(doc(db, "warehouses", warehouseId), {
+          name,
+          capacity,
+          ...(nextStatus !== undefined ? { status: nextStatus } : {}),
+        });
         setWarehouses((prev) =>
-          prev.map((item) => (item.id === warehouseId ? { ...item, name, capacity } : item)),
+          prev.map((item) =>
+            item.id === warehouseId
+              ? { ...item, name, capacity, ...(nextStatus !== undefined ? { status: nextStatus } : {}) }
+              : item,
+          ),
         );
         setMessage("Bodega actualizada.");
       } catch (err) {
@@ -1927,35 +1854,18 @@ export default function BodegaDashboard() {
       setNewClientCode("");
       setUsers([]);
       setNewUserName("");
-      setNewUserCode("");
       setNewUserClientId("");
       clientsLoadedRef.current = false;
     }
   }, [session]);
 
   useEffect(() => {
-    if (!newClientName.trim()) {
+    if (!newClientName) {
       setNewClientCode("");
       return;
     }
-    const timer = setTimeout(() => {
-      const code = generateUniqueClientCode(newClientName, clients.map((client) => client.code));
-      setNewClientCode(code);
-    }, 450);
-    return () => clearTimeout(timer);
-  }, [clients, generateUniqueClientCode, newClientName]);
-
-  useEffect(() => {
-    if (!newUserName.trim()) {
-      setNewUserCode("");
-      return;
-    }
-    const timer = setTimeout(() => {
-      const code = generateUniqueUserCode(newUserName);
-      setNewUserCode(code);
-    }, 450);
-    return () => clearTimeout(timer);
-  }, [generateUniqueUserCode, newUserName]);
+    setNewClientCode((prev) => (prev ? prev : generateClientCode(newClientName)));
+  }, [generateClientCode, newClientName]);
 
   useEffect(() => {
     if (!isConfigurator || activeTab !== "configuracion") {
@@ -2900,7 +2810,15 @@ export default function BodegaDashboard() {
           onSearchSubmit={handleSearch}
           userDisplayName={session?.displayName}
           onLogout={handleLogout}
-          onGoMenu={() => setAdminSection("menu")}
+          onGoMenu={() => {
+            if (isAdmin) {
+              setAdminSection("menu");
+              return;
+            }
+            if (isCliente && activeTab === "reportes") {
+              setReportesClienteMenuNonce((n) => n + 1);
+            }
+          }}
           role={role}
         />
         {showAdminMenu ? (
@@ -3018,8 +2936,6 @@ export default function BodegaDashboard() {
                 users={users}
                 newUserName={newUserName}
                 setNewUserName={setNewUserName}
-                newUserCode={newUserCode}
-                setNewUserCode={setNewUserCode}
                 newUserRole={newUserRole}
                 setNewUserRole={setNewUserRole}
                 newUserClientId={newUserClientId}
@@ -3291,6 +3207,7 @@ export default function BodegaDashboard() {
                 clientId={effectiveClientId ?? undefined}
                 clientFilterId={clientFilterId}
                 onClientChange={setClientFilterId}
+                menuResetNonce={isCliente ? reportesClienteMenuNonce : undefined}
               />
             ) : null}
           </>
