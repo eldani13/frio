@@ -46,8 +46,8 @@ export default function AsignarBodegasPage() {
   return (
     <div className="p-8 max-w-4xl mx-auto">
       <header className="mb-8">
-        <h1 className="text-3xl font-bold text-slate-900">Gestión de Bodegas</h1>
-        <p className="text-slate-500 mt-2">Configuración de asignación para clientes.</p>
+        <h1 className="text-3xl font-bold text-slate-900">Asignación de Bodegas</h1>
+        
       </header>
       
       <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
