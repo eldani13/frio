@@ -5,6 +5,8 @@ import {
   doc, 
   getDoc,
   updateDoc, 
+  query,     // <--- Añade esto
+  where      // <--- Añade esto
 } from "firebase/firestore";
 import { WarehouseMeta } from "@/app/interfaces/bodega";
 
@@ -29,29 +31,36 @@ export const AsignarBodegaService = {
     }
   },
 
-  /**
-   * Obtiene el campo 'code' de un cliente específico
-   */
-  async getClienteCode(clientId: string): Promise<string | null> {
-    try {
-      const docRef = doc(db, CLIENTS_COL, clientId);
-      const docSnap = await getDoc(docRef);
-      
-      if (docSnap.exists()) {
-        return docSnap.data().code || null;
-      }
-      return null;
-    } catch (error) {
-      console.error("Error al obtener código del cliente:", error);
-      return null;
-    }
-  },
-
+ 
   /**
    * Actualiza el codeCuenta en la bodega
    */
   async assignCodeCuenta(id: string, codeCuenta: string): Promise<void> {
     const docRef = doc(db, WAREHOUSES_COL, id);
     await updateDoc(docRef, { codeCuenta });
+  },
+
+/**
+   * Obtiene el nombre de la bodega dado un codeCuenta
+   */
+  async getWarehouseNameByCode(codeCuenta: string): Promise<string | null> {
+    try {
+      if (!codeCuenta) return null;
+
+      const colRef = collection(db, WAREHOUSES_COL);
+      // Creamos la consulta filtrando por el campo codeCuenta
+      const q = query(colRef, where("codeCuenta", "==", codeCuenta));
+      const snapshot = await getDocs(q);
+
+      if (snapshot.empty) return null;
+
+      // Retornamos el campo 'name' del primer documento encontrado
+      const data = snapshot.docs[0].data();
+      return data.name || "Sin nombre";
+    } catch (error) {
+      console.error("Error en getWarehouseNameByCode:", error);
+      return null;
+    }
   }
+
 };
