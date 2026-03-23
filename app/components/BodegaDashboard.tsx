@@ -79,10 +79,8 @@ type UserProfile = {
 };
 
 // --- TIPOS Y CONSTANTES ---
-const TOTAL_SLOTS = 12;
+const DEFAULT_TOTAL_SLOTS = 12;
 const WAREHOUSE_ID = DEFAULT_WAREHOUSE_ID;
-const FRIDEM_WAREHOUSE_ID = "x7T7rQc7hmTXxJ5df27B";
-const FRIDEM_WAREHOUSE_NAME = "Prueba";
 
 type AlertReason = "no_tuve_tiempo" | "no_quise" | "no_pude";
 
@@ -129,8 +127,14 @@ const ALERT_DELAY_MS = 2 * 60 * 1000;
 const ALERT_ORDER_PREFIX = "alerta-orden-";
 const ALERT_REPORT_PREFIX = "alerta-fallo-";
 
-const createInitialSlots = (): Slot[] =>
-  Array.from({ length: TOTAL_SLOTS }, (_, index) => ({
+const normalizeCapacity = (value?: number) => {
+  if (typeof value !== "number") return DEFAULT_TOTAL_SLOTS;
+  const safe = Math.max(0, Math.floor(value));
+  return Number.isFinite(safe) ? safe : DEFAULT_TOTAL_SLOTS;
+};
+
+const createInitialSlots = (size = DEFAULT_TOTAL_SLOTS): Slot[] =>
+  Array.from({ length: Math.max(0, size) }, (_, index) => ({
     position: index + 1,
     autoId: "",
     name: "",
@@ -165,25 +169,27 @@ const isValidRole = (value: unknown): value is Role =>
   value === "cliente" ||
   value === "configurador";
 
-const normalizeSlots = (value: unknown): Slot[] | null => {
-  if (!Array.isArray(value) || value.length !== TOTAL_SLOTS) {
+const normalizeSlots = (value: unknown, expectedSize = DEFAULT_TOTAL_SLOTS): Slot[] | null => {
+  if (!Array.isArray(value)) {
     return null;
   }
 
-  const slots: Slot[] = [];
+  const target = normalizeCapacity(expectedSize);
+  const map = new Map<number, Slot>();
+
   for (const item of value) {
     if (typeof item !== "object" || item === null) {
       return null;
     }
     const record = item as Record<string, unknown>;
-    const position = record.position;
+    const position = typeof record.position === "number" ? Math.floor(record.position) : NaN;
+    if (!Number.isFinite(position) || position < 1) {
+      return null;
+    }
     const autoId = record.autoId;
     const name = record.name;
     const temperature = record.temperature;
     const client = record.client;
-    if (typeof position !== "number") {
-      return null;
-    }
 
     const legacyName = typeof record.itemId === "string" ? record.itemId : "";
     const normalizedName = typeof name === "string" ? name : legacyName;
@@ -204,17 +210,46 @@ const normalizeSlots = (value: unknown): Slot[] | null => {
           ? record.customer
           : "";
 
-    slots.push({
+    map.set(position, {
       position,
       autoId: normalizedAutoId,
-      name: normalizedName ?? "",
+      name: normalizedName,
       temperature: normalizedTemp,
       client: normalizedClient,
     });
   }
 
-  return slots;
+  const sortedPositions = [...map.keys()].sort((a, b) => a - b);
+  const result: Slot[] = [];
+  for (const pos of sortedPositions) {
+    if (pos > target) break;
+    const slot = map.get(pos);
+    if (slot) {
+      result.push(slot);
+    }
+    if (result.length >= target) break;
+  }
+
+  for (let pos = 1; result.length < target; pos += 1) {
+    if (!map.has(pos)) {
+      result.push({ position: pos, autoId: "", name: "", temperature: null, client: "" });
+    }
+  }
+
+  return result.slice(0, target);
 };
+
+const resizeSlotsToCapacity = (slots: Slot[], capacity: number) =>
+  normalizeSlots(slots, capacity) ?? createInitialSlots(capacity);
+
+const filterBoxesByCapacity = (items: Box[], capacity: number) =>
+  items.filter((item) => item.position <= capacity);
+
+const filterOrdersByCapacity = (items: BodegaOrder[], capacity: number) =>
+  items.filter((order) => {
+    const within = (value?: number) => typeof value !== "number" || value <= capacity;
+    return within(order.sourcePosition) && within(order.targetPosition);
+  });
 
 const normalizeBoxes = (value: unknown): Box[] | null => {
   if (!Array.isArray(value)) {
@@ -343,16 +378,20 @@ const createAlertId = (prefix: string) =>
 const sortByPosition = <T extends { position: number }>(items: T[]) =>
   [...items].sort((a, b) => a.position - b.position);
 
-const getNextIngresoPosition = (boxes: Box[]) => {
+const getNextIngresoPosition = (boxes: Box[], capacity?: number) => {
+  const max = capacity && capacity > 0 ? capacity : undefined;
   const occupied = new Set(boxes.map((box) => box.position));
   let next = 1;
   while (occupied.has(next)) {
     next += 1;
+    if (max && next > max) return max;
   }
+  if (max) return Math.min(next, max);
   return next;
 };
 
-const getNextSalidaPosition = (boxes: Box[], reserved?: Set<number>) => {
+const getNextSalidaPosition = (boxes: Box[], reserved?: Set<number>, capacity?: number) => {
+  const max = capacity && capacity > 0 ? capacity : undefined;
   const occupied = new Set(boxes.map((box) => box.position));
   if (reserved) {
     reserved.forEach((position) => occupied.add(position));
@@ -360,7 +399,9 @@ const getNextSalidaPosition = (boxes: Box[], reserved?: Set<number>) => {
   let next = 1;
   while (occupied.has(next)) {
     next += 1;
+    if (max && next > max) return max;
   }
+  if (max) return Math.min(next, max);
   return next;
 };
 
@@ -506,10 +547,10 @@ export default function BodegaDashboard() {
   const [warehouseId, setWarehouseId] = useState<string>(WAREHOUSE_ID);
   const [warehouseName, setWarehouseName] = useState<string>("");
   const [warehouses, setWarehouses] = useState<WarehouseMeta[]>([]);
+  const [warehouseCapacity, setWarehouseCapacity] = useState<number>(DEFAULT_TOTAL_SLOTS);
   const [newWarehouseName, setNewWarehouseName] = useState<string>("");
   const [newWarehouseCapacity, setNewWarehouseCapacity] = useState<string>("");
   const [warehouseSaving, setWarehouseSaving] = useState<boolean>(false);
-  const isExternalWarehouse = warehouseId === FRIDEM_WAREHOUSE_ID;
   const [warehousesLoading, setWarehousesLoading] = useState<boolean>(false);
   const [inboundBoxes, setInboundBoxes] = useState<Box[]>([]);
   const [outboundBoxes, setOutboundBoxes] = useState<Box[]>([]);
@@ -548,6 +589,7 @@ export default function BodegaDashboard() {
 
   const [users, setUsers] = useState<ConfigUser[]>([]);
   const [newUserName, setNewUserName] = useState<string>("");
+  const [newUserCode, setNewUserCode] = useState<string>("");
   const [newUserRole, setNewUserRole] = useState<Role>("operario");
   const [newUserClientId, setNewUserClientId] = useState<string>("");
   const [newUserEmail, setNewUserEmail] = useState<string>("");
@@ -572,11 +614,21 @@ export default function BodegaDashboard() {
   const lastSavedSnapshot = React.useRef<string>("");
   const clientsLoadedRef = React.useRef(false);
 
+  const currentWarehouse = useMemo(
+    () => warehouses.find((item) => item.id === warehouseId) ?? null,
+    [warehouses, warehouseId],
+  );
+
+  const isExternalWarehouse = useMemo(() => {
+    const status = currentWarehouse?.status;
+    return status === "externa" || status === "external";
+  }, [currentWarehouse]);
+
   const loadWarehouses = useCallback(async () => {
     setWarehousesLoading(true);
     try {
       const snapshot = await getDocs(collection(db, "warehouses"));
-      let items = snapshot.docs.map((docSnap) => {
+      let items: WarehouseMeta[] = snapshot.docs.map((docSnap) => {
         const data = docSnap.data() as {
           name?: string;
           status?: string;
@@ -603,7 +655,7 @@ export default function BodegaDashboard() {
           createdAt: createdAtMs ? new Date(createdAtMs).toLocaleString("es-CO") : undefined,
           disabledAt: disabledAtMs ? new Date(disabledAtMs).toLocaleString("es-CO") : undefined,
           codeCuenta: (data.codeCuenta ?? "").toString(),
-        } satisfies WarehouseMeta;
+        };
       });
 
       // Ensure default exists and is present in the list
@@ -643,45 +695,19 @@ export default function BodegaDashboard() {
         await ensureDefault();
       }
 
-      if (!items.some((item) => item.id === FRIDEM_WAREHOUSE_ID)) {
-        items = [
-          ...items,
-          {
-            id: FRIDEM_WAREHOUSE_ID,
-            name: FRIDEM_WAREHOUSE_NAME,
-            status: "external",
-            capacity: undefined,
-            disabled: false,
-            createdAt: undefined,
-            disabledAt: undefined,
-            codeCuenta: "",
-          },
-        ];
-      }
-
       setWarehouses(items);
       if (items.length && !items.some((item) => item.id === warehouseId)) {
         setWarehouseId(items[0].id);
       }
     } catch (err) {
       console.warn("No se pudo cargar la lista de bodegas", err);
-      // Fallback: ensure at least the default and the external entry so the selector is usable
+      // Fallback: ensure at least the default entry so the selector is usable
       setWarehouses([
         {
           id: DEFAULT_WAREHOUSE_ID,
           name: "default",
           status: "active",
           capacity: 0,
-          disabled: false,
-          createdAt: undefined,
-          disabledAt: undefined,
-          codeCuenta: "",
-        },
-        {
-          id: FRIDEM_WAREHOUSE_ID,
-          name: FRIDEM_WAREHOUSE_NAME,
-          status: "external",
-          capacity: undefined,
           disabled: false,
           createdAt: undefined,
           disabledAt: undefined,
@@ -696,13 +722,29 @@ export default function BodegaDashboard() {
     }
   }, [warehouseId]);
 
+  const resolveCapacityForWarehouse = useCallback(
+    (id: string, fallbackSlots?: number) => {
+      const match = warehouses.find((item) => item.id === id);
+      if (match && typeof match.capacity === "number") {
+        return normalizeCapacity(match.capacity);
+      }
+      if (typeof fallbackSlots === "number" && fallbackSlots > 0) {
+        return normalizeCapacity(fallbackSlots);
+      }
+      return DEFAULT_TOTAL_SLOTS;
+    },
+    [warehouses],
+  );
+
   const handleSelectWarehouse = useCallback(
     (id: string) => {
       if (!id || id === warehouseId) return;
       setCloudReady(false);
       remoteUpdate.current = false;
       lastSavedSnapshot.current = "";
-      setSlots(createInitialSlots());
+      const capacity = resolveCapacityForWarehouse(id, warehouseCapacity);
+      setWarehouseCapacity(capacity);
+      setSlots(createInitialSlots(capacity));
       setInboundBoxes([]);
       setOutboundBoxes([]);
       setDispatchedBoxes([]);
@@ -716,7 +758,7 @@ export default function BodegaDashboard() {
       setLlamadasJefe([]);
       setWarehouseId(id);
     },
-    [warehouseId],
+    [resolveCapacityForWarehouse, warehouseCapacity, warehouseId],
   );
 
   const handleCreateWarehouse = useCallback(
@@ -788,16 +830,26 @@ export default function BodegaDashboard() {
     [handleSelectWarehouse, loadWarehouses, newWarehouseCapacity, newWarehouseName, session],
   );
 
+  const sanitizeClientCode = useCallback((value: string) => {
+    const normalized = (value ?? "")
+      .toUpperCase()
+      .replace(/[^0-9A-Z]/g, "")
+      .slice(0, 5);
+    return normalized ? normalized.padEnd(5, "0") : "";
+  }, []);
+
   const generateClientCode = useCallback((value: string) => {
     const normalized = value
       .normalize("NFD")
-      .replace(/[^\w\s-]/g, "")
-      .replace(/\s+/g, " ")
-      .trim()
-      .toLowerCase();
-    const base = normalized.replace(/\s+/g, "-").slice(0, 12) || "cliente";
-    const rand = Math.floor(1000 + Math.random() * 9000);
-    return `${base}-${rand}`;
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^A-Za-z0-9]/g, "")
+      .toUpperCase();
+    const seed = normalized
+      .split("")
+      .reduce((acc, char) => acc + char.charCodeAt(0), 0);
+    const rand = Math.floor(Math.random() * 36 ** 2);
+    const codeNumber = (seed + rand) % 36 ** 5;
+    return codeNumber.toString(36).toUpperCase().padStart(5, "0");
   }, []);
 
   const fetchWarehouses = useCallback(async () => {
@@ -836,7 +888,7 @@ export default function BodegaDashboard() {
           createdByRole: data.createdByRole ?? null,
           disabled: Boolean(data.disabled),
           disabledAt: disabledAtMs ? new Date(disabledAtMs).toLocaleString("es-CO") : undefined,
-        } satisfies Client;
+        };
       });
 
       items.sort(
@@ -867,7 +919,7 @@ export default function BodegaDashboard() {
 
     setClientSaving(true);
     try {
-      const code = (newClientCode || generateClientCode(value)).trim();
+      const code = sanitizeClientCode(newClientCode) || generateClientCode(value);
       const docRef = await addDoc(collection(db, "clientes"), {
         name: value,
         code,
@@ -909,6 +961,7 @@ export default function BodegaDashboard() {
           name?: string;
           displayName?: string;
           role?: Role;
+          code?: string;
           clientId?: string;
           email?: string;
           createdAt?: { toMillis?: () => number };
@@ -928,6 +981,7 @@ export default function BodegaDashboard() {
         return {
           id: docSnap.id,
           name: (data.name ?? data.displayName ?? "").toString().trim() || "Sin nombre",
+          code: sanitizeClientCode(data.code ?? ""),
           role: (data.role ?? "operario") as Role,
           clientId: data.clientId ?? "",
           email: data.email ?? "",
@@ -937,7 +991,7 @@ export default function BodegaDashboard() {
           createdByRole: data.createdByRole ?? null,
           disabled: Boolean(data.disabled),
           disabledAt: disabledAtMs ? new Date(disabledAtMs).toLocaleString("es-CO") : undefined,
-        } satisfies ConfigUser;
+        };
       });
 
       items.sort(
@@ -951,7 +1005,7 @@ export default function BodegaDashboard() {
     } finally {
       setUsersLoading(false);
     }
-  }, []);
+  }, [sanitizeClientCode]);
 
   const handleCreateUser = useCallback(async () => {
     const name = newUserName.trim();
@@ -976,11 +1030,13 @@ export default function BodegaDashboard() {
 
     setUserSaving(true);
     try {
+      const code = sanitizeClientCode(newUserCode) || generateClientCode(name);
       const secondaryAuth = getSecondaryAuth();
       const credentials = await createUserWithEmailAndPassword(secondaryAuth, email, password);
 
       await setDoc(doc(db, "usuarios", credentials.user.uid), {
         name,
+        code,
         role: newUserRole,
         clientId: newUserClientId.trim(),
         email,
@@ -995,6 +1051,7 @@ export default function BodegaDashboard() {
       const newUser: ConfigUser = {
         id: credentials.user.uid,
         name,
+        code,
         role: newUserRole,
         clientId: newUserClientId.trim(),
         email,
@@ -1006,6 +1063,7 @@ export default function BodegaDashboard() {
       };
       setUsers((prev) => [newUser, ...prev]);
       setNewUserName("");
+      setNewUserCode("");
       setNewUserClientId("");
       setNewUserEmail("");
       setNewUserPassword("");
@@ -1018,7 +1076,7 @@ export default function BodegaDashboard() {
     } finally {
       setUserSaving(false);
     }
-  }, [newUserClientId, newUserEmail, newUserName, newUserPassword, newUserRole, session]);
+  }, [generateClientCode, newUserClientId, newUserCode, newUserEmail, newUserName, newUserPassword, newUserRole, sanitizeClientCode, session]);
 
   const toggleUserDisabled = useCallback(
     async (userId: string, nextDisabled: boolean) => {
@@ -1127,7 +1185,7 @@ export default function BodegaDashboard() {
 
   const handleUpdateWarehouse = useCallback(
     async (
-      warehouseId: string,
+      warehouseIdParam: string,
       payload: { name: string; capacity: number; status?: "interna" | "externa" },
     ) => {
       const name = payload.name.trim();
@@ -1143,18 +1201,27 @@ export default function BodegaDashboard() {
             ? "externa"
             : "active";
       try {
-        await updateDoc(doc(db, "warehouses", warehouseId), {
+        await updateDoc(doc(db, "warehouses", warehouseIdParam), {
           name,
           capacity,
           ...(nextStatus !== undefined ? { status: nextStatus } : {}),
         });
         setWarehouses((prev) =>
           prev.map((item) =>
-            item.id === warehouseId
+            item.id === warehouseIdParam
               ? { ...item, name, capacity, ...(nextStatus !== undefined ? { status: nextStatus } : {}) }
               : item,
           ),
         );
+        if (warehouseId === warehouseIdParam) {
+          setWarehouseCapacity(capacity);
+          setSlots((prev) => resizeSlotsToCapacity(prev, capacity));
+          setInboundBoxes((prev) => filterBoxesByCapacity(prev, capacity));
+          setOutboundBoxes((prev) => filterBoxesByCapacity(prev, capacity));
+          setDispatchedBoxes((prev) => filterBoxesByCapacity(prev, capacity));
+          setOrders((prev) => filterOrdersByCapacity(prev, capacity));
+          setSelectedPosition((prev) => (prev && prev <= capacity ? prev : null));
+        }
         setMessage("Bodega actualizada.");
       } catch (err) {
         console.error("No se pudo editar la bodega", err);
@@ -1191,23 +1258,30 @@ export default function BodegaDashboard() {
     [],
   );
 
-  const loadFridemData = useCallback(async () => {
+  const loadExternalWarehouseData = useCallback(async (externalId: string, externalName?: string) => {
+    if (!externalId) return;
     setCloudReady(false);
     setMessage("");
     try {
-      const slotsFromFridem = await fetchFridemSlots(FRIDEM_WAREHOUSE_ID);
-      if (!slotsFromFridem.length) {
+      const slotsFromExternal = await fetchFridemSlots(externalId);
+      if (!slotsFromExternal.length) {
         setMessage(
-          "No se encontraron datos en la bodega externa. Revisa la base fridem (Firestore o Realtime) y la URL de Realtime (NEXT_PUBLIC_FRIDEM_DATABASE_URL).",
+          "No se encontraron datos en la bodega externa. Revisa la base externa (Firestore o Realtime) y la URL de Realtime (NEXT_PUBLIC_FRIDEM_DATABASE_URL).",
         );
       }
-      setSlots(slotsFromFridem.length ? slotsFromFridem : createInitialSlots());
+      const capacity = slotsFromExternal.length || DEFAULT_TOTAL_SLOTS;
+      setWarehouseCapacity(capacity);
+      setSlots(
+        slotsFromExternal.length
+          ? resizeSlotsToCapacity(slotsFromExternal, capacity)
+          : createInitialSlots(capacity),
+      );
       setInboundBoxes([]);
       setOutboundBoxes([]);
       setDispatchedBoxes([]);
       setOrders([]);
       setStats(defaultStats);
-      setWarehouseName(FRIDEM_WAREHOUSE_NAME);
+      setWarehouseName(externalName ?? "Bodega externa");
       setAlerts([]);
       setAssignedAlerts([]);
       setAlertasOperario([]);
@@ -1215,7 +1289,7 @@ export default function BodegaDashboard() {
       setLlamadasJefe([]);
     } catch (err) {
       console.warn("No se pudo cargar la bodega externa", err);
-      setMessage("No se pudo cargar la bodega externa fridem. Revisa consola y credenciales.");
+      setMessage("No se pudo cargar la bodega externa. Revisa consola y credenciales.");
       setSlots(createInitialSlots());
     } finally {
       setCloudReady(true);
@@ -1237,26 +1311,44 @@ export default function BodegaDashboard() {
   }, [session, loadWarehouses]);
 
   useEffect(() => {
+    const capacity = resolveCapacityForWarehouse(warehouseId);
+    setWarehouseCapacity(capacity);
+    setSlots((prev) => resizeSlotsToCapacity(prev, capacity));
+    setInboundBoxes((prev) => filterBoxesByCapacity(prev, capacity));
+    setOutboundBoxes((prev) => filterBoxesByCapacity(prev, capacity));
+    setDispatchedBoxes((prev) => filterBoxesByCapacity(prev, capacity));
+    setOrders((prev) => filterOrdersByCapacity(prev, capacity));
+    setSelectedPosition((prev) => (prev && prev <= capacity ? prev : null));
+  }, [resolveCapacityForWarehouse, warehouseId]);
+
+  useEffect(() => {
     if (!session || !warehouseId) {
       setCloudReady(false);
       return;
     }
 
     if (isExternalWarehouse) {
-      loadFridemData();
+      loadExternalWarehouseData(warehouseId, currentWarehouse?.name);
       return;
     }
 
     const unsubscribe = subscribeWarehouseState(warehouseId, (cloud) => {
       remoteUpdate.current = true;
-      const normalizedSlots = normalizeSlots(cloud.slots) ?? createInitialSlots();
-      setSlots(normalizedSlots);
-      setInboundBoxes(cloud.inboundBoxes?.length ? normalizeBoxes(cloud.inboundBoxes) ?? [] : []);
-      setOutboundBoxes(cloud.outboundBoxes?.length ? normalizeBoxes(cloud.outboundBoxes) ?? [] : []);
-      setDispatchedBoxes(
-        cloud.dispatchedBoxes?.length ? normalizeBoxes(cloud.dispatchedBoxes) ?? [] : [],
+      const resolvedCapacity = resolveCapacityForWarehouse(
+        warehouseId,
+        Array.isArray(cloud.slots) ? cloud.slots.length : undefined,
       );
-      setOrders(cloud.orders?.length ? normalizeOrders(cloud.orders) ?? [] : []);
+      setWarehouseCapacity(resolvedCapacity);
+      const normalizedSlots = normalizeSlots(cloud.slots, resolvedCapacity) ?? createInitialSlots(resolvedCapacity);
+      setSlots(normalizedSlots);
+      const normalizedInbound = cloud.inboundBoxes?.length ? normalizeBoxes(cloud.inboundBoxes) ?? [] : [];
+      const normalizedOutbound = cloud.outboundBoxes?.length ? normalizeBoxes(cloud.outboundBoxes) ?? [] : [];
+      const normalizedDispatched = cloud.dispatchedBoxes?.length ? normalizeBoxes(cloud.dispatchedBoxes) ?? [] : [];
+      const normalizedOrders = cloud.orders?.length ? normalizeOrders(cloud.orders) ?? [] : [];
+      setInboundBoxes(filterBoxesByCapacity(normalizedInbound, resolvedCapacity));
+      setOutboundBoxes(filterBoxesByCapacity(normalizedOutbound, resolvedCapacity));
+      setDispatchedBoxes(filterBoxesByCapacity(normalizedDispatched, resolvedCapacity));
+      setOrders(filterOrdersByCapacity(normalizedOrders, resolvedCapacity));
       setStats(cloud.stats ?? defaultStats);
       setWarehouseName(cloud.warehouseName ?? "");
       setAlerts(cloud.alerts ?? []);
@@ -1268,7 +1360,7 @@ export default function BodegaDashboard() {
     });
 
     return () => unsubscribe();
-  }, [isExternalWarehouse, loadFridemData, session, warehouseId]);
+  }, [currentWarehouse, isExternalWarehouse, loadExternalWarehouseData, resolveCapacityForWarehouse, session, warehouseId]);
 
   useEffect(() => {
     if (!cloudReady || !warehouseId || isExternalWarehouse) return;
@@ -1330,8 +1422,8 @@ export default function BodegaDashboard() {
   ]);
 
   useEffect(() => {
-    setIngresoPosition(getNextIngresoPosition(inboundBoxes));
-  }, [inboundBoxes]);
+    setIngresoPosition(getNextIngresoPosition(inboundBoxes, warehouseCapacity));
+  }, [inboundBoxes, warehouseCapacity]);
 
   useEffect(() => {
     const timerId = window.setInterval(() => {
@@ -1820,8 +1912,8 @@ export default function BodegaDashboard() {
   ]);
 
   useEffect(() => {
-    setSalidaTargetPosition(getNextSalidaPosition(outboundBoxes, reservedSalidaTargets));
-  }, [outboundBoxes, reservedSalidaTargets]);
+    setSalidaTargetPosition(getNextSalidaPosition(outboundBoxes, reservedSalidaTargets, warehouseCapacity));
+  }, [outboundBoxes, reservedSalidaTargets, warehouseCapacity]);
 
   useEffect(() => {
     if (availableBodegaForOrders.length === 0) {
@@ -1865,18 +1957,27 @@ export default function BodegaDashboard() {
       setNewClientCode("");
       setUsers([]);
       setNewUserName("");
+      setNewUserCode("");
       setNewUserClientId("");
       clientsLoadedRef.current = false;
     }
   }, [session]);
 
   useEffect(() => {
-    if (!newClientName) {
+    if (!newClientName.trim()) {
       setNewClientCode("");
       return;
     }
-    setNewClientCode((prev) => (prev ? prev : generateClientCode(newClientName)));
+    setNewClientCode(generateClientCode(newClientName));
   }, [generateClientCode, newClientName]);
+
+  useEffect(() => {
+    if (!newUserName.trim()) {
+      setNewUserCode("");
+      return;
+    }
+    setNewUserCode(generateClientCode(newUserName));
+  }, [generateClientCode, newUserName]);
 
   useEffect(() => {
     if (!isConfigurator || activeTab !== "configuracion") {
@@ -2013,7 +2114,16 @@ export default function BodegaDashboard() {
       return;
     }
 
-    const nextPosition = getNextIngresoPosition(inboundBoxes);
+    if (warehouseCapacity <= 0) {
+      setMessage("Configura una capacidad mayor a 0 para esta bodega.");
+      return;
+    }
+
+    const nextPosition = getNextIngresoPosition(inboundBoxes, warehouseCapacity);
+    if (nextPosition > warehouseCapacity) {
+      setMessage("No hay cupos disponibles en esta bodega.");
+      return;
+    }
 
     const newBox: Box = {
       position: nextPosition,
@@ -2064,8 +2174,16 @@ export default function BodegaDashboard() {
         setMessage("Selecciona una posicion libre en bodega.");
         return;
       }
+      if (warehouseCapacity > 0 && targetPosition > warehouseCapacity) {
+        setMessage("La posicion excede la capacidad de la bodega.");
+        return;
+      }
     } else {
-      const salidaPosition = getNextSalidaPosition(outboundBoxes, reservedSalidaTargets);
+      if (warehouseCapacity <= 0) {
+        setMessage("Configura una capacidad mayor a 0 para usar esta bodega.");
+        return;
+      }
+      const salidaPosition = getNextSalidaPosition(outboundBoxes, reservedSalidaTargets, warehouseCapacity);
       if (salidaPosition <= 0) {
         setMessage("Ingresa una posicion de salida valida.");
         return;
@@ -2074,7 +2192,7 @@ export default function BodegaDashboard() {
 
     const finalTargetPosition =
       destination === "a_salida"
-        ? getNextSalidaPosition(outboundBoxes, reservedSalidaTargets)
+        ? getNextSalidaPosition(outboundBoxes, reservedSalidaTargets, warehouseCapacity)
         : targetPosition;
 
     const newOrder: BodegaOrder = {
@@ -2807,7 +2925,7 @@ export default function BodegaDashboard() {
       <main className="mx-auto flex w-full max-w-6xl flex-col gap-8">
         <Header
           occupiedCount={occupiedCount}
-          totalSlots={TOTAL_SLOTS}
+          totalSlots={warehouseCapacity}
           dateLabel={dateLabel}
           warehouseId={warehouseId}
           warehouseName={warehouseName}
@@ -2947,6 +3065,8 @@ export default function BodegaDashboard() {
                 users={users}
                 newUserName={newUserName}
                 setNewUserName={setNewUserName}
+                newUserCode={newUserCode}
+                setNewUserCode={setNewUserCode}
                 newUserRole={newUserRole}
                 setNewUserRole={setNewUserRole}
                 newUserClientId={newUserClientId}
