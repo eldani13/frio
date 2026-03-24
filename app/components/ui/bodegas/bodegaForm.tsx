@@ -10,12 +10,19 @@ interface Props {
   onClose: () => void;
   onSuccess: () => Promise<void>;
   clientId: string; 
+  estado: string; // Viene dinámico del Page (ej: "interna" o "externa")
+  
 }
 
-export const BodegaAsignarModal = ({ isOpen, onClose, onSuccess, clientId }: Props) => {
-  // 1. Hook de Auth siempre en el nivel superior
-  const { session } = useAuth(); 
+export const BodegaAsignarModal = ({ 
+  isOpen, 
+  onClose, 
+  onSuccess, 
+  clientId, 
+  estado, 
+}: Props) => {
   
+  const { session } = useAuth(); 
   const [bodegas, setBodegas] = useState<WarehouseMeta[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [suggestedCode, setSuggestedCode] = useState("");
@@ -25,25 +32,21 @@ export const BodegaAsignarModal = ({ isOpen, onClose, onSuccess, clientId }: Pro
     if (isOpen) {
       loadData();
     }
-  }, [isOpen, session]); // Re-ejecutar si cambia la sesión mientras está abierto
+  }, [isOpen, session, estado]); // Se recarga si cambia cualquier filtro del Page
 
   const loadData = async () => {
     setLoading(true);
     try {
-      // 1. Cargar bodegas pendientes
-      const list = await AsignarBodegaService.getPendingBodegas();
+      // Usamos los parámetros exactos que nos pasó el Page
+      const list = await AsignarBodegaService.getPendingBodegas(estado);
       setBodegas(list);
 
-      // 2. Extraer el code de la sesión (ya disponible por el hook arriba)
       if (session?.codeCuenta) {
         setSuggestedCode(session.codeCuenta);
-      } else {
-        console.warn("No se encontró codeCuenta en la sesión");
       }
     } catch (error) {
       console.error("Error cargando datos:", error);
     } finally {
-      // El loading se apaga solo cuando AMBAS cosas terminan
       setLoading(false);
     }
   };
@@ -58,7 +61,8 @@ export const BodegaAsignarModal = ({ isOpen, onClose, onSuccess, clientId }: Pro
       await onSuccess();
       onClose();
     } catch (error) {
-      alert("Error al actualizar");
+      console.error("Error al asignar:", error);
+      alert("No se pudo vincular la bodega");
     } finally {
       setLoading(false);
     }
@@ -68,22 +72,26 @@ export const BodegaAsignarModal = ({ isOpen, onClose, onSuccess, clientId }: Pro
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm p-4">
-      <div className="bg-white w-full max-w-md rounded-[12px] shadow-2xl p-6">
+      <div className="bg-white w-full max-w-md rounded-[12px] shadow-2xl p-6 animate-in fade-in zoom-in duration-200">
         <div className="flex justify-between items-center mb-6">
           <div>
-            <h2 className="text-[18px] font-bold text-gray-800">Vincular Bodega</h2>
+            <h2 className="text-[18px] font-bold text-gray-800 capitalize">
+              Vincular Bodega {estado}
+            </h2>
             <p className="text-[12px] text-gray-500">
-              Se asignará el código: <b className="text-green-600">{suggestedCode || "Cargando..."}</b>
+              Asignando a cuenta: <span className="font-mono text-green-600 font-bold">{suggestedCode || "---"}</span>
             </p>
           </div>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 transition-colors">
             <HiOutlineXMark size={24} />
           </button>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-5">
           <div>
-            <label className="block text-[11px] font-bold text-gray-400 uppercase mb-2">Selecciona la Bodega</label>
+            <label className="block text-[11px] font-bold text-gray-400 uppercase mb-2">
+              Bodegas {estado}s disponibles
+            </label>
             <div className="max-h-48 overflow-y-auto border border-gray-100 rounded-lg divide-y">
               {bodegas.length > 0 ? (
                 bodegas.map((b) => (
@@ -97,25 +105,32 @@ export const BodegaAsignarModal = ({ isOpen, onClose, onSuccess, clientId }: Pro
                         : "hover:bg-gray-50"
                     }`}
                   >
-                    {b.name}
+                    <span>{b.name}</span>
+                    
                   </button>
                 ))
               ) : (
-                <p className="p-4 text-[12px] text-gray-400 text-center">No hay bodegas pendientes</p>
+                <div className="p-10 text-center">
+                  <p className="text-[12px] text-gray-400">No se encontraron registros</p>
+                </div>
               )}
             </div>
           </div>
 
           <div className="flex gap-3 pt-2">
-            <button type="button" onClick={onClose} className="flex-1 py-2 text-gray-500 text-[14px]">
+            <button 
+              type="button" 
+              onClick={onClose} 
+              className="flex-1 py-2 text-gray-400 text-[14px] hover:text-gray-600 transition-colors"
+            >
               Cancelar
             </button>
             <button
               type="submit"
               disabled={loading || !selectedId || !suggestedCode}
-              className="flex-1 py-2 bg-[#A8D5BA] text-[#2D5A3F] rounded-lg text-[14px] font-bold disabled:opacity-40"
+              className="flex-1 py-2 bg-[#A8D5BA] text-[#2D5A3F] rounded-lg text-[14px] font-bold active:scale-95 transition-all disabled:opacity-40"
             >
-              {loading ? "Procesando..." : "Confirmar Asignación"}
+              {loading ? "Vinculando..." : "Vincular Ahora"}
             </button>
           </div>
         </form>
