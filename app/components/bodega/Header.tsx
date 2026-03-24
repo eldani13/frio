@@ -14,9 +14,9 @@ interface ExtendedHeaderProps extends HeaderProps {
 
 export default function Header({
   dateLabel,
-  warehouseId,
-  warehouses,
-  onSelectWarehouse,
+  warehouseId: _warehouseId,
+  warehouses: _warehouses,
+  onSelectWarehouse: _onSelectWarehouse,
   canSearch,
   searchValue,
   onSearchChange,
@@ -28,12 +28,6 @@ export default function Header({
 }: ExtendedHeaderProps) {
   const [menuOpen, setMenuOpen] = useState(false);
 
-  const canSelectWarehouse =
-    role === "administrador" &&
-    Array.isArray(warehouses) &&
-    warehouses.length > 0 &&
-    onSelectWarehouse;
-
    
   return (
     <header className="w-full bg-white shadow-md border-b border-slate-200">
@@ -44,38 +38,6 @@ export default function Header({
 
           {/* LEFT SECTION */}
           <div className="flex items-center gap-8">
-
-            {/* Warehouse */}
-            <div className="flex flex-col">
-             
-              {canSelectWarehouse ? (
-                <select 
-                  className="hidden mt-1 rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium shadow-sm focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 outline-none"
-                  value={warehouseId}
-                  onChange={(event) =>
-                    onSelectWarehouse?.(event.target.value)
-                  }
-                >
-                  {warehouses?.map((item) => (
-                    <option key={item.id} value={item.id}>
-                      {item.name ? `${item.name} (${item.id})` : item.id}
-                    </option>
-                  ))}
-                </select>
-              ) : (                
-                <div className="flex flex-col">
-                  {/* Etiqueta superior */}
-                  <span className="text-xs text-slate-400 uppercase tracking-wide">
-                    Bodega
-                  </span>
-                  
-                  {/* Valor debajo */}
-                  <span className="font-semibold text-slate-700 mt-1">
-                    {warehouseId ?? "--"}
-                  </span>
-                </div>
-              )}
-            </div>
 
             {/* Date */}
             <div className="flex flex-col">
@@ -167,32 +129,6 @@ export default function Header({
         {/* ===== MOBILE MENU ===== */}
         {menuOpen && (
           <div className="md:hidden mt-4 pt-4 border-t flex flex-col gap-4">
-
-            {/* Warehouse */}
-            <div className="flex flex-col">
-              <span className="text-xs text-slate-400 uppercase">Bodega</span>
-
-              {canSelectWarehouse ? (
-                <select
-                  className="rounded-lg border border-slate-300 px-3 py-2 mt-1"
-                  value={warehouseId}
-                  onChange={(event) =>
-                    onSelectWarehouse?.(event.target.value)
-                  }
-                >
-                  {warehouses?.map((item) => (
-                    <option key={item.id} value={item.id}>
-                      {item.name ? `${item.name} (${item.id})` : item.id}
-                    </option>
-                  ))}
-                </select>
-              ) : (
-                <div className="font-semibold mt-1">
-                  {warehouseId ?? "--"}
-                </div>
-              )}
-            </div>
-
             {/* Date */}
             <div>
               <span className="text-xs text-slate-400 uppercase">Fecha</span>
