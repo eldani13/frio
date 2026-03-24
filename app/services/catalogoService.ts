@@ -103,5 +103,37 @@ export const CatalogoService = {
       console.error("Error en CatalogoService.delete:", error.message);
       throw error;
     }
+  },
+
+  // Agrega esto a tu CatalogoService
+async importMany(dataList: any[], codeCuenta: string) {
+  try {
+    // Obtenemos el último ID una sola vez para empezar el conteo
+    const qLast = query(getColRef(), orderBy("numericId", "desc"), limit(1));
+    const lastSnap = await getDocs(qLast);
+    
+    let currentId = 1;
+    if (!lastSnap.empty) {
+      currentId = (lastSnap.docs[0].data() as Catalogo).numericId + 1;
+    }
+
+    const promises = dataList.map((item, index) => {
+      const nextId = currentId + index;
+      const newProduct: Omit<Catalogo, 'id'> = {
+        ...item,
+        codeCuenta,
+        numericId: nextId,
+        code: this.toBase36(nextId),
+        createdAt: Date.now()
+      };
+      return addDoc(getColRef(), newProduct);
+    });
+
+    return await Promise.all(promises);
+  } catch (error) {
+    console.error("Error importando datos:", error);
+    throw error;
   }
+}
+
 };

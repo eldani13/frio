@@ -6,6 +6,9 @@ import { CatalogoTable } from "@/app/components/ui/catalogos/CatalogoTable";
 import { CatalogoForm } from "@/app/components/ui/catalogos/CatalogoForm";
 import { HiOutlinePlus, HiOutlineSquares2X2 } from "react-icons/hi2";
 import { useAuth } from "@/app/context/AuthContext";
+import { ImportExcel } from "@/app/utils/importarExcelCatalogo";
+
+
 
 export default function CatalogoPage() {
   const [productos, setProductos] = useState<Catalogo[]>([]);
@@ -22,6 +25,21 @@ export default function CatalogoPage() {
     const data = await CatalogoService.getAll(codeCuenta || "");
     setProductos(data);
     setLoading(false);
+  };
+
+  const handleImport = async (data: any[]) => {
+    if (data.length === 0) return;
+    
+    setLoading(true);
+    try {
+      await CatalogoService.importMany(data, codeCuenta || "");
+      alert("¡Importación exitosa!");
+      await load(); // Recargar la tabla
+    } catch (error) {
+      alert("Error al importar los datos.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => {
@@ -65,6 +83,13 @@ export default function CatalogoPage() {
            
           </div>
         </div>
+
+        <div className="flex gap-3">
+          {/* Botón de Importación */}
+          <ImportExcel onDataLoaded={handleImport} />
+
+        </div>
+
 
         <button 
           onClick={() => { setSelectedProducto(null); setIsModalOpen(true); }}
