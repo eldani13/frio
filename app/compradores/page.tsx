@@ -5,15 +5,19 @@ import { Comprador } from "@/app/types/comprador"; // Importación del Type
 import { CompradorTable } from "@/app/components/ui/compradores/CompradorTable";
 import { CompradorForm } from "@/app/components/ui/compradores/CompradorForm";
 import { HiOutlinePlus,HiOutlineSquares2X2 } from "react-icons/hi2";
+import { useAuth } from "@/app/context/AuthContext";
 
 export default function CompradoresPage() {
   const [compradores, setCompradores] = useState<Comprador[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedComprador, setSelectedComprador] = useState<Comprador | null>(null);
 
-  // Carga inicial de datos
+  const { session } = useAuth();
+  const codeCuenta = session?.codeCuenta;
+
+  // Carga inicial de datos con codeCuenta
   const load = async () => {
-    const data = await CompradorService.getAll();
+    const data = await CompradorService.getAll(codeCuenta || "");
     setCompradores(data);
   };
 
@@ -27,7 +31,7 @@ export default function CompradoresPage() {
       if (selectedComprador?.id) {
         await CompradorService.update(selectedComprador.id, { name });
       } else {
-        await CompradorService.create(name);
+        await CompradorService.create(name, codeCuenta || "");
       }
       await load(); // Recargar la lista tras la operación
     } catch (error) {
