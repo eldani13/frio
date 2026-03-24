@@ -7,8 +7,9 @@ import {
   doc, 
   updateDoc, 
   query, 
-  orderBy,
-  limit
+  where, 
+  orderBy, 
+  limit 
 } from "firebase/firestore";
 import { Provider } from "@/app/types/provider";
 
@@ -19,14 +20,17 @@ const SUB_COLLECTION = "providers";
 const getColRef = () => collection(db, PARENT_COLLECTION, PARENT_ID, SUB_COLLECTION);
 
 export const ProviderService = {
-  // Transforma número a Base 36 y aplica el relleno de 4 dígitos (Ej: 1 -> 0001, 10 -> 000A)
   toBase36: (num: number): string => {
     return num.toString(36).toUpperCase().padStart(4, '0');
   },
 
-  async getAll(): Promise<Provider[]> {
+  // 1. Obtener todos filtrados por la cuenta del usuario
+  async getAll(codeCuenta: string): Promise<Provider[]> {
     try {
-      const q = query(getColRef(), orderBy("numericId", "asc"));
+      const q = query(
+        getColRef(), 
+        where("codeCuenta", "==", codeCuenta),  
+      );
       const snapshot = await getDocs(q);
       
       return snapshot.docs.map(d => ({ 
@@ -39,23 +43,24 @@ export const ProviderService = {
     }
   },
 
-  async create(name: string) {
+  // 2. Crear con correlativo GLOBAL y guardar codeCuenta
+  async create(name: string, codeCuenta: string) {
     try {
-      // 1. Buscamos el último ID para el autonumérico
+      // Correlativo GLOBAL (sin 'where') para que el 0001, 0002 sea único en la DB
       const qLast = query(getColRef(), orderBy("numericId", "desc"), limit(1));
       const lastSnap = await getDocs(qLast);
       
       let nextId = 1;
       if (!lastSnap.empty) {
-        const lastData = lastSnap.docs[0].data() as Provider;
-        nextId = (lastData.numericId || 0) + 1;
+        const lastData = lastSnap.docs[0].data();
+        nextId = (Number(lastData.numericId) || 0) + 1;
       }
 
-      // 2. Generamos el objeto con el código ya formateado
       const newProvider: Omit<Provider, 'id'> = {
-        numericId: nextId,
-        code: this.toBase36(nextId), // Aquí se aplica el 0000
         name: name.trim(),
+        codeCuenta: codeCuenta, // Se guarda para que el dueño lo vea
+        numericId: nextId,      // ID global
+        code: this.toBase36(nextId),
         createdAt: Date.now()
       };
 
@@ -66,10 +71,12 @@ export const ProviderService = {
     }
   },
 
+  // 3. Update RESTAURADO (como lo tenías originalmente)
   async update(id: string, data: Partial<Provider>) {
     try {
       const docRef = doc(db, PARENT_COLLECTION, PARENT_ID, SUB_COLLECTION, id);
-      // Ojo: No permitimos actualizar 'code' ni 'numericId' para mantener integridad
+      // Solo permitimos actualizar el nombre (u otros campos que vengan en data)
+      // pero evitamos tocar code o numericId por integridad
       const { name } = data; 
       return await updateDoc(docRef, { name });
     } catch (error: any) {

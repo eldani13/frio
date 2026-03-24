@@ -5,20 +5,23 @@ import { Provider } from "@/app/types/provider";
 import { ProviderTable } from "@/app/components/ui/providers/ProviderTable";
 import { ProviderForm } from "@/app/components/ui/providers/ProviderForm";
 import { HiOutlinePlus, HiOutlineSquares2X2 } from "react-icons/hi2";
+import { useAuth } from "@/app/context/AuthContext";
 
 export default function ProvidersPage() {
   const [providers, setProviders] = useState<Provider[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedProvider, setSelectedProvider] = useState<Provider | null>(null);
 
-  const load = async () => setProviders(await ProviderService.getAll());
+  const { session } = useAuth();
+  const codeCuenta = session?.codeCuenta;
+  const load = async () => setProviders(await ProviderService.getAll(codeCuenta || ""));
   useEffect(() => { load(); }, []);
 
   const handleSuccess = async (name: string) => {
     if (selectedProvider?.id) {
       await ProviderService.update(selectedProvider.id, { name });
     } else {
-      await ProviderService.create(name);
+      await ProviderService.create(name, codeCuenta || "");
     }
     await load();
   };
