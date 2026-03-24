@@ -154,11 +154,33 @@ export default function ConfiguratorPanel({
     configurador: "configurador",
   };
 
+  const warehouseNameByAccountCode = useMemo(() => {
+    const map = new Map<string, string>();
+    warehouses.forEach((warehouse) => {
+      const code = warehouse.codeCuenta?.trim();
+      if (code) {
+        map.set(ensureFiveClientCode(code), warehouse.name ?? "");
+      }
+    });
+    return map;
+  }, [warehouses]);
+
   const clientNameById = useMemo(() => {
     const map = new Map<string, string>();
     clients.forEach((client) => {
       if (client.id) {
         map.set(client.id, client.name ?? "");
+      }
+    });
+    return map;
+  }, [clients]);
+
+  const clientNameByCode = useMemo(() => {
+    const map = new Map<string, string>();
+    clients.forEach((client) => {
+      const code = ensureFiveClientCode(client.code ?? "");
+      if (code) {
+        map.set(code, client.name ?? "");
       }
     });
     return map;
@@ -202,9 +224,10 @@ export default function ConfiguratorPanel({
           </div>
         </div>
 
-        <div className="grid grid-cols-[1.6fr_2.2fr_1.5fr_2fr] border-y border-[#edf1f5] bg-white px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-[#7c8087]">
+        <div className="grid grid-cols-[1.6fr_2.2fr_1.7fr_1.5fr_2fr] border-y border-[#edf1f5] bg-white px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-[#7c8087]">
           <span>Código</span>
           <span>Nombre</span>
+          <span>Bodega asignada</span>
           <span>Credenciales</span>
           <span>Acciones</span>
         </div>
@@ -220,11 +243,14 @@ export default function ConfiguratorPanel({
             return (
               <div
                 key={client.id}
-                className="grid grid-cols-[1.6fr_2.2fr_1.5fr_2fr] items-center gap-3 border-t border-[#edf1f5] bg-white px-4 py-3 text-sm text-[#3f3f3f]"
+                className="grid grid-cols-[1.6fr_2.2fr_1.7fr_1.5fr_2fr] items-center gap-3 border-t border-[#edf1f5] bg-white px-4 py-3 text-sm text-[#3f3f3f]"
               >
                 <span className="font-mono text-xs text-[#6b7280]">{client.code}</span>
                 <span className={`font-semibold ${client.disabled ? "text-[#9ca3af]" : "text-[#2d2d2d]"}`}>
                   {client.name}
+                </span>
+                <span className="text-sm text-[#4b5563]">
+                  {warehouseNameByAccountCode.get(ensureFiveClientCode(client.code ?? "")) ?? "Sin asignar"}
                 </span>
                 <span className={`text-sm font-semibold ${users.some((user) => user.clientId === client.id && user.email?.trim()) ? "text-[#15803d]" : "text-[#9ca3af]"}`}>
                   {users.some((user) => user.clientId === client.id && user.email?.trim()) ? "Sí" : "No"}
@@ -320,7 +346,9 @@ export default function ConfiguratorPanel({
                 ? warehouse.capacity
                 : "-";
             const effectiveStatus = warehouse.status === "externa" ? "externa" : "interna";
-            const assignedLabel = warehouse.codeCuenta?.trim() ? warehouse.codeCuenta.trim() : "Sin asignar";
+            const normalizedCode = ensureFiveClientCode(warehouse.codeCuenta ?? "");
+            const assignedLabel = normalizedCode ? clientNameByCode.get(normalizedCode) : undefined;
+            const assignedDisplay = assignedLabel ?? (normalizedCode || "Sin asignar");
             return (
               <div
                 key={warehouse.id}
@@ -336,7 +364,10 @@ export default function ConfiguratorPanel({
                   </span>
                 </div>
                 <span className="text-sm font-semibold text-[#3f3f3f]">{capacityLabel}</span>
-                <span className="text-sm text-[#3f3f3f]">{assignedLabel}</span>
+                <div className="flex flex-col text-sm text-[#3f3f3f]">
+                  <span>{assignedDisplay}</span>
+                  <span className="font-mono text-[11px] text-[#6b7280]">{normalizedCode || "Sin código"}</span>
+                </div>
                 <div className="flex flex-wrap items-center gap-2">
                   <button
                     type="button"
@@ -645,7 +676,7 @@ export default function ConfiguratorPanel({
                   placeholder="Código generado"
                   disabled={clientSaving || clientsLoading}
                 />
-                <p className="mt-1 text-xs text-slate-500">Se genera con el nombre + números; puedes ajustarlo si lo necesitas.</p>
+                <p className="mt-1 text-xs text-slate-500">Se genera al escribir el nombre (base 36, 5 caracteres); puedes ajustarlo si lo necesitas.</p>
               </div>
             </div>
 
