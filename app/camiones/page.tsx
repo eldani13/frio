@@ -5,15 +5,19 @@ import { Camion } from "@/app/types/camion";
 import { TruckTable } from "@/app/components/ui/camiones/camionTable";
 import { TruckForm } from "@/app/components/ui/camiones/camionForm";
 import { HiOutlinePlus,HiOutlineSquares2X2 } from "react-icons/hi2";
+import { useAuth } from "@/app/context/AuthContext";
 
 export default function TrucksPage() {
   const [trucks, setTrucks] = useState<Camion[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedTruck, setSelectedTruck] = useState<Camion | null>(null);
 
-  // Carga inicial de datos
+  const { session } = useAuth();
+  const codeCuenta = session?.codeCuenta;
+
+  // Carga inicial de datos con codeCuenta
   const load = async () => {
-    const data = await TruckService.getAll();
+    const data = await TruckService.getAll(codeCuenta || "");
     setTrucks(data);
   };
 
@@ -27,7 +31,7 @@ export default function TrucksPage() {
       if (selectedTruck?.id) {
         await TruckService.update(selectedTruck.id, data);
       } else {
-        await TruckService.create(data);
+        await TruckService.create(data, codeCuenta || "");
       }
       await load();
       setIsModalOpen(false); // Cerramos el modal tras el éxito

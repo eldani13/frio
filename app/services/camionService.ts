@@ -7,27 +7,34 @@ import {
   doc, 
   updateDoc, 
   query, 
+  where, // Agregado para el filtro
   orderBy,
   limit
 } from "firebase/firestore";
-import { Camion } from "@/app/types/camion"; // Ajusta la ruta según tu proyecto
+import { Camion } from "@/app/types/camion";
 
 const PARENT_COLLECTION = "warehouses";
 const PARENT_ID = "GENERAL"; 
-const SUB_COLLECTION = "trucks"; // Cambiado a trucks para diferenciar de proveedores
+const SUB_COLLECTION = "trucks";
 
 const getColRef = () => collection(db, PARENT_COLLECTION, PARENT_ID, SUB_COLLECTION);
 
 export const TruckService = {
   
-  // Transforma número a Base 36 y aplica el relleno de 4 dígitos (Ej: 1 -> 0001)
   toBase36: (num: number): string => {
     return num.toString(36).toUpperCase().padStart(4, '0');
   },
 
-  async getAll(): Promise<Camion[]> {
+  /**
+   * Obtiene los camiones filtrados por codeCuenta.
+   * Sin orderBy para evitar errores de índice compuesto.
+   */
+  async getAll(codeCuenta: string): Promise<Camion[]> {
     try {
-      const q = query(getColRef(), orderBy("numericId", "asc"));
+      const q = query(
+        getColRef(), 
+        where("codeCuenta", "==", codeCuenta)
+      );
       const snapshot = await getDocs(q);
       
       return snapshot.docs.map(d => ({ 
@@ -40,9 +47,12 @@ export const TruckService = {
     }
   },
 
-  async create(data: Omit<Camion, 'id' | 'numericId' | 'code' | 'createdAt'>) {
+  /**
+   * Crea un nuevo camión con correlativo GLOBAL y codeCuenta.
+   */
+  async create(data: Omit<Camion, 'id' | 'numericId' | 'code' | 'createdAt' | 'codeCuenta'>, codeCuenta: string) {
     try {
-      // 1. Buscamos el último ID para el autonumérico
+      // 1. Buscamos el último ID de forma global (sin where)
       const qLast = query(getColRef(), orderBy("numericId", "desc"), limit(1));
       const lastSnap = await getDocs(qLast);
       
@@ -52,9 +62,10 @@ export const TruckService = {
         nextId = (lastData.numericId || 0) + 1;
       }
 
-      // 2. Preparamos el nuevo objeto combinando los datos del formulario con los autogenerados
+      // 2. Preparamos el objeto incluyendo el codeCuenta de la sesión
       const newTruck: Omit<Camion, 'id'> = {
         ...data,
+        codeCuenta: codeCuenta, // Vinculación con la cuenta activa
         numericId: nextId,
         code: this.toBase36(nextId),
         createdAt: Date.now()
@@ -67,14 +78,18 @@ export const TruckService = {
     }
   },
 
+  /**
+   * Actualiza los datos del camión (mantiene tu lógica original)
+   */
   async update(id: string, data: Partial<Omit<Camion, 'id' | 'numericId' | 'code'>>) {
     try {
       const docRef = doc(db, PARENT_COLLECTION, PARENT_ID, SUB_COLLECTION, id);
       
-      // Filtramos para evitar sobrescribir el código o el ID numérico por error
-      const { ...updateData } = data;
+      // Filtramos para evitar sobrescribir campos protegidos
+      const updateData = { ...data };
       delete (updateData as any).code;
       delete (updateData as any).numericId;
+      delete (updateData as any).codeCuenta; // También protegemos el codeCuenta
 
       return await updateDoc(docRef, updateData);
     } catch (error: any) {
