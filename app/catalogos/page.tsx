@@ -5,6 +5,7 @@ import { Catalogo } from "@/app/types/catalogo";
 import { CatalogoTable } from "@/app/components/ui/catalogos/CatalogoTable";
 import { CatalogoForm } from "@/app/components/ui/catalogos/CatalogoForm";
 import { HiOutlinePlus, HiOutlineSquares2X2 } from "react-icons/hi2";
+import { useAuth } from "@/app/context/AuthContext";
 
 export default function CatalogoPage() {
   const [productos, setProductos] = useState<Catalogo[]>([]);
@@ -12,10 +13,13 @@ export default function CatalogoPage() {
   const [selectedProducto, setSelectedProducto] = useState<Catalogo | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // Carga de datos
+  const { session } = useAuth();
+  const codeCuenta = session?.codeCuenta;
+
+  // Carga de datos con codeCuenta
   const load = async () => {
     setLoading(true);
-    const data = await CatalogoService.getAll();
+    const data = await CatalogoService.getAll(codeCuenta || "");
     setProductos(data);
     setLoading(false);
   };
@@ -32,7 +36,7 @@ export default function CatalogoPage() {
         await CatalogoService.update(selectedProducto.id, data);
       } else {
         // Si no, creamos uno nuevo (asegurándonos de cumplir con los requeridos)
-        await CatalogoService.create(data as any);
+        await CatalogoService.create(data as any, codeCuenta || "");
       }
       await load();
     } catch (error) {

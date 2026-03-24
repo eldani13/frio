@@ -53,4 +53,5 @@ export interface Catalogo {
     seoDescription?: string;
     googleShoppingCategory?: string;
     metacampos?: string;
+    codeCuenta: string;
   }

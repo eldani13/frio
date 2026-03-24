@@ -7,33 +7,34 @@ import {
   doc, 
   updateDoc, 
   query, 
+  where, // Agregado para filtrar por cuenta
   orderBy,
   limit
 } from "firebase/firestore";
-import { Catalogo } from "@/app/types/catalogo"; // Ajusta la ruta según tu proyecto
+import { Catalogo } from "@/app/types/catalogo";
 
 const PARENT_COLLECTION = "warehouses";
 const PARENT_ID = "GENERAL"; 
-const SUB_COLLECTION = "productos"; // Nombre de la subcolección para el catálogo
+const SUB_COLLECTION = "productos";
 
 const getColRef = () => collection(db, PARENT_COLLECTION, PARENT_ID, SUB_COLLECTION);
 
 export const CatalogoService = {
   
-  /**
-   * Transforma número a Base 36 y aplica el relleno de 4 dígitos 
-   * Ej: 1 -> 0001, 10 -> 000A, 36 -> 0010
-   */
   toBase36: (num: number): string => {
     return num.toString(36).toUpperCase().padStart(4, '0');
   },
 
   /**
-   * Obtiene todos los productos del catálogo ordenados por ID numérico
+   * Obtiene los productos filtrados por codeCuenta.
+   * Sin orderBy para evitar el error de índice compuesto.
    */
-  async getAll(): Promise<Catalogo[]> {
+  async getAll(codeCuenta: string): Promise<Catalogo[]> {
     try {
-      const q = query(getColRef(), orderBy("numericId", "asc"));
+      const q = query(
+        getColRef(), 
+        where("codeCuenta", "==", codeCuenta)
+      );
       const snapshot = await getDocs(q);
       
       return snapshot.docs.map(d => ({ 
@@ -47,12 +48,11 @@ export const CatalogoService = {
   },
 
   /**
-   * Crea un nuevo producto calculando el siguiente ID autonumérico
-   * Recibe un objeto con los datos del formulario (Omitiendo los campos autogenerados)
+   * Crea un producto con correlativo GLOBAL y lo asigna a una cuenta.
    */
-  async create(productData: Omit<Catalogo, 'id' | 'numericId' | 'code' | 'createdAt'>) {
+  async create(productData: Omit<Catalogo, 'id' | 'numericId' | 'code' | 'createdAt' | 'codeCuenta'>, codeCuenta: string) {
     try {
-      // 1. Buscamos el último ID para el autonumérico
+      // 1. Buscamos el último ID de forma global (sin where)
       const qLast = query(getColRef(), orderBy("numericId", "desc"), limit(1));
       const lastSnap = await getDocs(qLast);
       
@@ -62,9 +62,10 @@ export const CatalogoService = {
         nextId = (lastData.numericId || 0) + 1;
       }
 
-      // 2. Generamos el objeto completo según la interfaz Catalogo
+      // 2. Generamos el objeto incluyendo el codeCuenta pasado por parámetro
       const newProduct: Omit<Catalogo, 'id'> = {
         ...productData,
+        codeCuenta: codeCuenta, // Vinculación con la cuenta
         numericId: nextId,
         code: this.toBase36(nextId),
         createdAt: Date.now()
@@ -78,14 +79,14 @@ export const CatalogoService = {
   },
 
   /**
-   * Actualiza un producto existente
+   * Actualiza un producto existente (mantiene tu lógica original)
    */
   async update(id: string, data: Partial<Catalogo>) {
     try {
       const docRef = doc(db, PARENT_COLLECTION, PARENT_ID, SUB_COLLECTION, id);
       
-      // Evitamos sobrescribir los campos de identificación por seguridad
-      const { id: _, numericId, code, createdAt, ...updateData } = data as any;
+      // Evitamos sobrescribir los campos de identificación y la cuenta
+      const { id: _, numericId, code, createdAt, codeCuenta, ...updateData } = data as any;
 
       return await updateDoc(docRef, updateData);
     } catch (error: any) {
@@ -94,9 +95,6 @@ export const CatalogoService = {
     }
   },
 
-  /**
-   * Elimina un producto por su ID de documento
-   */
   async delete(id: string) {
     try {
       const docRef = doc(db, PARENT_COLLECTION, PARENT_ID, SUB_COLLECTION, id);
