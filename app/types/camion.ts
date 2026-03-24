@@ -17,4 +17,5 @@ export interface Camion {
   isAvailable: boolean;   // Si está libre para asignar ruta
     
   createdAt: number;        // Timestamp de creación
+  codeCuenta: string;       // Cuenta del usuario
 }

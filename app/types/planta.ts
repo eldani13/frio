@@ -9,4 +9,5 @@ export interface Planta {
     tempRange: string;    // Rango térmico (ej: "-20°C a 5°C")
     isOperational: boolean;
     createdAt: number;    // Timestamp
+    codeCuenta: string;   // Cuenta del usuario
   }

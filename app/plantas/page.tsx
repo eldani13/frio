@@ -5,13 +5,16 @@ import { Planta } from "@/app/types/planta";
 import { PlantaTable } from "@/app/components/ui/plantas/PlantaTable";
 import { PlantaForm } from "@/app/components/ui/plantas/PlantaForm";
 import { HiOutlinePlus, HiOutlineSquares2X2 } from "react-icons/hi2";
+import { useAuth } from "@/app/context/AuthContext";
 
 export default function PlantasPage() {
   const [plantas, setPlantas] = useState<Planta[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedPlanta, setSelectedPlanta] = useState<Planta | null>(null);
 
-  const load = async () => setPlantas(await PlantaService.getAll());
+  const { session } = useAuth();
+  const codeCuenta = session?.codeCuenta;
+  const load = async () => setPlantas(await PlantaService.getAll(codeCuenta || ""));
   
   useEffect(() => { 
     load(); 
@@ -22,7 +25,7 @@ export default function PlantasPage() {
       if (selectedPlanta?.id) {
         await PlantaService.update(selectedPlanta.id, data);
       } else {
-        await PlantaService.create(data);
+        await PlantaService.create(data, codeCuenta || "");
       }
       await load();
     } catch (error) {
