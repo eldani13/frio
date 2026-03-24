@@ -665,7 +665,7 @@ export default function BodegaDashboard() {
         if (!defaultSnap.exists()) {
           await setDoc(defaultRef, {
             name: "default",
-            status: "active",
+            status: "interna",
             capacity: 0,
             disabled: false,
             createdAt: serverTimestamp(),
@@ -677,7 +677,7 @@ export default function BodegaDashboard() {
             {
               id: DEFAULT_WAREHOUSE_ID,
               name: "default",
-              status: "active",
+              status: "interna",
               capacity: 0,
               disabled: false,
               createdAt: undefined,
@@ -706,7 +706,7 @@ export default function BodegaDashboard() {
         {
           id: DEFAULT_WAREHOUSE_ID,
           name: "default",
-          status: "active",
+          status: "interna",
           capacity: 0,
           disabled: false,
           createdAt: undefined,
@@ -773,7 +773,7 @@ export default function BodegaDashboard() {
       const capacity = Number.isFinite(capacityRaw) && capacityRaw >= 0 ? capacityRaw : 0;
       const isExterna =
         typeof arg === "object" && arg !== null && arg.status === "externa";
-      const firestoreStatus = isExterna ? "externa" : "active";
+      const firestoreStatus = isExterna ? "externa" : "interna";
       const codeCuenta = (session.clientId ?? "").toString();
       if (!name) {
         setMessage("Ingresa un nombre para la bodega.");
@@ -1199,7 +1199,7 @@ export default function BodegaDashboard() {
           ? undefined
           : payload.status === "externa"
             ? "externa"
-            : "active";
+            : "interna";
       try {
         await updateDoc(doc(db, "warehouses", warehouseIdParam), {
           name,
