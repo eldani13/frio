@@ -3,14 +3,18 @@ import { useState, useEffect } from "react";
 import { HiOutlineXMark } from "react-icons/hi2";
 import { Planta } from "@/app/types/planta";
 
+// Definimos los campos que el FORMULARIO no maneja (se generan en DB o son automáticos)
+type PlantaFormData = Omit<Planta, 'id' | 'numericId' | 'code' | 'createdAt' | 'codeCuenta'>;
+
 interface PlantaFormProps {
   isOpen: boolean;
   onClose: () => void;
-  onSuccess: (data: Omit<Planta, 'id' | 'numericId' | 'code' | 'createdAt'>) => Promise<void>;
+  // El éxito devuelve la data limpia sin los campos automáticos
+  onSuccess: (data: PlantaFormData) => Promise<void>;
   planta?: Planta | null;
 }
 
-const initialForm = {
+const initialForm: PlantaFormData = {
   name: "",
   plantName: "",
   location: "",
@@ -20,7 +24,7 @@ const initialForm = {
 };
 
 export const PlantaForm = ({ isOpen, onClose, onSuccess, planta }: PlantaFormProps) => {
-  const [formData, setFormData] = useState(initialForm);
+  const [formData, setFormData] = useState<PlantaFormData>(initialForm);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -47,7 +51,7 @@ export const PlantaForm = ({ isOpen, onClose, onSuccess, planta }: PlantaFormPro
       await onSuccess(formData);
       onClose();
     } catch (error) {
-      console.error(error);
+      console.error("Error al procesar planta:", error);
     } finally {
       setLoading(false);
     }
@@ -76,9 +80,8 @@ export const PlantaForm = ({ isOpen, onClose, onSuccess, planta }: PlantaFormPro
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          {/* Fila 1: Razón Social */}
           <div>
-            <label className="block text-[11px] font-medium text-gray-500 uppercase mb-1">Razón Social</label>
+            <label className="block text-[11px] font-bold text-gray-500 uppercase mb-1">Razón Social</label>
             <input
               autoFocus
               name="name"
@@ -91,10 +94,9 @@ export const PlantaForm = ({ isOpen, onClose, onSuccess, planta }: PlantaFormPro
             />
           </div>
 
-          {/* Fila 2: Nombre de Planta y Ubicación */}
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-[11px] font-medium text-gray-500 uppercase mb-1">Nombre Planta</label>
+              <label className="block text-[11px] font-bold text-gray-500 uppercase mb-1">Nombre Planta</label>
               <input
                 name="plantName"
                 type="text"
@@ -106,7 +108,7 @@ export const PlantaForm = ({ isOpen, onClose, onSuccess, planta }: PlantaFormPro
               />
             </div>
             <div>
-              <label className="block text-[11px] font-medium text-gray-500 uppercase mb-1">Ubicación/Zona</label>
+              <label className="block text-[11px] font-bold text-gray-500 uppercase mb-1">Ubicación / Zona</label>
               <input
                 name="location"
                 type="text"
@@ -119,10 +121,9 @@ export const PlantaForm = ({ isOpen, onClose, onSuccess, planta }: PlantaFormPro
             </div>
           </div>
 
-          {/* Fila 3: Capacidad y Rango Térmico */}
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-[11px] font-medium text-gray-500 uppercase mb-1">Capacidad (Pallets)</label>
+              <label className="block text-[11px] font-bold text-gray-500 uppercase mb-1">Capacidad (Pallets)</label>
               <input
                 name="maxPallets"
                 type="number"
@@ -133,7 +134,7 @@ export const PlantaForm = ({ isOpen, onClose, onSuccess, planta }: PlantaFormPro
               />
             </div>
             <div>
-              <label className="block text-[11px] font-medium text-gray-500 uppercase mb-1">Rango Térmico</label>
+              <label className="block text-[11px] font-bold text-gray-500 uppercase mb-1">Rango Térmico</label>
               <input
                 name="tempRange"
                 type="text"
@@ -146,7 +147,6 @@ export const PlantaForm = ({ isOpen, onClose, onSuccess, planta }: PlantaFormPro
             </div>
           </div>
 
-          {/* Fila 4: Estado Operacional */}
           <div className="flex items-center gap-3 py-2">
             <input
               id="isOperational"
@@ -156,7 +156,7 @@ export const PlantaForm = ({ isOpen, onClose, onSuccess, planta }: PlantaFormPro
               onChange={handleChange}
               className="w-4 h-4 text-[#A8D5BA] border-gray-300 rounded focus:ring-[#A8D5BA]"
             />
-            <label htmlFor="isOperational" className="text-[14px] text-gray-700">Planta Operativa</label>
+            <label htmlFor="isOperational" className="text-[14px] font-medium text-gray-700">Planta Operativa</label>
           </div>
 
           <div className="flex gap-3 pt-4">
@@ -170,7 +170,7 @@ export const PlantaForm = ({ isOpen, onClose, onSuccess, planta }: PlantaFormPro
             <button
               type="submit"
               disabled={loading}
-              className="flex-1 px-4 py-2 bg-[#A8D5BA] text-[#2D5A3F] rounded-[8px] text-[14px] font-medium hover:bg-[#97c4a9] active:scale-95 transition-all disabled:opacity-50"
+              className="flex-1 px-4 py-2 bg-[#A8D5BA] text-[#2D5A3F] rounded-[8px] text-[14px] font-bold hover:bg-[#97c4a9] active:scale-95 transition-all disabled:opacity-50"
             >
               {loading ? "Guardando..." : planta ? "Actualizar" : "Crear Planta"}
             </button>

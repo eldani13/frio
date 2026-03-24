@@ -23,6 +23,7 @@ const INITIAL_STATE: TruckFormData = {
   type: 'Seco', // Ahora TypeScript sabe que es de tipo 'Refrigerado' | 'Seco' | 'Isotérmico'
   tempRange: "",
   isAvailable: true,
+  codeCuenta: "",
 };
 
 export const TruckForm = ({ isOpen, onClose, onSuccess, truck }: TruckFormProps) => {
@@ -41,6 +42,7 @@ export const TruckForm = ({ isOpen, onClose, onSuccess, truck }: TruckFormProps)
         type: truck.type,
         tempRange: truck.tempRange || "",
         isAvailable: truck.isAvailable,
+        codeCuenta: truck.codeCuenta,
       });
     } else {
       setFormData(INITIAL_STATE);
