@@ -7,10 +7,11 @@ import {
   doc, 
   updateDoc, 
   query, 
+  where, // Agregado para filtrar
   orderBy,
   limit
 } from "firebase/firestore";
-import { Planta } from "@/app/types/planta"; // Ajusta la ruta según tu proyecto
+import { Planta } from "@/app/types/planta";
 
 const PARENT_COLLECTION = "warehouses";
 const PARENT_ID = "GENERAL"; 
@@ -19,14 +20,17 @@ const SUB_COLLECTION = "plantas";
 const getColRef = () => collection(db, PARENT_COLLECTION, PARENT_ID, SUB_COLLECTION);
 
 export const PlantaService = {
-  // Transforma número a Base 36 y aplica el relleno de 4 dígitos (Ej: 1 -> 0001)
   toBase36: (num: number): string => {
     return num.toString(36).toUpperCase().padStart(4, '0');
   },
 
-  async getAll(): Promise<Planta[]> {
+  // 1. Recibe codeCuenta y NO tiene orderBy para evitar el error de índice
+  async getAll(codeCuenta: string): Promise<Planta[]> {
     try {
-      const q = query(getColRef(), orderBy("numericId", "asc"));
+      const q = query(
+        getColRef(), 
+        where("codeCuenta", "==", codeCuenta)
+      );
       const snapshot = await getDocs(q);
       
       return snapshot.docs.map(d => ({ 
@@ -39,9 +43,10 @@ export const PlantaService = {
     }
   },
 
-  async create(data: Omit<Planta, 'id' | 'numericId' | 'code' | 'createdAt'>) {
+  // 2. Agregamos codeCuenta a los parámetros y al objeto final
+  async create(data: Omit<Planta, 'id' | 'numericId' | 'code' | 'createdAt' | 'codeCuenta'>, codeCuenta: string) {
     try {
-      // 1. Buscamos el último ID para el autonumérico
+      // Búsqueda GLOBAL del correlativo (sin where)
       const qLast = query(getColRef(), orderBy("numericId", "desc"), limit(1));
       const lastSnap = await getDocs(qLast);
       
@@ -51,9 +56,9 @@ export const PlantaService = {
         nextId = (lastData.numericId || 0) + 1;
       }
 
-      // 2. Generamos el objeto con el código y campos automáticos
       const newPlanta: Omit<Planta, 'id'> = {
         ...data,
+        codeCuenta: codeCuenta, // Guardamos la cuenta del usuario
         numericId: nextId,
         code: this.toBase36(nextId),
         createdAt: Date.now()
@@ -70,8 +75,6 @@ export const PlantaService = {
     try {
       const docRef = doc(db, PARENT_COLLECTION, PARENT_ID, SUB_COLLECTION, id);
       
-      // Extraemos solo los campos editables de la interfaz Planta
-      // Evitamos actualizar id, numericId y code por integridad
       const { 
         name, 
         plantName, 
