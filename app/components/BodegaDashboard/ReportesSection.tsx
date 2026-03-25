@@ -9,7 +9,11 @@ import AsignarBodegasPage from "@/app/asignarbodegas/page";
 
 import { MdBusiness, MdFactory, MdShoppingCart } from "react-icons/md";
 import { BiBarChartAlt2, BiCollection, BiUserCheck } from "react-icons/bi";
-import { HiOutlineArrowRight, HiOutlineTruck } from "react-icons/hi2";
+import {
+  HiOutlineArrowLeft,
+  HiOutlineArrowRight,
+  HiOutlineTruck,
+} from "react-icons/hi2";
 
 interface ReportesSectionProps {
   isCliente?: boolean;
@@ -25,6 +29,7 @@ const ReportesSection: React.FC<ReportesSectionProps> = ({
   const [viewMode, setViewMode] = React.useState<
     | "reporte"
     | "catalogo"
+    | "asignaciones"
     | "proveedores"
     | "plantas"
     | "compradores"
@@ -54,15 +59,12 @@ const ReportesSection: React.FC<ReportesSectionProps> = ({
     setReportDetailModal(null);
   }, [isCliente, menuResetNonce, setReportDetailModal]);
 
-  // Vista de Menú Principal (Solo para clientes o cuando no hay vista seleccionada)
+  // Menú principal cliente: Reportes, Catálogo, Asignaciones
   if (isCliente && viewMode === null) {
     return (
       <section className="rounded-2xl bg-white p-8 shadow-sm border border-slate-200">
         <div className="flex flex-col items-center text-center gap-6 w-full px-4">
-          
           <div className="flex flex-col w-full max-w-4xl gap-3">
-            
-            {/* Botón Reporte */}
             <button
               type="button"
               onClick={() => setViewMode("reporte")}
@@ -77,7 +79,6 @@ const ReportesSection: React.FC<ReportesSectionProps> = ({
               <HiOutlineArrowRight size={18} className="text-slate-500 group-hover:translate-x-1 transition-transform" />
             </button>
 
-            {/* Botón Catálogo */}
             <button
               type="button"
               onClick={() => setViewMode("catalogo")}
@@ -92,37 +93,39 @@ const ReportesSection: React.FC<ReportesSectionProps> = ({
               <HiOutlineArrowRight size={18} className="text-slate-500 group-hover:translate-x-1 transition-transform" />
             </button>
 
-            {/* Botón Asignar bodegas Internas */}
             <button
               type="button"
-              onClick={() => setViewMode("asignarBodegasInterna")}
+              onClick={() => setViewMode("asignaciones")}
               className="group w-full rounded-2xl bg-[#b0d6c3] p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md flex items-center justify-between cursor-pointer active:scale-95"
             >
               <div className="flex items-center gap-4">
                 <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-white/50 text-slate-800 shadow-sm">
                   <BiUserCheck size={24} />
                 </span>
-                <p className="text-lg font-bold text-slate-900">Asignar Bodega Interna</p>
+                <p className="text-lg font-bold text-slate-900">Asignaciones</p>
               </div>
               <HiOutlineArrowRight size={18} className="text-slate-500 group-hover:translate-x-1 transition-transform" />
             </button>
+          </div>
+        </div>
+      </section>
+    );
+  }
 
-             {/* Botón Asignar bodegas Externas */}
-             <button
-              type="button"
-              onClick={() => setViewMode("asignarBodegasExterna")}
-              className="group w-full rounded-2xl bg-[#b0d6c3] p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md flex items-center justify-between cursor-pointer active:scale-95"
-            >
-              <div className="flex items-center gap-4">
-                <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-white/50 text-slate-800 shadow-sm">
-                  <BiUserCheck size={24} />
-                </span>
-                <p className="text-lg font-bold text-slate-900">Asignar Bodega Externa</p>
-              </div>
-              <HiOutlineArrowRight size={18} className="text-slate-500 group-hover:translate-x-1 transition-transform" />
-            </button>
-
-            {/* Botón Proveedores */}
+  // Submenú Asignaciones (cliente)
+  if (isCliente && viewMode === "asignaciones") {
+    return (
+      <section className="rounded-2xl bg-white p-8 shadow-sm border border-slate-200">
+        <div className="flex flex-col w-full max-w-4xl mx-auto px-4 gap-4">
+          <button
+            type="button"
+            onClick={() => setViewMode(null)}
+            className="self-start flex items-center gap-2 text-sm font-semibold text-slate-600 hover:text-slate-900 transition-colors"
+          >
+            <HiOutlineArrowLeft size={18} />
+            Volver al menú
+          </button>
+          <div className="flex flex-col gap-3">
             <button
               type="button"
               onClick={() => setViewMode("proveedores")}
@@ -137,22 +140,8 @@ const ReportesSection: React.FC<ReportesSectionProps> = ({
               <HiOutlineArrowRight size={18} className="text-slate-500 group-hover:translate-x-1 transition-transform" />
             </button>
 
-            {/* Botón Plantas */}
             <button
-              onClick={() => setViewMode("plantas")}
-              className="group w-full rounded-2xl bg-[#e2d5f3] p-4 transition-all hover:-translate-y-0.5 hover:shadow-md flex items-center justify-between cursor-pointer active:scale-95"
-            >
-              <div className="flex items-center gap-4">
-                <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-white/40 text-slate-800 shadow-sm">
-                  <MdFactory size={24} />
-                </span>
-                <p className="text-lg font-bold text-slate-900">Plantas</p>
-              </div>
-              <HiOutlineArrowRight size={20} className="text-slate-500 group-hover:translate-x-1 transition-transform" />
-            </button>
-
-            {/* Botón Compradores */}
-            <button
+              type="button"
               onClick={() => setViewMode("compradores")}
               className="group w-full rounded-2xl bg-[#d1f2fb] p-4 transition-all hover:-translate-y-0.5 hover:shadow-md flex items-center justify-between cursor-pointer active:scale-95"
             >
@@ -165,8 +154,36 @@ const ReportesSection: React.FC<ReportesSectionProps> = ({
               <HiOutlineArrowRight size={20} className="text-slate-500 group-hover:translate-x-1 transition-transform" />
             </button>
 
-            {/* Botón Camiones */}
             <button
+              type="button"
+              onClick={() => setViewMode("asignarBodegasInterna")}
+              className="group w-full rounded-2xl bg-[#b0d6c3] p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md flex items-center justify-between cursor-pointer active:scale-95"
+            >
+              <div className="flex items-center gap-4">
+                <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-white/50 text-slate-800 shadow-sm">
+                  <BiUserCheck size={24} />
+                </span>
+                <p className="text-lg font-bold text-slate-900">Bodega interna</p>
+              </div>
+              <HiOutlineArrowRight size={18} className="text-slate-500 group-hover:translate-x-1 transition-transform" />
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setViewMode("asignarBodegasExterna")}
+              className="group w-full rounded-2xl bg-[#b0d6c3] p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md flex items-center justify-between cursor-pointer active:scale-95"
+            >
+              <div className="flex items-center gap-4">
+                <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-white/50 text-slate-800 shadow-sm">
+                  <BiUserCheck size={24} />
+                </span>
+                <p className="text-lg font-bold text-slate-900">Bodega externa</p>
+              </div>
+              <HiOutlineArrowRight size={18} className="text-slate-500 group-hover:translate-x-1 transition-transform" />
+            </button>
+
+            <button
+              type="button"
               onClick={() => setViewMode("camiones")}
               className="group w-full rounded-2xl bg-[#d1f2fb] p-4 transition-all hover:-translate-y-0.5 hover:shadow-md flex items-center justify-between cursor-pointer active:scale-95"
             >
@@ -178,9 +195,21 @@ const ReportesSection: React.FC<ReportesSectionProps> = ({
               </div>
               <HiOutlineArrowRight size={20} className="text-slate-500 group-hover:translate-x-1 transition-transform" />
             </button>
-          
-          </div>
 
+            <button
+              type="button"
+              onClick={() => setViewMode("plantas")}
+              className="group w-full rounded-2xl bg-[#e2d5f3] p-4 transition-all hover:-translate-y-0.5 hover:shadow-md flex items-center justify-between cursor-pointer active:scale-95"
+            >
+              <div className="flex items-center gap-4">
+                <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-white/40 text-slate-800 shadow-sm">
+                  <MdFactory size={24} />
+                </span>
+                <p className="text-lg font-bold text-slate-900">Plantas</p>
+              </div>
+              <HiOutlineArrowRight size={20} className="text-slate-500 group-hover:translate-x-1 transition-transform" />
+            </button>
+          </div>
         </div>
       </section>
     );

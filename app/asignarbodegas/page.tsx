@@ -1,23 +1,24 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { BodegaAsignarModal } from "@/app/components/ui/bodegas/bodegaForm";
 import { AsignarBodegaService } from "@/app/services/asignarbodegaService";
 import { useAuth } from "@/app/context/AuthContext";
 import { WarehouseMeta } from "@/app/interfaces/bodega";
 
 export default function AsignarBodegasPage({ estado }: { estado: string }) {
-  const [modalOpen, setModalOpen] = useState(false); // Iniciamos en false para validar primero
+  const [modalOpen, setModalOpen] = useState(false);
   const { session, loading } = useAuth();
-  
+
   const clientId = session?.clientId || "";
   const codeCuenta = session?.codeCuenta || "";
-  
+
   const [bodegasAsignadas, setBodegasAsignadas] = useState<WarehouseMeta[]>([]);
   const [isFetching, setIsFetching] = useState(true);
 
-  // --- LÓGICA DE VALIDACIÓN ---
-  // Verificamos si ya existe una bodega con el mismo "estado" (interna/externa)
-  const yaTieneBodegaDeEsteTipo = bodegasAsignadas.some(b => b.status === estado);
+  const bodegasDeEsteTipo = useMemo(
+    () => bodegasAsignadas.filter((b) => b.status === estado),
+    [bodegasAsignadas, estado],
+  );
 
   const fetchBodegas = async () => {
     if (codeCuenta) {
@@ -38,44 +39,35 @@ export default function AsignarBodegasPage({ estado }: { estado: string }) {
     if (!loading) fetchBodegas();
   }, [codeCuenta, loading]);
 
-  // Manejador del botón con alerta
-  const handleOpenModal = () => {
-    if (yaTieneBodegaDeEsteTipo) {
-      alert(`Atención: Este cliente ya tiene una bodega ${estado} asignada.`);
-      return;
-    }
-    setModalOpen(true);
-  };
-
   if (loading) return <div className="p-8 text-center animate-pulse">Cargando sesión...</div>;
+
+  const tipoLabel = estado === "interna" ? "internas" : "externas";
 
   return (
     <div className="p-8 max-w-4xl mx-auto">
-      <header className="mb-8 flex justify-between items-center">
+      <header className="mb-8 flex flex-col gap-4 sm:flex-row sm:justify-between sm:items-center">
         <div>
           <h1 className="text-3xl font-bold text-slate-900">Infraestructura</h1>
-          <p className="text-slate-500 text-sm">Validando asignación de tipo: <b>{estado}</b></p>
+          <p className="text-slate-500 text-sm">
+            Bodegas <b>{tipoLabel}</b> vinculadas a tu cuenta:{" "}
+            <b>{bodegasDeEsteTipo.length}</b>
+          </p>
         </div>
-        
-        {/* El botón cambia de color o estilo si ya está bloqueado */}
-        <button 
-          onClick={handleOpenModal}
-          disabled={yaTieneBodegaDeEsteTipo}
-          className={`px-4 py-2 rounded-lg font-bold text-sm transition-all ${
-            yaTieneBodegaDeEsteTipo 
-            ? "bg-gray-100 text-gray-400 cursor-not-allowed" 
-            : "bg-emerald-100 text-emerald-700 hover:bg-emerald-200"
-          }`}
+
+        <button
+          type="button"
+          onClick={() => setModalOpen(true)}
+          className="px-4 py-2 rounded-lg font-bold text-sm transition-all bg-emerald-100 text-emerald-700 hover:bg-emerald-200 shrink-0"
         >
-          {yaTieneBodegaDeEsteTipo ? `Bodega ${estado} ya asignada` : `+ Vincular ${estado}`}
+          + Vincular otra bodega {estado}
         </button>
       </header>
-      
+
       <div className="grid gap-4">
         {isFetching ? (
           <p className="text-slate-400 text-sm italic">Buscando bodegas...</p>
-        ) : bodegasAsignadas.length > 0 ? (
-          bodegasAsignadas.map((bodega) => (
+        ) : bodegasDeEsteTipo.length > 0 ? (
+          bodegasDeEsteTipo.map((bodega) => (
             <div key={bodega.id} className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
               <div className="flex justify-between items-start">
                 <div>
@@ -92,7 +84,9 @@ export default function AsignarBodegasPage({ estado }: { estado: string }) {
           ))
         ) : (
           <div className="bg-slate-50 border-2 border-dashed border-slate-200 rounded-2xl p-12 text-center">
-            <p className="text-slate-400">No hay bodegas vinculadas.</p>
+            <p className="text-slate-400">
+              No hay bodegas {tipoLabel} vinculadas. Usá el botón de arriba para agregar la primera.
+            </p>
           </div>
         )}
       </div>

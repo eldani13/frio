@@ -579,8 +579,8 @@ export default function BodegaDashboard() {
   const [ingresoPosition, setIngresoPosition] = useState<number>(1);
   const [ingresoName, setIngresoName] = useState<string>("");
   const [ingresoTemp, setIngresoTemp] = useState<string>("");
-  const [ingresoClient, setIngresoClient] = useState<string>("cliente1");
-  const [clientFilterId, setClientFilterId] = useState<string>("cliente1");
+  const [ingresoClient, setIngresoClient] = useState<string>("");
+  const [clientFilterId, setClientFilterId] = useState<string>("");
   const [clients, setClients] = useState<Client[]>([]);
   const [newClientName, setNewClientName] = useState<string>("");
   const [newClientCode, setNewClientCode] = useState<string>("");
@@ -2138,7 +2138,7 @@ export default function BodegaDashboard() {
     addIngreso(newBox);
     setIngresoName("");
     setIngresoTemp("");
-    setIngresoClient("cliente1");
+    setIngresoClient("");
     setMessage(`Caja registrada en ingresos ${nextPosition}.`);
   };
 
@@ -3105,7 +3105,9 @@ export default function BodegaDashboard() {
                 availableBodegaTargets={availableBodegaTargets}
                 isCliente={isCliente}
                 clientFilterId={clientFilterId}
-                clientCatalog={clients.map((client) => client.name)}
+                clientCatalog={clients
+                  .filter((client) => client.createdByRole === "configurador" && !client.disabled)
+                  .map((client) => client.name)}
                 onClientChange={setClientFilterId}
               />
             ) : null}
