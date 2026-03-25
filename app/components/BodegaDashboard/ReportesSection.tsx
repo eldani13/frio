@@ -1,3 +1,4 @@
+"use client";
 import React from "react";
 import ProvidersPage from "@/app/proveedores/page";
 import PlantasPage from "@/app/plantas/page";
@@ -62,51 +63,53 @@ const ReportesSection: React.FC<ReportesSectionProps> = ({
   // Menú principal cliente: Reportes, Catálogo, Asignaciones
   if (isCliente && viewMode === null) {
     return (
-      <section className="rounded-2xl bg-white p-8 shadow-sm border border-slate-200">
-        <div className="flex flex-col items-center text-center gap-6 w-full px-4">
-          <div className="flex flex-col w-full max-w-4xl gap-3">
-            <button
-              type="button"
-              onClick={() => setViewMode("reporte")}
-              className="group w-full rounded-2xl bg-[#b8d1f6] p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md flex items-center justify-between cursor-pointer active:scale-95"
-            >
-              <div className="flex items-center gap-4">
-                <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-white/50 text-slate-800 shadow-sm">
-                  <BiBarChartAlt2 size={24} />
-                </span>
-                <p className="text-lg font-bold text-slate-900">Reportes</p>
-              </div>
-              <HiOutlineArrowRight size={18} className="text-slate-500 group-hover:translate-x-1 transition-transform" />
-            </button>
+      <section className="p-4 sm:p-8">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 max-w-6xl mx-auto">
+          
 
-            <button
-              type="button"
-              onClick={() => setViewMode("catalogo")}
-              className="group w-full rounded-2xl bg-[#f8edb1] p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md flex items-center justify-between cursor-pointer active:scale-95"
-            >
-              <div className="flex items-center gap-4">
-                <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-white/50 text-slate-800 shadow-sm">
-                  <BiCollection size={24} />
-                </span>
-                <p className="text-lg font-bold text-slate-900">Catálogo</p>
-              </div>
-              <HiOutlineArrowRight size={18} className="text-slate-500 group-hover:translate-x-1 transition-transform" />
-            </button>
+           {/* BOTÓN ASIGNACIONES */}
+           <button
+            type="button"
+            onClick={() => setViewMode("asignaciones")}
+            className="group relative flex flex-col items-center justify-center gap-4 rounded-[2rem] bg-gradient-to-br from-[#d1ede0] to-[#b0d6c3] p-10 shadow-lg shadow-emerald-100/50 transition-all duration-300 hover:-translate-y-2 hover:shadow-2xl hover:shadow-emerald-200 active:scale-95 sm:col-span-2 lg:col-span-1"
+          >
+            <span className="flex h-20 w-20 items-center justify-center rounded-2xl bg-white/60 text-emerald-700 shadow-inner group-hover:scale-110 transition-transform duration-300">
+              <BiUserCheck size={40} />
+            </span>
+            <div className="text-center">
+              <h3 className="text-2xl font-black text-slate-800 tracking-tight">Asignaciones</h3>              
+            </div>
+          </button>       
 
-            <button
-              type="button"
-              onClick={() => setViewMode("asignaciones")}
-              className="group w-full rounded-2xl bg-[#b0d6c3] p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md flex items-center justify-between cursor-pointer active:scale-95"
-            >
-              <div className="flex items-center gap-4">
-                <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-white/50 text-slate-800 shadow-sm">
-                  <BiUserCheck size={24} />
-                </span>
-                <p className="text-lg font-bold text-slate-900">Asignaciones</p>
-              </div>
-              <HiOutlineArrowRight size={18} className="text-slate-500 group-hover:translate-x-1 transition-transform" />
-            </button>
-          </div>
+          {/* BOTÓN CATÁLOGO */}
+          <button
+            type="button"
+            onClick={() => setViewMode("catalogo")}
+            className="group relative flex flex-col items-center justify-center gap-4 rounded-[2rem] bg-gradient-to-br from-[#fdf6d8] to-[#f8edb1] p-10 shadow-lg shadow-yellow-100/50 transition-all duration-300 hover:-translate-y-2 hover:shadow-2xl hover:shadow-yellow-200 active:scale-95"
+          >
+            <span className="flex h-20 w-20 items-center justify-center rounded-2xl bg-white/60 text-yellow-700 shadow-inner group-hover:scale-110 transition-transform duration-300">
+              <BiCollection size={40} />
+            </span>
+            <div className="text-center">
+              <h3 className="text-2xl font-black text-slate-800 tracking-tight">Catálogo</h3>             
+            </div>
+          </button>
+
+          {/* BOTÓN REPORTES */}
+          <button
+            type="button"
+            onClick={() => setViewMode("reporte")}
+            className="group relative flex flex-col items-center justify-center gap-4 rounded-[2rem] bg-gradient-to-br from-[#d0e1fd] to-[#b8d1f6] p-10 shadow-lg shadow-blue-100/50 transition-all duration-300 hover:-translate-y-2 hover:shadow-2xl hover:shadow-blue-200 active:scale-95"
+          >
+            <span className="flex h-20 w-20 items-center justify-center rounded-2xl bg-white/60 text-blue-700 shadow-inner group-hover:scale-110 transition-transform duration-300">
+              <BiBarChartAlt2 size={40} />
+            </span>
+            <div className="text-center">
+              <h3 className="text-2xl font-black text-slate-800 tracking-tight">Reportes</h3>              
+            </div>
+          </button>
+         
+
         </div>
       </section>
     );
@@ -218,7 +221,6 @@ const ReportesSection: React.FC<ReportesSectionProps> = ({
   // Renderizado de las Sub-páginas seleccionadas
   return (
     <section className="rounded-2xl bg-white p-0 shadow-sm">
-      
         <div className="text-sm text-slate-600">
           {viewMode === "reporte" && <ReportesPage />}
           {viewMode === "catalogo" && <CatalogosPage />}
@@ -229,7 +231,6 @@ const ReportesSection: React.FC<ReportesSectionProps> = ({
           {viewMode === "asignarBodegasInterna" && (<AsignarBodegasPage estado="interna" /> )}
           {viewMode === "asignarBodegasExterna" && (<AsignarBodegasPage estado="externa" /> )}
         </div>
-      
     </section>
   );
 };
