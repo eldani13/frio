@@ -3,13 +3,20 @@ import React, { useState } from "react";
 import Operacion from "./operacion";
 import ListadoCargue from "./listadocargue";
 
-export default function BodegasExternasPage() {
+type Props = { warehouseName?: string };
+
+export default function BodegasExternasPage({ warehouseName }: Props) {
   const [view, setView] = useState<"OP" | "CA">("OP");
 
   return (
     <div className="p-6">
       <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold">Bodegas Externas</h1>
+        <div>
+          <h1 className="text-2xl font-bold">Bodegas externas</h1>
+          {warehouseName ? (
+            <p className="mt-1 text-sm font-medium text-slate-500">{warehouseName}</p>
+          ) : null}
+        </div>
         
         <div className="flex gap-2 bg-slate-100 p-1 rounded-xl">
           <button 
