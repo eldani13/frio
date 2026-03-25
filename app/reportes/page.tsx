@@ -145,9 +145,7 @@ const ReportesSection = () => {
       {(activeModule === "BODEGA_INT" || activeModule === "BODEGA_EXT") && bodegaStep === "list" && (
         <div className="max-w-2xl mx-auto">
           <h2 className="text-xl font-bold text-slate-900 mb-2">{listTitle}</h2>
-          <p className="text-sm text-slate-500 mb-6">
-            Elegí una bodega para ver el mismo reporte de operación y cargue que antes abría el botón.
-          </p>
+         
 
           {authLoading ? (
             <p className="text-slate-400 text-sm italic py-8 text-center">Cargando sesión…</p>

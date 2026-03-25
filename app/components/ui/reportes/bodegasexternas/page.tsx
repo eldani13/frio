@@ -6,7 +6,8 @@ import ListadoCargue from "./listadocargue";
 type Props = { warehouseName?: string };
 
 export default function BodegasExternasPage({ warehouseName }: Props) {
-  const [view, setView] = useState<"OP" | "CA">("OP");
+  // Cambiamos el estado inicial a "CA" para que se muestre CARGUE primero
+  const [view, setView] = useState<"OP" | "CA">("CA");
 
   return (
     <div className="p-6">
@@ -19,24 +20,35 @@ export default function BodegasExternasPage({ warehouseName }: Props) {
         </div>
         
         <div className="flex gap-2 bg-slate-100 p-1 rounded-xl">
-          <button 
-            onClick={() => setView("OP")}
-            className={`px-4 py-2 rounded-lg ${view === "OP" ? "bg-white shadow text-blue-600" : "text-slate-500"}`}
-          >
-            OPERACIÓN
-          </button>
+          {/* Botón CARGUE primero */}
           <button 
             onClick={() => setView("CA")}
-            className={`px-4 py-2 rounded-lg ${view === "CA" ? "bg-white shadow text-blue-600" : "text-slate-500"}`}
+            className={`px-4 py-2 rounded-lg font-medium transition-all ${
+              view === "CA" 
+                ? "bg-white shadow text-blue-600" 
+                : "text-slate-500 hover:text-slate-700"
+            }`}
           >
             CARGUE
+          </button>
+
+          {/* Botón OPERACIÓN segundo */}
+          <button 
+            onClick={() => setView("OP")}
+            className={`px-4 py-2 rounded-lg font-medium transition-all ${
+              view === "OP" 
+                ? "bg-white shadow text-blue-600" 
+                : "text-slate-500 hover:text-slate-700"
+            }`}
+          >
+            OPERACIÓN
           </button>
         </div>
       </div>
 
-      {/* SEPARACIÓN TOTAL DE LÓGICA */}
+      {/* Renderizado condicional */}
       <div className="mt-4">
-        {view === "OP" ? <Operacion /> : <ListadoCargue />}
+        {view === "CA" ? <ListadoCargue /> : <Operacion />}
       </div>
     </div>
   );

@@ -4,32 +4,40 @@ import Operacion from "./operacion";
 import ListadoCargue from "./listadocargue";
 
 export default function TransportesPage() {
-  const [view, setView] = useState<"OP" | "CA">("OP");
+  // Establecemos "CA" (Cargue) como la vista inicial por defecto
+  const [view, setView] = useState<"OP" | "CA">("CA");
 
   return (
     <div className="p-6">
       <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold">Transportes</h1>
+        <h1 className="text-2xl font-bold text-slate-800">Transportes</h1>
         
-        <div className="flex gap-2 bg-slate-100 p-1 rounded-xl">
-          <button 
-            onClick={() => setView("OP")}
-            className={`px-4 py-2 rounded-lg ${view === "OP" ? "bg-white shadow text-blue-600" : "text-slate-500"}`}
-          >
-            OPERACIÓN
-          </button>
+        <div className="flex gap-2 bg-slate-100 p-1 rounded-xl shadow-inner">
+          {/* Botón CARGUE - Ahora aparece primero y es el estado inicial */}
           <button 
             onClick={() => setView("CA")}
-            className={`px-4 py-2 rounded-lg ${view === "CA" ? "bg-white shadow text-blue-600" : "text-slate-500"}`}
+            className={`px-4 py-2 rounded-lg font-bold transition-all ${
+              view === "CA" ? "bg-white shadow text-blue-600" : "text-slate-500 hover:text-slate-700"
+            }`}
           >
             CARGUE
+          </button>
+
+          {/* Botón OPERACIÓN - Aparece en segundo lugar */}
+          <button 
+            onClick={() => setView("OP")}
+            className={`px-4 py-2 rounded-lg font-bold transition-all ${
+              view === "OP" ? "bg-white shadow text-blue-600" : "text-slate-500 hover:text-slate-700"
+            }`}
+          >
+            OPERACIÓN
           </button>
         </div>
       </div>
 
-      {/* SEPARACIÓN TOTAL DE LÓGICA */}
+      {/* Renderizado condicional: Mostramos ListadoCargue si el estado es "CA" */}
       <div className="mt-4">
-        {view === "OP" ? <Operacion /> : <ListadoCargue />}
+        {view === "CA" ? <ListadoCargue /> : <Operacion />}
       </div>
     </div>
   );
