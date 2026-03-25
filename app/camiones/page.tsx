@@ -13,25 +13,29 @@ export default function TrucksPage() {
   const [selectedTruck, setSelectedTruck] = useState<Camion | null>(null);
 
   const { session } = useAuth();
-  const codeCuenta = session?.codeCuenta;
+  const codeCuenta = session?.codeCuenta ?? "";
+  const idCliente = session?.clientId ?? "";
 
-  // Carga inicial de datos con codeCuenta
   const load = async () => {
-    const data = await TruckService.getAll(codeCuenta || "");
+    if (!idCliente) {
+      setTrucks([]);
+      return;
+    }
+    const data = await TruckService.getAll(idCliente, codeCuenta);
     setTrucks(data);
   };
 
   useEffect(() => {
-    load();
-  }, []);
+    void load();
+  }, [idCliente, codeCuenta]);
 
-  // Lógica para Crear o Actualizar
   const handleSuccess = async (data: Omit<Camion, 'id' | 'numericId' | 'code' | 'createdAt'>) => {
     try {
+      if (!idCliente) return;
       if (selectedTruck?.id) {
-        await TruckService.update(selectedTruck.id, data);
+        await TruckService.update(idCliente, selectedTruck.id, data);
       } else {
-        await TruckService.create(data, codeCuenta || "");
+        await TruckService.create(data, idCliente, codeCuenta);
       }
       await load();
       setIsModalOpen(false); // Cerramos el modal tras el éxito
@@ -42,9 +46,10 @@ export default function TrucksPage() {
 
   // Lógica de eliminación
   const handleDelete = async (id: string) => {
+    if (!idCliente) return;
     if (window.confirm("¿Estás seguro de eliminar este vehículo? Esta acción no se puede deshacer.")) {
       try {
-        await TruckService.delete(id);
+        await TruckService.delete(idCliente, id);
         await load();
       } catch (error) {
         alert("No se pudo eliminar el camión.");

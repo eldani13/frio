@@ -13,11 +13,14 @@ import {
 } from "firebase/firestore";
 import { Camion } from "@/app/types/camion";
 
-const PARENT_COLLECTION = "warehouses";
-const PARENT_ID = "GENERAL"; 
+const PARENT_COLLECTION = "clientes";
 const SUB_COLLECTION = "trucks";
 
-const getColRef = () => collection(db, PARENT_COLLECTION, PARENT_ID, SUB_COLLECTION);
+const getColRef = (idCliente: string) =>
+  collection(db, PARENT_COLLECTION, idCliente, SUB_COLLECTION);
+
+const getTruckDocRef = (idCliente: string, id: string) =>
+  doc(db, PARENT_COLLECTION, idCliente, SUB_COLLECTION, id);
 
 export const TruckService = {
   
@@ -29,10 +32,11 @@ export const TruckService = {
    * Obtiene los camiones filtrados por codeCuenta.
    * Sin orderBy para evitar errores de índice compuesto.
    */
-  async getAll(codeCuenta: string): Promise<Camion[]> {
+  async getAll(idCliente: string, codeCuenta: string): Promise<Camion[]> {
     try {
+      if (!idCliente?.trim()) return [];
       const q = query(
-        getColRef(), 
+        getColRef(idCliente),
         where("codeCuenta", "==", codeCuenta)
       );
       const snapshot = await getDocs(q);
@@ -47,13 +51,11 @@ export const TruckService = {
     }
   },
 
-  /**
-   * Crea un nuevo camión con correlativo GLOBAL y codeCuenta.
-   */
-  async create(data: Omit<Camion, 'id' | 'numericId' | 'code' | 'createdAt' | 'codeCuenta'>, codeCuenta: string) {
+  /** Crea camión con correlativo por cliente; persiste codeCuenta en el documento. */
+  async create(data: Omit<Camion, 'id' | 'numericId' | 'code' | 'createdAt' | 'codeCuenta'>, idCliente: string, codeCuenta: string) {
     try {
-      // 1. Buscamos el último ID de forma global (sin where)
-      const qLast = query(getColRef(), orderBy("numericId", "desc"), limit(1));
+      if (!idCliente?.trim()) throw new Error("idCliente requerido");
+      const qLast = query(getColRef(idCliente), orderBy("numericId", "desc"), limit(1));
       const lastSnap = await getDocs(qLast);
       
       let nextId = 1;
@@ -71,7 +73,7 @@ export const TruckService = {
         createdAt: Date.now()
       };
 
-      return await addDoc(getColRef(), newTruck);
+      return await addDoc(getColRef(idCliente), newTruck);
     } catch (error: any) {
       console.error("Error en TruckService.create:", error.message);
       throw error;
@@ -81,27 +83,25 @@ export const TruckService = {
   /**
    * Actualiza los datos del camión (mantiene tu lógica original)
    */
-  async update(id: string, data: Partial<Omit<Camion, 'id' | 'numericId' | 'code'>>) {
+  async update(idCliente: string, id: string, data: Partial<Omit<Camion, 'id' | 'numericId' | 'code'>>) {
     try {
-      const docRef = doc(db, PARENT_COLLECTION, PARENT_ID, SUB_COLLECTION, id);
-      
-      // Filtramos para evitar sobrescribir campos protegidos
+      if (!idCliente?.trim()) throw new Error("idCliente requerido");
       const updateData = { ...data };
       delete (updateData as any).code;
       delete (updateData as any).numericId;
-      delete (updateData as any).codeCuenta; // También protegemos el codeCuenta
+      delete (updateData as any).codeCuenta;
 
-      return await updateDoc(docRef, updateData);
+      return await updateDoc(getTruckDocRef(idCliente, id), updateData);
     } catch (error: any) {
       console.error("Error en TruckService.update:", error.message);
       throw error;
     }
   },
 
-  async delete(id: string) {
+  async delete(idCliente: string, id: string) {
     try {
-      const docRef = doc(db, PARENT_COLLECTION, PARENT_ID, SUB_COLLECTION, id);
-      return await deleteDoc(docRef);
+      if (!idCliente?.trim()) throw new Error("idCliente requerido");
+      return await deleteDoc(getTruckDocRef(idCliente, id));
     } catch (error: any) {
       console.error("Error en TruckService.delete:", error.message);
       throw error;

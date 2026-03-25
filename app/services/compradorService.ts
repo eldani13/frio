@@ -13,11 +13,14 @@ import {
 } from "firebase/firestore";
 import { Comprador } from "@/app/types/comprador";
 
-const PARENT_COLLECTION = "warehouses";
-const PARENT_ID = "GENERAL"; 
+const PARENT_COLLECTION = "clientes";
 const SUB_COLLECTION = "compradores";
 
-const getColRef = () => collection(db, PARENT_COLLECTION, PARENT_ID, SUB_COLLECTION);
+const getColRef = (idCliente: string) =>
+  collection(db, PARENT_COLLECTION, idCliente, SUB_COLLECTION);
+
+const getCompradorDocRef = (idCliente: string, id: string) =>
+  doc(db, PARENT_COLLECTION, idCliente, SUB_COLLECTION, id);
 
 export const CompradorService = {
   
@@ -29,10 +32,11 @@ export const CompradorService = {
    * Obtiene los compradores filtrados por cuenta.
    * Se quita el orderBy para que funcione sin necesidad de crear índices manuales.
    */
-  async getAll(codeCuenta: string): Promise<Comprador[]> {
+  async getAll(idCliente: string, codeCuenta: string): Promise<Comprador[]> {
     try {
+      if (!idCliente?.trim()) return [];
       const q = query(
-        getColRef(), 
+        getColRef(idCliente),
         where("codeCuenta", "==", codeCuenta)
       );
       const snapshot = await getDocs(q);
@@ -47,13 +51,11 @@ export const CompradorService = {
     }
   },
 
-  /**
-   * Crea un comprador con correlativo GLOBAL y guarda el codeCuenta.
-   */
-  async create(name: string, codeCuenta: string) {
+  /** Crea comprador con correlativo por cliente; persiste codeCuenta. */
+  async create(name: string, idCliente: string, codeCuenta: string) {
     try {
-      // Búsqueda del último ID de forma global (sin where)
-      const qLast = query(getColRef(), orderBy("numericId", "desc"), limit(1));
+      if (!idCliente?.trim()) throw new Error("idCliente requerido");
+      const qLast = query(getColRef(idCliente), orderBy("numericId", "desc"), limit(1));
       const lastSnap = await getDocs(qLast);
       
       let nextId = 1;
@@ -70,7 +72,7 @@ export const CompradorService = {
         createdAt: Date.now()
       };
 
-      return await addDoc(getColRef(), newComprador);
+      return await addDoc(getColRef(idCliente), newComprador);
     } catch (error: any) {
       console.error("Error en CompradorService.create:", error.message);
       throw error;
@@ -80,24 +82,23 @@ export const CompradorService = {
   /**
    * Actualiza el comprador manteniendo tu lógica original del update.
    */
-  async update(id: string, data: Partial<Comprador>) {
+  async update(idCliente: string, id: string, data: Partial<Comprador>) {
     try {
-      const docRef = doc(db, PARENT_COLLECTION, PARENT_ID, SUB_COLLECTION, id);
-      
+      if (!idCliente?.trim()) throw new Error("idCliente requerido");
       const updateData: Partial<Comprador> = {};
       if (data.name) updateData.name = data.name.trim();
 
-      return await updateDoc(docRef, updateData as any);
+      return await updateDoc(getCompradorDocRef(idCliente, id), updateData as any);
     } catch (error: any) {
       console.error("Error en CompradorService.update:", error.message);
       throw error;
     }
   },
 
-  async delete(id: string) {
+  async delete(idCliente: string, id: string) {
     try {
-      const docRef = doc(db, PARENT_COLLECTION, PARENT_ID, SUB_COLLECTION, id);
-      return await deleteDoc(docRef);
+      if (!idCliente?.trim()) throw new Error("idCliente requerido");
+      return await deleteDoc(getCompradorDocRef(idCliente, id));
     } catch (error: any) {
       console.error("Error en CompradorService.delete:", error.message);
       throw error;

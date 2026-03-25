@@ -13,11 +13,14 @@ import {
 } from "firebase/firestore";
 import { Catalogo } from "@/app/types/catalogo";
 
-const PARENT_COLLECTION = "warehouses";
-const PARENT_ID = "GENERAL"; 
+const PARENT_COLLECTION = "clientes";
 const SUB_COLLECTION = "productos";
 
-const getColRef = () => collection(db, PARENT_COLLECTION, PARENT_ID, SUB_COLLECTION);
+const getColRef = (idCliente: string) =>
+  collection(db, PARENT_COLLECTION, idCliente, SUB_COLLECTION);
+
+const getProductoDocRef = (idCliente: string, id: string) =>
+  doc(db, PARENT_COLLECTION, idCliente, SUB_COLLECTION, id);
 
 export const CatalogoService = {
   
@@ -29,10 +32,11 @@ export const CatalogoService = {
    * Obtiene los productos filtrados por codeCuenta.
    * Sin orderBy para evitar el error de índice compuesto.
    */
-  async getAll(codeCuenta: string): Promise<Catalogo[]> {
+  async getAll(idCliente: string, codeCuenta: string): Promise<Catalogo[]> {
     try {
+      if (!idCliente?.trim()) return [];
       const q = query(
-        getColRef(), 
+        getColRef(idCliente),
         where("codeCuenta", "==", codeCuenta)
       );
       const snapshot = await getDocs(q);
@@ -47,13 +51,11 @@ export const CatalogoService = {
     }
   },
 
-  /**
-   * Crea un producto con correlativo GLOBAL y lo asigna a una cuenta.
-   */
-  async create(productData: Omit<Catalogo, 'id' | 'numericId' | 'code' | 'createdAt' | 'codeCuenta'>, codeCuenta: string) {
+  /** Crea producto con correlativo por cliente; persiste codeCuenta. */
+  async create(productData: Omit<Catalogo, 'id' | 'numericId' | 'code' | 'createdAt' | 'codeCuenta'>, idCliente: string, codeCuenta: string) {
     try {
-      // 1. Buscamos el último ID de forma global (sin where)
-      const qLast = query(getColRef(), orderBy("numericId", "desc"), limit(1));
+      if (!idCliente?.trim()) throw new Error("idCliente requerido");
+      const qLast = query(getColRef(idCliente), orderBy("numericId", "desc"), limit(1));
       const lastSnap = await getDocs(qLast);
       
       let nextId = 1;
@@ -71,7 +73,7 @@ export const CatalogoService = {
         createdAt: Date.now()
       };
 
-      return await addDoc(getColRef(), newProduct);
+      return await addDoc(getColRef(idCliente), newProduct);
     } catch (error: any) {
       console.error("Error en CatalogoService.create:", error.message);
       throw error;
@@ -81,59 +83,55 @@ export const CatalogoService = {
   /**
    * Actualiza un producto existente (mantiene tu lógica original)
    */
-  async update(id: string, data: Partial<Catalogo>) {
+  async update(idCliente: string, id: string, data: Partial<Catalogo>) {
     try {
-      const docRef = doc(db, PARENT_COLLECTION, PARENT_ID, SUB_COLLECTION, id);
-      
-      // Evitamos sobrescribir los campos de identificación y la cuenta
+      if (!idCliente?.trim()) throw new Error("idCliente requerido");
       const { id: _, numericId, code, createdAt, codeCuenta, ...updateData } = data as any;
 
-      return await updateDoc(docRef, updateData);
+      return await updateDoc(getProductoDocRef(idCliente, id), updateData);
     } catch (error: any) {
       console.error("Error en CatalogoService.update:", error.message);
       throw error;
     }
   },
 
-  async delete(id: string) {
+  async delete(idCliente: string, id: string) {
     try {
-      const docRef = doc(db, PARENT_COLLECTION, PARENT_ID, SUB_COLLECTION, id);
-      return await deleteDoc(docRef);
+      if (!idCliente?.trim()) throw new Error("idCliente requerido");
+      return await deleteDoc(getProductoDocRef(idCliente, id));
     } catch (error: any) {
       console.error("Error en CatalogoService.delete:", error.message);
       throw error;
     }
   },
 
-  // Agrega esto a tu CatalogoService
-async importMany(dataList: any[], codeCuenta: string) {
-  try {
-    // Obtenemos el último ID una sola vez para empezar el conteo
-    const qLast = query(getColRef(), orderBy("numericId", "desc"), limit(1));
-    const lastSnap = await getDocs(qLast);
-    
-    let currentId = 1;
-    if (!lastSnap.empty) {
-      currentId = (lastSnap.docs[0].data() as Catalogo).numericId + 1;
+  async importMany(dataList: any[], idCliente: string, codeCuenta: string) {
+    try {
+      if (!idCliente?.trim()) throw new Error("idCliente requerido");
+      const qLast = query(getColRef(idCliente), orderBy("numericId", "desc"), limit(1));
+      const lastSnap = await getDocs(qLast);
+
+      let currentId = 1;
+      if (!lastSnap.empty) {
+        currentId = (lastSnap.docs[0].data() as Catalogo).numericId + 1;
+      }
+
+      const promises = dataList.map((item, index) => {
+        const nextId = currentId + index;
+        const newProduct: Omit<Catalogo, "id"> = {
+          ...item,
+          codeCuenta,
+          numericId: nextId,
+          code: this.toBase36(nextId),
+          createdAt: Date.now(),
+        };
+        return addDoc(getColRef(idCliente), newProduct);
+      });
+
+      return await Promise.all(promises);
+    } catch (error) {
+      console.error("Error importando datos:", error);
+      throw error;
     }
-
-    const promises = dataList.map((item, index) => {
-      const nextId = currentId + index;
-      const newProduct: Omit<Catalogo, 'id'> = {
-        ...item,
-        codeCuenta,
-        numericId: nextId,
-        code: this.toBase36(nextId),
-        createdAt: Date.now()
-      };
-      return addDoc(getColRef(), newProduct);
-    });
-
-    return await Promise.all(promises);
-  } catch (error) {
-    console.error("Error importando datos:", error);
-    throw error;
-  }
-}
-
+  },
 };

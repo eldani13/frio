@@ -13,27 +13,31 @@ export default function CompradoresPage() {
   const [selectedComprador, setSelectedComprador] = useState<Comprador | null>(null);
 
   const { session } = useAuth();
-  const codeCuenta = session?.codeCuenta;
+  const codeCuenta = session?.codeCuenta ?? "";
+  const idCliente = session?.clientId ?? "";
 
-  // Carga inicial de datos con codeCuenta
   const load = async () => {
-    const data = await CompradorService.getAll(codeCuenta || "");
+    if (!idCliente) {
+      setCompradores([]);
+      return;
+    }
+    const data = await CompradorService.getAll(idCliente, codeCuenta);
     setCompradores(data);
   };
 
   useEffect(() => {
-    load();
-  }, []);
+    void load();
+  }, [idCliente, codeCuenta]);
 
-  // Manejador para Crear o Actualizar
   const handleSuccess = async (name: string) => {
     try {
+      if (!idCliente) return;
       if (selectedComprador?.id) {
-        await CompradorService.update(selectedComprador.id, { name });
+        await CompradorService.update(idCliente, selectedComprador.id, { name });
       } else {
-        await CompradorService.create(name, codeCuenta || "");
+        await CompradorService.create(name, idCliente, codeCuenta);
       }
-      await load(); // Recargar la lista tras la operación
+      await load();
     } catch (error) {
       console.error("Error en la operación:", error);
       alert("Hubo un error al procesar la solicitud.");
@@ -42,9 +46,10 @@ export default function CompradoresPage() {
 
   // Manejador para Eliminar
   const handleDelete = async (id: string) => {
+    if (!idCliente) return;
     if (window.confirm("¿Eliminar este comprador definitivamente?")) {
       try {
-        await CompradorService.delete(id);
+        await CompradorService.delete(idCliente, id);
         await load();
       } catch (error) {
         console.error("Error al eliminar:", error);

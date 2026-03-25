@@ -13,11 +13,14 @@ import {
 } from "firebase/firestore";
 import { Planta } from "@/app/types/planta";
 
-const PARENT_COLLECTION = "warehouses";
-const PARENT_ID = "GENERAL"; 
+const PARENT_COLLECTION = "clientes";
 const SUB_COLLECTION = "plantas";
 
-const getColRef = () => collection(db, PARENT_COLLECTION, PARENT_ID, SUB_COLLECTION);
+const getColRef = (idCliente: string) =>
+  collection(db, PARENT_COLLECTION, idCliente, SUB_COLLECTION);
+
+const getPlantaDocRef = (idCliente: string, id: string) =>
+  doc(db, PARENT_COLLECTION, idCliente, SUB_COLLECTION, id);
 
 export const PlantaService = {
   toBase36: (num: number): string => {
@@ -25,10 +28,11 @@ export const PlantaService = {
   },
 
   // 1. Recibe codeCuenta y NO tiene orderBy para evitar el error de índice
-  async getAll(codeCuenta: string): Promise<Planta[]> {
+  async getAll(idCliente: string, codeCuenta: string): Promise<Planta[]> {
     try {
+      if (!idCliente?.trim()) return [];
       const q = query(
-        getColRef(), 
+        getColRef(idCliente),
         where("codeCuenta", "==", codeCuenta)
       );
       const snapshot = await getDocs(q);
@@ -44,10 +48,10 @@ export const PlantaService = {
   },
 
   // 2. Agregamos codeCuenta a los parámetros y al objeto final
-  async create(data: Omit<Planta, 'id' | 'numericId' | 'code' | 'createdAt' | 'codeCuenta'>, codeCuenta: string) {
+  async create(data: Omit<Planta, 'id' | 'numericId' | 'code' | 'createdAt' | 'codeCuenta'>, idCliente: string, codeCuenta: string) {
     try {
-      // Búsqueda GLOBAL del correlativo (sin where)
-      const qLast = query(getColRef(), orderBy("numericId", "desc"), limit(1));
+      if (!idCliente?.trim()) throw new Error("idCliente requerido");
+      const qLast = query(getColRef(idCliente), orderBy("numericId", "desc"), limit(1));
       const lastSnap = await getDocs(qLast);
       
       let nextId = 1;
@@ -64,46 +68,45 @@ export const PlantaService = {
         createdAt: Date.now()
       };
 
-      return await addDoc(getColRef(), newPlanta);
+      return await addDoc(getColRef(idCliente), newPlanta);
     } catch (error: any) {
       console.error("Error en PlantaService.create:", error.message);
       throw error;
     }
   },
 
-  async update(id: string, data: Partial<Planta>) {
+  async update(idCliente: string, id: string, data: Partial<Planta>) {
     try {
-      const docRef = doc(db, PARENT_COLLECTION, PARENT_ID, SUB_COLLECTION, id);
-      
-      const { 
-        name, 
-        plantName, 
-        location, 
-        maxPallets, 
-        tempRange, 
-        isOperational 
+      if (!idCliente?.trim()) throw new Error("idCliente requerido");
+      const {
+        name,
+        plantName,
+        location,
+        maxPallets,
+        tempRange,
+        isOperational,
       } = data;
 
-      const updateData = { 
-        name, 
-        plantName, 
-        location, 
-        maxPallets, 
-        tempRange, 
-        isOperational 
+      const updateData = {
+        name,
+        plantName,
+        location,
+        maxPallets,
+        tempRange,
+        isOperational,
       };
 
-      return await updateDoc(docRef, updateData);
+      return await updateDoc(getPlantaDocRef(idCliente, id), updateData);
     } catch (error: any) {
       console.error("Error en PlantaService.update:", error.message);
       throw error;
     }
   },
 
-  async delete(id: string) {
+  async delete(idCliente: string, id: string) {
     try {
-      const docRef = doc(db, PARENT_COLLECTION, PARENT_ID, SUB_COLLECTION, id);
-      return await deleteDoc(docRef);
+      if (!idCliente?.trim()) throw new Error("idCliente requerido");
+      return await deleteDoc(getPlantaDocRef(idCliente, id));
     } catch (error: any) {
       console.error("Error en PlantaService.delete:", error.message);
       throw error;

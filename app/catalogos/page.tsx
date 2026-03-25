@@ -17,23 +17,28 @@ export default function CatalogoPage() {
   const [loading, setLoading] = useState(true);
 
   const { session } = useAuth();
-  const codeCuenta = session?.codeCuenta;
+  const codeCuenta = session?.codeCuenta ?? "";
+  const idCliente = session?.clientId ?? "";
 
-  // Carga de datos con codeCuenta
   const load = async () => {
     setLoading(true);
-    const data = await CatalogoService.getAll(codeCuenta || "");
+    if (!idCliente) {
+      setProductos([]);
+      setLoading(false);
+      return;
+    }
+    const data = await CatalogoService.getAll(idCliente, codeCuenta);
     setProductos(data);
     setLoading(false);
   };
 
   const handleImport = async (data: any[]) => {
-    if (data.length === 0) return;
-    
+    if (data.length === 0 || !idCliente) return;
+
     setLoading(true);
     try {
-      await CatalogoService.importMany(data, codeCuenta || "");
-      alert("¡Importación exitosa!");
+      await CatalogoService.importMany(data, idCliente, codeCuenta);
+      alert("?Importaci?n exitosa!");
       await load(); // Recargar la tabla
     } catch (error) {
       alert("Error al importar los datos.");
@@ -43,18 +48,16 @@ export default function CatalogoPage() {
   };
 
   useEffect(() => {
-    load();
-  }, []);
+    void load();
+  }, [idCliente, codeCuenta]);
 
-  // Lógica para Crear o Actualizar
   const handleSuccess = async (data: Partial<Catalogo>) => {
     try {
+      if (!idCliente) return;
       if (selectedProducto?.id) {
-        // Si hay un ID, actualizamos
-        await CatalogoService.update(selectedProducto.id, data);
+        await CatalogoService.update(idCliente, selectedProducto.id, data);
       } else {
-        // Si no, creamos uno nuevo (asegurándonos de cumplir con los requeridos)
-        await CatalogoService.create(data as any, codeCuenta || "");
+        await CatalogoService.create(data as any, idCliente, codeCuenta);
       }
       await load();
     } catch (error) {
@@ -62,17 +65,17 @@ export default function CatalogoPage() {
     }
   };
 
-  // Lógica para Eliminar
   const handleDelete = async (id: string) => {
-    if (window.confirm("¿Estás seguro de eliminar este producto? Esta acción no se puede deshacer.")) {
-      await CatalogoService.delete(id);
+    if (!idCliente) return;
+    if (window.confirm("?Est?s seguro de eliminar este producto? Esta acci?n no se puede deshacer.")) {
+      await CatalogoService.delete(idCliente, id);
       await load();
     }
   };
 
   return (
     <main className="max-w-6xl mx-auto p-6 md:p-10 font-['Inter']">
-      {/* Header de la página */}
+      {/* Header de la p?gina */}
       <header className="mb-8 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div className="flex items-center gap-4">
           <div className="p-3 bg-[#f8edb1] rounded-2xl text-[#2D5A3F]">
@@ -85,7 +88,7 @@ export default function CatalogoPage() {
         </div>
 
         <div className="flex gap-3">
-          {/* Botón de Importación */}
+          {/* Bot?n de Importaci?n */}
           <ImportExcel onDataLoaded={handleImport} />
 
         </div>
@@ -103,7 +106,7 @@ export default function CatalogoPage() {
       {loading ? (
         <div className="h-64 flex flex-col items-center justify-center bg-white rounded-3xl border border-dashed border-gray-200">
           <div className="w-8 h-8 border-4 border-[#A8D5BA] border-t-transparent rounded-full animate-spin mb-4"></div>
-          <p className="text-gray-400 text-sm font-medium">Cargando catálogo...</p>
+          <p className="text-gray-400 text-sm font-medium">Cargando cat?logo...</p>
         </div>
       ) : (
         <CatalogoTable 

@@ -13,19 +13,30 @@ export default function PlantasPage() {
   const [selectedPlanta, setSelectedPlanta] = useState<Planta | null>(null);
 
   const { session } = useAuth();
-  const codeCuenta = session?.codeCuenta;
-  const load = async () => setPlantas(await PlantaService.getAll(codeCuenta || ""));
-  
-  useEffect(() => { 
-    load(); 
-  }, []);
+  const codeCuenta = session?.codeCuenta ?? "";
+  const idCliente = session?.clientId ?? "";
 
-  const handleSuccess = async (data: Omit<Planta, 'id' | 'numericId' | 'code' | 'createdAt'>) => {
+  const load = async () => {
+    if (!idCliente) {
+      setPlantas([]);
+      return;
+    }
+    setPlantas(await PlantaService.getAll(idCliente, codeCuenta));
+  };
+
+  useEffect(() => {
+    void load();
+  }, [idCliente, codeCuenta]);
+
+  const handleSuccess = async (
+    data: Omit<Planta, "id" | "numericId" | "code" | "createdAt" | "codeCuenta">,
+  ) => {
     try {
+      if (!idCliente) return;
       if (selectedPlanta?.id) {
-        await PlantaService.update(selectedPlanta.id, data);
+        await PlantaService.update(idCliente, selectedPlanta.id, data);
       } else {
-        await PlantaService.create(data, codeCuenta || "");
+        await PlantaService.create(data, idCliente, codeCuenta);
       }
       await load();
     } catch (error) {
@@ -34,8 +45,9 @@ export default function PlantasPage() {
   };
 
   const handleDelete = async (id: string) => {
+    if (!idCliente) return;
     if (window.confirm("¿Eliminar esta planta definitivamente?")) {
-      await PlantaService.delete(id);
+      await PlantaService.delete(idCliente, id);
       await load();
     }
   };

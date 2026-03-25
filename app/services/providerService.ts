@@ -13,23 +13,27 @@ import {
 } from "firebase/firestore";
 import { Provider } from "@/app/types/provider";
 
-const PARENT_COLLECTION = "warehouses";
-const PARENT_ID = "GENERAL"; 
+const PARENT_COLLECTION = "clientes";
 const SUB_COLLECTION = "providers";
 
-const getColRef = () => collection(db, PARENT_COLLECTION, PARENT_ID, SUB_COLLECTION);
+const getColRef = (idCliente: string) =>
+  collection(db, PARENT_COLLECTION, idCliente, SUB_COLLECTION);
+
+const getProviderDocRef = (idCliente: string, id: string) =>
+  doc(db, PARENT_COLLECTION, idCliente, SUB_COLLECTION, id);
 
 export const ProviderService = {
   toBase36: (num: number): string => {
     return num.toString(36).toUpperCase().padStart(4, '0');
   },
 
-  // 1. Obtener todos filtrados por la cuenta del usuario
-  async getAll(codeCuenta: string): Promise<Provider[]> {
+  // 1. Filtrado por codeCuenta en documento; la jerarquía usa idCliente (session.clientId)
+  async getAll(idCliente: string, codeCuenta: string): Promise<Provider[]> {
     try {
+      if (!idCliente?.trim()) return [];
       const q = query(
-        getColRef(), 
-        where("codeCuenta", "==", codeCuenta),  
+        getColRef(idCliente),
+        where("codeCuenta", "==", codeCuenta),
       );
       const snapshot = await getDocs(q);
       
@@ -43,11 +47,11 @@ export const ProviderService = {
     }
   },
 
-  // 2. Crear con correlativo GLOBAL y guardar codeCuenta
-  async create(name: string, codeCuenta: string) {
+  // 2. Correlativo por cliente (subcolección); codeCuenta se mantiene en el documento
+  async create(name: string, idCliente: string, codeCuenta: string) {
     try {
-      // Correlativo GLOBAL (sin 'where') para que el 0001, 0002 sea único en la DB
-      const qLast = query(getColRef(), orderBy("numericId", "desc"), limit(1));
+      if (!idCliente?.trim()) throw new Error("idCliente requerido");
+      const qLast = query(getColRef(idCliente), orderBy("numericId", "desc"), limit(1));
       const lastSnap = await getDocs(qLast);
       
       let nextId = 1;
@@ -59,36 +63,33 @@ export const ProviderService = {
       const newProvider: Omit<Provider, 'id'> = {
         name: name.trim(),
         codeCuenta: codeCuenta, // Se guarda para que el dueño lo vea
-        numericId: nextId,      // ID global
+        numericId: nextId,
         code: this.toBase36(nextId),
         createdAt: Date.now()
       };
 
-      return await addDoc(getColRef(), newProvider);
+      return await addDoc(getColRef(idCliente), newProvider);
     } catch (error: any) {
       console.error("Error en create:", error.message);
       throw error;
     }
   },
 
-  // 3. Update RESTAURADO (como lo tenías originalmente)
-  async update(id: string, data: Partial<Provider>) {
+  async update(idCliente: string, id: string, data: Partial<Provider>) {
     try {
-      const docRef = doc(db, PARENT_COLLECTION, PARENT_ID, SUB_COLLECTION, id);
-      // Solo permitimos actualizar el nombre (u otros campos que vengan en data)
-      // pero evitamos tocar code o numericId por integridad
-      const { name } = data; 
-      return await updateDoc(docRef, { name });
+      if (!idCliente?.trim()) throw new Error("idCliente requerido");
+      const { name } = data;
+      return await updateDoc(getProviderDocRef(idCliente, id), { name });
     } catch (error: any) {
       console.error("Error en update:", error.message);
       throw error;
     }
   },
 
-  async delete(id: string) {
+  async delete(idCliente: string, id: string) {
     try {
-      const docRef = doc(db, PARENT_COLLECTION, PARENT_ID, SUB_COLLECTION, id);
-      return await deleteDoc(docRef);
+      if (!idCliente?.trim()) throw new Error("idCliente requerido");
+      return await deleteDoc(getProviderDocRef(idCliente, id));
     } catch (error: any) {
       console.error("Error en delete:", error.message);
       throw error;

@@ -13,22 +13,35 @@ export default function ProvidersPage() {
   const [selectedProvider, setSelectedProvider] = useState<Provider | null>(null);
 
   const { session } = useAuth();
-  const codeCuenta = session?.codeCuenta;
-  const load = async () => setProviders(await ProviderService.getAll(codeCuenta || ""));
-  useEffect(() => { load(); }, []);
+  const codeCuenta = session?.codeCuenta ?? "";
+  const idCliente = session?.clientId ?? "";
+
+  const load = async () => {
+    if (!idCliente) {
+      setProviders([]);
+      return;
+    }
+    setProviders(await ProviderService.getAll(idCliente, codeCuenta));
+  };
+
+  useEffect(() => {
+    void load();
+  }, [idCliente, codeCuenta]);
 
   const handleSuccess = async (name: string) => {
+    if (!idCliente) return;
     if (selectedProvider?.id) {
-      await ProviderService.update(selectedProvider.id, { name });
+      await ProviderService.update(idCliente, selectedProvider.id, { name });
     } else {
-      await ProviderService.create(name, codeCuenta || "");
+      await ProviderService.create(name, idCliente, codeCuenta);
     }
     await load();
   };
 
   const handleDelete = async (id: string) => {
+    if (!idCliente) return;
     if (window.confirm("¿Eliminar este proveedor definitivamente?")) {
-      await ProviderService.delete(id);
+      await ProviderService.delete(idCliente, id);
       await load();
     }
   };
@@ -41,7 +54,7 @@ export default function ProvidersPage() {
             <HiOutlineSquares2X2 size={28} />
           </div>
           <div>
-            <h1 className="text-[28px] font-extrabold text-gray-900 tracking-tight">Proveedores</h1>
+            <h1 className="text-[28px] font-extrabold text-gray-900 tracking-tight">Proveedores</h1>           
           </div>
         </div>
         <button 
