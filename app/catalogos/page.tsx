@@ -38,7 +38,7 @@ export default function CatalogoPage() {
     setLoading(true);
     try {
       await CatalogoService.importMany(data, idCliente, codeCuenta);
-      alert("?Importaci?n exitosa!");
+      alert("Importación exitosa!");
       await load(); // Recargar la tabla
     } catch (error) {
       alert("Error al importar los datos.");
@@ -67,7 +67,7 @@ export default function CatalogoPage() {
 
   const handleDelete = async (id: string) => {
     if (!idCliente) return;
-    if (window.confirm("?Est?s seguro de eliminar este producto? Esta acci?n no se puede deshacer.")) {
+    if (window.confirm("¿Estás seguro de eliminar este producto? Esta acciónn no se puede deshacer.")) {
       await CatalogoService.delete(idCliente, id);
       await load();
     }
@@ -75,7 +75,7 @@ export default function CatalogoPage() {
 
   return (
     <main className="max-w-6xl mx-auto p-6 md:p-10 font-['Inter']">
-      {/* Header de la p?gina */}
+      {/* Header de la pagina */}
       <header className="mb-8 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div className="flex items-center gap-4">
           <div className="p-3 bg-[#f8edb1] rounded-2xl text-[#2D5A3F]">
@@ -88,7 +88,7 @@ export default function CatalogoPage() {
         </div>
 
         <div className="flex gap-3">
-          {/* Bot?n de Importaci?n */}
+          {/* Botón de Importación */}
           <ImportExcel onDataLoaded={handleImport} />
 
         </div>
@@ -106,7 +106,7 @@ export default function CatalogoPage() {
       {loading ? (
         <div className="h-64 flex flex-col items-center justify-center bg-white rounded-3xl border border-dashed border-gray-200">
           <div className="w-8 h-8 border-4 border-[#A8D5BA] border-t-transparent rounded-full animate-spin mb-4"></div>
-          <p className="text-gray-400 text-sm font-medium">Cargando cat?logo...</p>
+          <p className="text-gray-400 text-sm font-medium">Cargando catálogo...</p>
         </div>
       ) : (
         <CatalogoTable 
