@@ -6,6 +6,7 @@ import { BiPackage, BiArrowBack } from "react-icons/bi";
 import { useAuth } from "@/app/context/AuthContext";
 import { AsignarBodegaService } from "@/app/services/asignarbodegaService";
 import type { WarehouseMeta } from "@/app/interfaces/bodega";
+import { fetchFridemInventoryRows } from "@/lib/fridemInventory";
 
 import BodegaExtModule from "@/app/components/ui/reportes/bodegasexternas/page";
 import BodegaIntModule from "@/app/components/ui/reportes/bodegasinternas/page";
@@ -21,6 +22,17 @@ function warehousesForTipo(list: WarehouseMeta[], tipo: "interna" | "externa"): 
   return list.filter((b) => b.status === "externa" || b.status === "external");
 }
 
+function sumRowsKg(
+  rows: Awaited<ReturnType<typeof fetchFridemInventoryRows>>,
+): number {
+  return rows.reduce((acc, current) => {
+    const k = current.kilosActual ?? current.kilos;
+    return acc + (Number.isFinite(k) ? Number(k) : 0);
+  }, 0);
+}
+
+const EXTERNAL_GRID_TOTAL_MAX_WAIT_MS = 2000;
+
 const ReportesSection = () => {
   const { session, loading: authLoading } = useAuth();
   const codeCuenta = session?.codeCuenta ?? "";
@@ -28,6 +40,9 @@ const ReportesSection = () => {
   const [activeModule, setActiveModule] = useState<ModuloTipo>(null);
   const [bodegaStep, setBodegaStep] = useState<BodegaStep | null>(null);
   const [selectedWarehouse, setSelectedWarehouse] = useState<{ id: string; name: string } | null>(null);
+  const [externalTotalKg, setExternalTotalKg] = useState(0);
+  /** En la grilla: evita mostrar 0 Kg indefinidamente mientras llega el inventario externo */
+  const [externalTotalGridLoading, setExternalTotalGridLoading] = useState(false);
 
   const [warehouseRows, setWarehouseRows] = useState<WarehouseMeta[]>([]);
   const [warehousesLoading, setWarehousesLoading] = useState(false);
@@ -61,6 +76,66 @@ const ReportesSection = () => {
     void loadWarehouses();
   }, [authLoading, bodegaTipo, bodegaStep, loadWarehouses]);
 
+  // Total Kg en la tarjeta "Bodega externa" de la grilla: suma todas las bodegas externas en paralelo.
+  // A los 2 s como máximo dejamos de mostrar placeholder aunque sigan llegando respuestas.
+  useEffect(() => {
+    if (authLoading || activeModule !== null) return;
+    if (!codeCuenta.trim()) {
+      setExternalTotalKg(0);
+      setExternalTotalGridLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    setExternalTotalKg(0);
+    setExternalTotalGridLoading(true);
+
+    const stopLoadingTimer = window.setTimeout(() => {
+      if (!cancelled) setExternalTotalGridLoading(false);
+    }, EXTERNAL_GRID_TOTAL_MAX_WAIT_MS);
+
+    void (async () => {
+      try {
+        const list = await AsignarBodegaService.getWarehousesByCode(codeCuenta);
+        if (cancelled) return;
+        const externas = warehousesForTipo(list ?? [], "externa");
+        if (externas.length === 0) {
+          setExternalTotalKg(0);
+          setExternalTotalGridLoading(false);
+          window.clearTimeout(stopLoadingTimer);
+          return;
+        }
+
+        await Promise.all(
+          externas.map((w) =>
+            fetchFridemInventoryRows(w.id)
+              .then((rows) => {
+                if (cancelled) return;
+                const kg = sumRowsKg(rows);
+                setExternalTotalKg((prev) => prev + kg);
+              })
+              .catch(() => {}),
+          ),
+        );
+        if (!cancelled) {
+          setExternalTotalGridLoading(false);
+          window.clearTimeout(stopLoadingTimer);
+        }
+      } catch {
+        if (!cancelled) {
+          setExternalTotalKg(0);
+          setExternalTotalGridLoading(false);
+          window.clearTimeout(stopLoadingTimer);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(stopLoadingTimer);
+    };
+  }, [authLoading, activeModule, codeCuenta]);
+
   const openModuleFromGrid = (id: ModuloTipo) => {
     setActiveModule(id);
     if (id === "BODEGA_INT" || id === "BODEGA_EXT") {
@@ -88,7 +163,16 @@ const ReportesSection = () => {
     { id: "COMPRADOR", label: "Ventas", value: "(0 Kg)", icon: <MdShoppingCart size={28} />, color: "bg-white" },
     { id: "TRANSPORTE", label: "Transporte", value: "(0 Kg)", icon: <HiOutlineTruck size={28} />, color: "bg-white" },
     { id: "BODEGA_INT", label: "Bodega interna", value: "(0 Kg)", icon: <BiPackage size={28} />, color: "bg-white" },
-    { id: "BODEGA_EXT", label: "Bodega externa", value: "(69 Kg)", icon: <MdFactory size={28} />, color: "bg-white" },
+    {
+      id: "BODEGA_EXT",
+      label: "Bodega externa",
+      value:
+        externalTotalGridLoading && externalTotalKg === 0
+          ? "(…)"
+          : `(${externalTotalKg.toLocaleString("es-CO", { maximumFractionDigits: 2 })} Kg)`,
+      icon: <MdFactory size={28} />,
+      color: "bg-white",
+    },
   ];
 
   if (!activeModule) {
@@ -195,7 +279,12 @@ const ReportesSection = () => {
         <BodegaIntModule key={selectedWarehouse?.id ?? "int"} warehouseName={selectedWarehouse?.name} />
       )}
       {activeModule === "BODEGA_EXT" && bodegaStep === "detail" && (
-        <BodegaExtModule key={selectedWarehouse?.id ?? "ext"} warehouseName={selectedWarehouse?.name} />
+        <BodegaExtModule
+          key={selectedWarehouse?.id ?? "ext"}
+          warehouseId={selectedWarehouse?.id}
+          warehouseName={selectedWarehouse?.name}
+          onTotalChange={setExternalTotalKg}
+        />
       )}
 
       {activeModule === "COMPRADOR" && <CompradorModule />}

@@ -1,13 +1,62 @@
 "use client";
-import React, { useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import Operacion from "./operacion";
 import ListadoCargue from "./listadocargue";
+import { fetchFridemInventoryRows, type FridemInventoryRow } from "@/lib/fridemInventory";
 
-type Props = { warehouseName?: string };
+type Props = {
+  warehouseName?: string;
+  warehouseId?: string;
+  onTotalChange?: (totalKg: number) => void;
+};
 
-export default function BodegasExternasPage({ warehouseName }: Props) {
-  // Cambiamos el estado inicial a "CA" para que se muestre CARGUE primero
+export default function BodegasExternasPage({ warehouseName, warehouseId, onTotalChange }: Props) {
   const [view, setView] = useState<"OP" | "CA">("CA");
+  const [items, setItems] = useState<FridemInventoryRow[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const loadInventory = useCallback(async () => {
+    if (!warehouseId) {
+      setItems([]);
+      setError("Selecciona una bodega externa para ver su inventario.");
+      setLoading(false);
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+    try {
+      const rows = await fetchFridemInventoryRows(warehouseId);
+      setItems(rows);
+    } catch (err) {
+      console.error("No se pudo cargar el inventario externo", err);
+      setItems([]);
+      setError("No se pudo cargar el inventario externo. Revisa la base de lectura y las credenciales.");
+    } finally {
+      setLoading(false);
+    }
+  }, [warehouseId]);
+
+  useEffect(() => {
+    void loadInventory();
+  }, [loadInventory]);
+
+  const totalKg = useMemo(
+    () =>
+      items.reduce(
+        (acc, current) =>
+          acc + (Number.isFinite(current.kilosActual ?? current.kilos) ? (current.kilosActual ?? current.kilos) : 0),
+        0,
+      ),
+    [items],
+  );
+
+  useEffect(() => {
+    if (typeof onTotalChange === "function") {
+      onTotalChange(totalKg);
+    }
+  }, [totalKg, onTotalChange]);
 
   return (
     <div className="p-6">
@@ -48,7 +97,11 @@ export default function BodegasExternasPage({ warehouseName }: Props) {
 
       {/* Renderizado condicional */}
       <div className="mt-4">
-        {view === "CA" ? <ListadoCargue /> : <Operacion />}
+        {view === "CA" ? (
+          <ListadoCargue items={items} loading={loading} error={error} onRetry={loadInventory} />
+        ) : (
+          <Operacion totalKg={totalKg} loading={loading} itemCount={items.length} />
+        )}
       </div>
     </div>
   );
