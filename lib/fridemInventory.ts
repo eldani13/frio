@@ -38,14 +38,92 @@ export type FridemInventoryRow = {
   estado: string;
 };
 
+/**
+ * Convierte cadenas numéricas del inventario externo (p. ej. CECIR) a número.
+ * Evita interpretar "1,504" como 1,504 decimal: si la coma agrupa miles (…,504),
+ * se interpreta como 1504. También acepta formatos US (1,234.56) y europeos (1.234,56).
+ */
 const parseNumber = (value: unknown): number | null => {
   if (typeof value === "number" && Number.isFinite(value)) return value;
-  if (typeof value === "string") {
-    const normalized = value.replace(",", ".");
-    const parsed = Number.parseFloat(normalized);
-    return Number.isFinite(parsed) ? parsed : null;
+  if (typeof value !== "string") return null;
+
+  const s = value.trim().replace(/\s/g, "");
+  if (!s) return null;
+
+  const hasComma = s.includes(",");
+  const hasDot = s.includes(".");
+
+  if (hasComma && hasDot) {
+    if (s.lastIndexOf(",") > s.lastIndexOf(".")) {
+      const normalized = s.replace(/\./g, "").replace(",", ".");
+      const n = Number.parseFloat(normalized);
+      return Number.isFinite(n) ? n : null;
+    }
+    const normalized = s.replace(/,/g, "");
+    const n = Number.parseFloat(normalized);
+    return Number.isFinite(n) ? n : null;
   }
-  return null;
+
+  if (hasComma && !hasDot) {
+    const parts = s.split(",");
+    if (parts.length > 2) {
+      const n = Number.parseFloat(s.replace(/,/g, ""));
+      return Number.isFinite(n) ? n : null;
+    }
+    if (parts.length === 2) {
+      const [before, after] = parts;
+      if (!/^\d*$/.test(before) || !/^\d+$/.test(after)) {
+        const n = Number.parseFloat(s.replace(",", "."));
+        return Number.isFinite(n) ? n : null;
+      }
+      if (before === "" || before === "0") {
+        const n = Number.parseFloat(`0.${after}`);
+        return Number.isFinite(n) ? n : null;
+      }
+      if (after.length <= 2) {
+        const n = Number.parseFloat(`${before}.${after}`);
+        return Number.isFinite(n) ? n : null;
+      }
+      if (after.length === 3) {
+        const n = Number.parseFloat(before + after);
+        return Number.isFinite(n) ? n : null;
+      }
+    }
+    const n = Number.parseFloat(s.replace(/,/g, ""));
+    return Number.isFinite(n) ? n : null;
+  }
+
+  if (hasDot && !hasComma) {
+    const parts = s.split(".");
+    if (parts.length > 2) {
+      const n = Number.parseFloat(s.replace(/\./g, ""));
+      return Number.isFinite(n) ? n : null;
+    }
+    if (parts.length === 2) {
+      const [before, after] = parts;
+      if (!/^\d*$/.test(before) || !/^\d+$/.test(after)) {
+        const n = Number.parseFloat(s);
+        return Number.isFinite(n) ? n : null;
+      }
+      if (before === "" || before === "0") {
+        const n = Number.parseFloat(`0.${after}`);
+        return Number.isFinite(n) ? n : null;
+      }
+      if (after.length <= 2) {
+        const n = Number.parseFloat(`${before}.${after}`);
+        return Number.isFinite(n) ? n : null;
+      }
+      if (after.length === 3) {
+        const n = Number.parseFloat(before + after);
+        return Number.isFinite(n) ? n : null;
+      }
+    }
+    const n = Number.parseFloat(s);
+    return Number.isFinite(n) ? n : null;
+  }
+
+  const n = Number.parseFloat(s);
+  return Number.isFinite(n) ? n : null;
 };
 
 const normalizeRawToRow = (raw: FridemRaw, index: number): FridemInventoryRow => {
