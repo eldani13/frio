@@ -3,5 +3,6 @@ export interface Comprador {
     numericId: number;  // Autonumérico
     code: string;       // Base 36
     name: string;
+    codeCuenta: string;
     createdAt: number;
   }

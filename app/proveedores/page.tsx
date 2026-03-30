@@ -4,28 +4,84 @@ import { ProviderService } from "@/app/services/providerService";
 import { Provider } from "@/app/types/provider";
 import { ProviderTable } from "@/app/components/ui/providers/ProviderTable";
 import { ProviderForm } from "@/app/components/ui/providers/ProviderForm";
-import { HiOutlinePlus } from "react-icons/hi2";
+import {
+  ProviderOrdenesModal,
+  type ProveedorOrdenCompraRow,
+} from "@/app/components/ui/providers/ProviderOrdenesModal";
+import { OrdenCompraService } from "@/app/services/ordenCompraService";
+import { HiOutlinePlus, HiOutlineSquares2X2 } from "react-icons/hi2";
+import { useAuth } from "@/app/context/AuthContext";
 
 export default function ProvidersPage() {
   const [providers, setProviders] = useState<Provider[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedProvider, setSelectedProvider] = useState<Provider | null>(null);
+  const [ordenesModalProvider, setOrdenesModalProvider] = useState<Provider | null>(null);
+  const [ordenesList, setOrdenesList] = useState<ProveedorOrdenCompraRow[]>([]);
+  const [ordenesLoading, setOrdenesLoading] = useState(false);
 
-  const load = async () => setProviders(await ProviderService.getAll());
-  useEffect(() => { load(); }, []);
+  const { session } = useAuth();
+  const codeCuenta = session?.codeCuenta ?? "";
+  const idCliente = session?.clientId ?? "";
+
+  const load = async () => {
+    if (!idCliente) {
+      setProviders([]);
+      return;
+    }
+    setProviders(await ProviderService.getAll(idCliente, codeCuenta));
+  };
+
+  useEffect(() => {
+    void load();
+  }, [idCliente, codeCuenta]);
+
+  useEffect(() => {
+    if (!ordenesModalProvider?.id || !idCliente.trim()) {
+      setOrdenesList([]);
+      return;
+    }
+    let cancelled = false;
+    setOrdenesLoading(true);
+    void OrdenCompraService.getByProveedor(idCliente, codeCuenta, ordenesModalProvider.id)
+      .then((list) => {
+        if (cancelled) return;
+        setOrdenesList(
+          list.map((o) => ({
+            id: o.id ?? o.numero,
+            ordenCompra: o.numero,
+            estado: o.estado,
+            resumenProductos: (o.lineItems ?? [])
+              .map((li) => `${li.titleSnapshot} ×${li.cantidad}`)
+              .join(" · "),
+          })),
+        );
+      })
+      .catch(() => {
+        if (!cancelled) setOrdenesList([]);
+      })
+      .finally(() => {
+        if (!cancelled) setOrdenesLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [ordenesModalProvider?.id, idCliente, codeCuenta]);
 
   const handleSuccess = async (name: string) => {
+    if (!idCliente) return;
     if (selectedProvider?.id) {
-      await ProviderService.update(selectedProvider.id, { name });
+      await ProviderService.update(idCliente, selectedProvider.id, { name });
     } else {
-      await ProviderService.create(name);
+      await ProviderService.create(name, idCliente, codeCuenta);
     }
     await load();
   };
 
   const handleDelete = async (id: string) => {
+    if (!idCliente) return;
     if (window.confirm("¿Eliminar este proveedor definitivamente?")) {
-      await ProviderService.delete(id);
+      await ProviderService.delete(idCliente, id);
       await load();
     }
   };
@@ -33,9 +89,13 @@ export default function ProvidersPage() {
   return (
     <main className="max-w-4xl mx-auto p-8 font-['Inter']">
       <header className="mb-10 flex justify-between items-center">
-        <div>
-          <h1 className="text-[32px] font-bold text-gray-900 tracking-tight">Proveedores</h1>
-          <p className="text-[#2D5A3F]/60 text-[14px]">Listado de proveedores</p>
+        <div className="flex items-center gap-4">
+          <div className="p-3 bg-[#f8edb1] rounded-2xl text-[#2D5A3F]">
+            <HiOutlineSquares2X2 size={28} />
+          </div>
+          <div>
+            <h1 className="text-[28px] font-extrabold text-gray-900 tracking-tight">Proveedores</h1>           
+          </div>
         </div>
         <button 
           onClick={() => { setSelectedProvider(null); setIsModalOpen(true); }}
@@ -45,17 +105,32 @@ export default function ProvidersPage() {
         </button>
       </header>
 
-      <ProviderTable 
-        providers={providers} 
-        onEdit={(p) => { setSelectedProvider(p); setIsModalOpen(true); }} 
-        onDelete={handleDelete} 
+      <ProviderTable
+        providers={providers}
+        onSelectProvider={(p) => {
+          setOrdenesList([]);
+          setOrdenesModalProvider(p);
+        }}
+        onEdit={(p) => {
+          setSelectedProvider(p);
+          setIsModalOpen(true);
+        }}
+        onDelete={handleDelete}
       />
 
-      <ProviderForm 
-        isOpen={isModalOpen} 
+      <ProviderForm
+        isOpen={isModalOpen}
         provider={selectedProvider}
-        onClose={() => setIsModalOpen(false)} 
-        onSuccess={handleSuccess} 
+        onClose={() => setIsModalOpen(false)}
+        onSuccess={handleSuccess}
+      />
+
+      <ProviderOrdenesModal
+        isOpen={ordenesModalProvider !== null}
+        provider={ordenesModalProvider}
+        ordenes={ordenesList}
+        loading={ordenesLoading}
+        onClose={() => setOrdenesModalProvider(null)}
       />
     </main>
   );

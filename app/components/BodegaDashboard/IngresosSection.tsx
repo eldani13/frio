@@ -2,6 +2,7 @@ import React, { useMemo, useState } from "react";
 import { FiArchive, FiBox, FiAlertCircle } from "react-icons/fi";
 import { IoCloseOutline } from "react-icons/io5";
 import type { Box, Slot, BodegaOrder } from "../../interfaces/bodega";
+import { useEffect } from "react";
 
 const HIGH_TEMP_THRESHOLD = 5;
 
@@ -58,15 +59,6 @@ export default function IngresosSection(props: Props) {
 
   const ingresoClientOptions = useMemo(() => {
     const unique = new Set<string>();
-    [inboundBoxes, outboundBoxes, slots]
-      .filter(Boolean)
-      .forEach((list) => {
-        list.forEach((item) => {
-          if (item.client && item.client.trim()) {
-            unique.add(item.client);
-          }
-        });
-      });
     clientCatalog.forEach((name) => {
       if (name && name.trim()) {
         unique.add(name.trim());
@@ -75,7 +67,14 @@ export default function IngresosSection(props: Props) {
     if (clientFilterId) unique.add(clientFilterId);
     if (ingresoClient) unique.add(ingresoClient);
     return Array.from(unique);
-  }, [clientCatalog, clientFilterId, inboundBoxes, ingresoClient, outboundBoxes, slots]);
+  }, [clientCatalog, clientFilterId, ingresoClient]);
+
+  useEffect(() => {
+    if (!ingresoClient && ingresoClientOptions.length > 0) {
+      const first = ingresoClientOptions[0];
+      if (first) setIngresoClient(first);
+    }
+  }, [ingresoClient, ingresoClientOptions, setIngresoClient]);
 
   const clientOptions = useMemo(() => {
     const unique = new Set<string>();

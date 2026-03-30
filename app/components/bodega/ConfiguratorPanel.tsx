@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   FiUsers,
   FiUserCheck,
@@ -47,6 +47,8 @@ type Props = {
   users: ConfigUser[];
   newUserName: string;
   setNewUserName: Dispatch<SetStateAction<string>>;
+  newUserCode: string;
+  setNewUserCode: Dispatch<SetStateAction<string>>;
   newUserRole: Role;
   setNewUserRole: Dispatch<SetStateAction<Role>>;
   newUserClientId: string;
@@ -89,6 +91,8 @@ export default function ConfiguratorPanel({
   users,
   newUserName,
   setNewUserName,
+  newUserCode,
+  setNewUserCode,
   newUserRole,
   setNewUserRole,
   newUserClientId,
@@ -125,6 +129,13 @@ export default function ConfiguratorPanel({
   const [createWarehouseStatus, setCreateWarehouseStatus] = useState<"interna" | "externa">("interna");
   const [editWarehouseStatus, setEditWarehouseStatus] = useState<"interna" | "externa">("interna");
 
+  const normalizeBase36 = (value: string) => value.toUpperCase().replace(/[^0-9A-Z]/g, "");
+  const ensureFiveClientCode = (value: string) => {
+    const normalized = normalizeBase36(value);
+    if (!normalized) return "";
+    return normalized.padEnd(5, "0").slice(0, 5);
+  };
+
   const roleClientDefaults: Record<Role, string> = {
     configurador: "",
     administrador: "bodega",
@@ -133,6 +144,47 @@ export default function ConfiguratorPanel({
     cliente: "",
     custodio: "bodega",
   };
+
+  const roleLabels: Record<Role, string> = {
+    custodio: "custodio",
+    administrador: "administrador",
+    operario: "operario",
+    jefe: "jefe",
+    cliente: "administrador de cuentas",
+    configurador: "configurador",
+  };
+
+  const warehouseNameByAccountCode = useMemo(() => {
+    const map = new Map<string, string>();
+    warehouses.forEach((warehouse) => {
+      const code = warehouse.codeCuenta?.trim();
+      if (code) {
+        map.set(ensureFiveClientCode(code), warehouse.name ?? "");
+      }
+    });
+    return map;
+  }, [warehouses]);
+
+  const clientNameById = useMemo(() => {
+    const map = new Map<string, string>();
+    clients.forEach((client) => {
+      if (client.id) {
+        map.set(client.id, client.name ?? "");
+      }
+    });
+    return map;
+  }, [clients]);
+
+  const clientNameByCode = useMemo(() => {
+    const map = new Map<string, string>();
+    clients.forEach((client) => {
+      const code = ensureFiveClientCode(client.code ?? "");
+      if (code) {
+        map.set(code, client.name ?? "");
+      }
+    });
+    return map;
+  }, [clients]);
 
   useEffect(() => {
     if (showCreateUserModal) {
@@ -172,9 +224,10 @@ export default function ConfiguratorPanel({
           </div>
         </div>
 
-        <div className="grid grid-cols-[1.6fr_2.2fr_1.5fr_2fr] border-y border-[#edf1f5] bg-white px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-[#7c8087]">
+        <div className="grid grid-cols-[1.6fr_2.2fr_1.7fr_1.5fr_2fr] border-y border-[#edf1f5] bg-white px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-[#7c8087]">
           <span>Código</span>
           <span>Nombre</span>
+          <span>Bodega asignada</span>
           <span>Credenciales</span>
           <span>Acciones</span>
         </div>
@@ -190,11 +243,14 @@ export default function ConfiguratorPanel({
             return (
               <div
                 key={client.id}
-                className="grid grid-cols-[1.6fr_2.2fr_1.5fr_2fr] items-center gap-3 border-t border-[#edf1f5] bg-white px-4 py-3 text-sm text-[#3f3f3f]"
+                className="grid grid-cols-[1.6fr_2.2fr_1.7fr_1.5fr_2fr] items-center gap-3 border-t border-[#edf1f5] bg-white px-4 py-3 text-sm text-[#3f3f3f]"
               >
                 <span className="font-mono text-xs text-[#6b7280]">{client.code}</span>
                 <span className={`font-semibold ${client.disabled ? "text-[#9ca3af]" : "text-[#2d2d2d]"}`}>
                   {client.name}
+                </span>
+                <span className="text-sm text-[#4b5563]">
+                  {warehouseNameByAccountCode.get(ensureFiveClientCode(client.code ?? "")) ?? "Sin asignar"}
                 </span>
                 <span className={`text-sm font-semibold ${users.some((user) => user.clientId === client.id && user.email?.trim()) ? "text-[#15803d]" : "text-[#9ca3af]"}`}>
                   {users.some((user) => user.clientId === client.id && user.email?.trim()) ? "Sí" : "No"}
@@ -270,9 +326,10 @@ export default function ConfiguratorPanel({
           </div>
         </div>
 
-        <div className="grid grid-cols-[2fr_1.5fr_2fr] border-y border-[#edf1f5] bg-white px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-[#7c8087]">
+        <div className="grid grid-cols-[2fr_1.5fr_1.7fr_2fr] border-y border-[#edf1f5] bg-white px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-[#7c8087]">
           <span>Nombre</span>
           <span>Capacidad</span>
+          <span>Bodega asignada</span>
           <span>Acciones</span>
         </div>
         {warehousesLoading && !list.length ? (
@@ -289,10 +346,13 @@ export default function ConfiguratorPanel({
                 ? warehouse.capacity
                 : "-";
             const effectiveStatus = warehouse.status === "externa" ? "externa" : "interna";
+            const normalizedCode = ensureFiveClientCode(warehouse.codeCuenta ?? "");
+            const assignedLabel = normalizedCode ? clientNameByCode.get(normalizedCode) : undefined;
+            const assignedDisplay = assignedLabel ?? (normalizedCode || "Sin asignar");
             return (
               <div
                 key={warehouse.id}
-                className="grid grid-cols-[2fr_1.5fr_2fr] items-center gap-3 border-t border-[#edf1f5] bg-white px-4 py-3 text-sm text-[#3f3f3f]"
+                className="grid grid-cols-[2fr_1.5fr_1.7fr_2fr] items-center gap-3 border-t border-[#edf1f5] bg-white px-4 py-3 text-sm text-[#3f3f3f]"
               >
                 <div className="flex flex-col">
                   <span className={`font-semibold ${warehouse.disabled ? "text-[#9ca3af]" : "text-[#2d2d2d]"}`}>
@@ -304,6 +364,10 @@ export default function ConfiguratorPanel({
                   </span>
                 </div>
                 <span className="text-sm font-semibold text-[#3f3f3f]">{capacityLabel}</span>
+                <div className="flex flex-col text-sm text-[#3f3f3f]">
+                  <span>{assignedDisplay}</span>
+                  <span className="font-mono text-[11px] text-[#6b7280]">{normalizedCode || "Sin código"}</span>
+                </div>
                 <div className="flex flex-wrap items-center gap-2">
                   <button
                     type="button"
@@ -373,7 +437,7 @@ export default function ConfiguratorPanel({
             </div>
 
             <div className="grid grid-cols-[1.5fr_1.4fr_1.9fr_1.7fr_1.2fr_2fr] border-y border-[#edf1f5] bg-white px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-[#7c8087]">
-              <span>ID</span>
+              <span>Código</span>
               <span>Rol</span>
               <span>Nombre</span>
               <span>Cuenta</span>
@@ -390,17 +454,20 @@ export default function ConfiguratorPanel({
               users.map((user) => {
                 const hasCredentials = Boolean(user.email?.trim());
                 const shortId = user.id.length > 12 ? `${user.id.slice(0, 6)}...${user.id.slice(-3)}` : user.id;
+                const code = ensureFiveClientCode(user.code ?? shortId);
                 return (
                   <div
                     key={user.id}
                     className="grid grid-cols-[1.5fr_1.4fr_1.9fr_1.7fr_1.2fr_2fr] items-center gap-3 border-t border-[#edf1f5] bg-white px-4 py-3 text-sm text-[#3f3f3f]"
                   >
-                    <span className="font-mono text-xs text-[#6b7280]">{shortId}</span>
-                    <span className="text-sm font-semibold text-[#3f3f3f]">{user.role}</span>
+                    <span className="font-mono text-xs text-[#6b7280]">{code}</span>
+                    <span className="text-sm font-semibold text-[#3f3f3f]">{roleLabels[user.role] ?? user.role}</span>
                     <span className={`font-semibold ${user.disabled ? "text-[#9ca3af]" : "text-[#2d2d2d]"}`}>
                       {user.name}
                     </span>
-                    <span className="text-sm text-[#4b5563]">{user.clientId || "-"}</span>
+                    <span className="text-sm text-[#4b5563]">
+                      {user.clientId ? clientNameById.get(user.clientId) ?? user.clientId : "-"}
+                    </span>
                     <span className={`text-sm font-semibold ${hasCredentials ? "text-[#15803d]" : "text-[#9ca3af]"}`}>
                       {hasCredentials ? "Sí" : "No"}
                     </span>
@@ -595,7 +662,7 @@ export default function ConfiguratorPanel({
                   value={newClientName}
                   onChange={(event) => setNewClientName(event.target.value)}
                   className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none"
-                  placeholder="Nombre del cliente"
+                  placeholder="Nombre de la cuenta"
                   disabled={clientSaving || clientsLoading}
                 />
               </div>
@@ -604,12 +671,12 @@ export default function ConfiguratorPanel({
                 <input
                   type="text"
                   value={newClientCode}
-                  onChange={(event) => setNewClientCode(event.target.value)}
+                  onChange={(event) => setNewClientCode(ensureFiveClientCode(event.target.value))}
                   className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none"
                   placeholder="Código generado"
                   disabled={clientSaving || clientsLoading}
                 />
-                <p className="mt-1 text-xs text-slate-500">Se genera con el nombre + números; puedes ajustarlo si lo necesitas.</p>
+                <p className="mt-1 text-xs text-slate-500">Se genera al escribir el nombre (base 36, 5 caracteres); puedes ajustarlo si lo necesitas.</p>
               </div>
             </div>
 
@@ -673,6 +740,18 @@ export default function ConfiguratorPanel({
                 />
               </div>
               <div>
+                <label className="text-sm font-semibold text-slate-700">Código</label>
+                <input
+                  type="text"
+                  value={newUserCode}
+                  onChange={(event) => setNewUserCode(ensureFiveClientCode(event.target.value))}
+                  className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none"
+                  placeholder="Código base 36 (5 caracteres)"
+                  disabled={userSaving || usersLoading}
+                />
+                <p className="mt-1 text-xs text-slate-500">Se genera igual que las cuentas (base 36, 5 caracteres).</p>
+              </div>
+              <div>
                 <label className="text-sm font-semibold text-slate-700">Nombre</label>
                 <input
                   type="text"
@@ -696,7 +775,7 @@ export default function ConfiguratorPanel({
                   disabled={userSaving || usersLoading}
                 >
                   {["custodio", "administrador", "operario", "jefe", "cliente", "configurador"].map((role) => (
-                    <option key={role} value={role}>{role}</option>
+                    <option key={role} value={role}>{roleLabels[role as Role] ?? role}</option>
                   ))}
                 </select>
               </div>
@@ -764,7 +843,13 @@ export default function ConfiguratorPanel({
                   await handleCreateUser();
                   setShowCreateUserModal(false);
                 }}
-                disabled={userSaving || !newUserName.trim() || !newUserEmail.trim() || !newUserPassword.trim()}
+                disabled={
+                  userSaving ||
+                  !newUserName.trim() ||
+                  !newUserEmail.trim() ||
+                  !newUserPassword.trim() ||
+                  !newUserCode.trim()
+                }
                 className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-300"
               >
                 {userSaving ? "Creando..." : "Crear"}
@@ -914,7 +999,7 @@ export default function ConfiguratorPanel({
                 <input
                   type="text"
                   value={editCode}
-                  onChange={(event) => setEditCode(event.target.value)}
+                  onChange={(event) => setEditCode(ensureFiveClientCode(event.target.value))}
                   className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none"
                   placeholder="Código"
                   disabled={editSaving || clientsLoading}
@@ -1107,7 +1192,7 @@ export default function ConfiguratorPanel({
                   disabled={editUserSaving || usersLoading}
                 >
                   {["custodio", "administrador", "operario", "jefe", "cliente", "configurador"].map((role) => (
-                    <option key={role} value={role}>{role}</option>
+                    <option key={role} value={role}>{roleLabels[role as Role] ?? role}</option>
                   ))}
                 </select>
               </div>

@@ -7,26 +7,34 @@ import {
   doc, 
   updateDoc, 
   query, 
+  where, // Agregado para filtrar
   orderBy,
   limit
 } from "firebase/firestore";
-import { Planta } from "@/app/types/planta"; // Ajusta la ruta según tu proyecto
+import { Planta } from "@/app/types/planta";
 
-const PARENT_COLLECTION = "warehouses";
-const PARENT_ID = "GENERAL"; 
+const PARENT_COLLECTION = "clientes";
 const SUB_COLLECTION = "plantas";
 
-const getColRef = () => collection(db, PARENT_COLLECTION, PARENT_ID, SUB_COLLECTION);
+const getColRef = (idCliente: string) =>
+  collection(db, PARENT_COLLECTION, idCliente, SUB_COLLECTION);
+
+const getPlantaDocRef = (idCliente: string, id: string) =>
+  doc(db, PARENT_COLLECTION, idCliente, SUB_COLLECTION, id);
 
 export const PlantaService = {
-  // Transforma número a Base 36 y aplica el relleno de 4 dígitos (Ej: 1 -> 0001)
   toBase36: (num: number): string => {
     return num.toString(36).toUpperCase().padStart(4, '0');
   },
 
-  async getAll(): Promise<Planta[]> {
+  // 1. Recibe codeCuenta y NO tiene orderBy para evitar el error de índice
+  async getAll(idCliente: string, codeCuenta: string): Promise<Planta[]> {
     try {
-      const q = query(getColRef(), orderBy("numericId", "asc"));
+      if (!idCliente?.trim()) return [];
+      const q = query(
+        getColRef(idCliente),
+        where("codeCuenta", "==", codeCuenta)
+      );
       const snapshot = await getDocs(q);
       
       return snapshot.docs.map(d => ({ 
@@ -39,10 +47,11 @@ export const PlantaService = {
     }
   },
 
-  async create(data: Omit<Planta, 'id' | 'numericId' | 'code' | 'createdAt'>) {
+  // 2. Agregamos codeCuenta a los parámetros y al objeto final
+  async create(data: Omit<Planta, 'id' | 'numericId' | 'code' | 'createdAt' | 'codeCuenta'>, idCliente: string, codeCuenta: string) {
     try {
-      // 1. Buscamos el último ID para el autonumérico
-      const qLast = query(getColRef(), orderBy("numericId", "desc"), limit(1));
+      if (!idCliente?.trim()) throw new Error("idCliente requerido");
+      const qLast = query(getColRef(idCliente), orderBy("numericId", "desc"), limit(1));
       const lastSnap = await getDocs(qLast);
       
       let nextId = 1;
@@ -51,56 +60,53 @@ export const PlantaService = {
         nextId = (lastData.numericId || 0) + 1;
       }
 
-      // 2. Generamos el objeto con el código y campos automáticos
       const newPlanta: Omit<Planta, 'id'> = {
         ...data,
+        codeCuenta: codeCuenta, // Guardamos la cuenta del usuario
         numericId: nextId,
         code: this.toBase36(nextId),
         createdAt: Date.now()
       };
 
-      return await addDoc(getColRef(), newPlanta);
+      return await addDoc(getColRef(idCliente), newPlanta);
     } catch (error: any) {
       console.error("Error en PlantaService.create:", error.message);
       throw error;
     }
   },
 
-  async update(id: string, data: Partial<Planta>) {
+  async update(idCliente: string, id: string, data: Partial<Planta>) {
     try {
-      const docRef = doc(db, PARENT_COLLECTION, PARENT_ID, SUB_COLLECTION, id);
-      
-      // Extraemos solo los campos editables de la interfaz Planta
-      // Evitamos actualizar id, numericId y code por integridad
-      const { 
-        name, 
-        plantName, 
-        location, 
-        maxPallets, 
-        tempRange, 
-        isOperational 
+      if (!idCliente?.trim()) throw new Error("idCliente requerido");
+      const {
+        name,
+        plantName,
+        location,
+        maxPallets,
+        tempRange,
+        isOperational,
       } = data;
 
-      const updateData = { 
-        name, 
-        plantName, 
-        location, 
-        maxPallets, 
-        tempRange, 
-        isOperational 
+      const updateData = {
+        name,
+        plantName,
+        location,
+        maxPallets,
+        tempRange,
+        isOperational,
       };
 
-      return await updateDoc(docRef, updateData);
+      return await updateDoc(getPlantaDocRef(idCliente, id), updateData);
     } catch (error: any) {
       console.error("Error en PlantaService.update:", error.message);
       throw error;
     }
   },
 
-  async delete(id: string) {
+  async delete(idCliente: string, id: string) {
     try {
-      const docRef = doc(db, PARENT_COLLECTION, PARENT_ID, SUB_COLLECTION, id);
-      return await deleteDoc(docRef);
+      if (!idCliente?.trim()) throw new Error("idCliente requerido");
+      return await deleteDoc(getPlantaDocRef(idCliente, id));
     } catch (error: any) {
       console.error("Error en PlantaService.delete:", error.message);
       throw error;

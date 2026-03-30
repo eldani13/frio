@@ -24,6 +24,7 @@ export type ConfigUser = {
 	id: string;
 	name: string;
 	role: Role;
+	code?: string;
 	clientId?: string;
 	email?: string;
 	password?: string;
@@ -112,4 +113,5 @@ export type WarehouseMeta = {
 	disabled?: boolean;
 	createdAt?: string;
 	disabledAt?: string;
+	codeCuenta?: string;
 };
