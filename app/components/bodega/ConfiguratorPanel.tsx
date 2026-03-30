@@ -662,7 +662,7 @@ export default function ConfiguratorPanel({
                   value={newClientName}
                   onChange={(event) => setNewClientName(event.target.value)}
                   className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none"
-                  placeholder="Nombre del cliente"
+                  placeholder="Nombre de la cuenta"
                   disabled={clientSaving || clientsLoading}
                 />
               </div>

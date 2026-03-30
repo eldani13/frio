@@ -6,7 +6,7 @@ import ListadoCargue from "./listadocargue";
 type Props = { warehouseName?: string };
 
 export default function BodegasInternasPage({ warehouseName }: Props) {
-  // Cambiamos el estado inicial a "CA" para que CARGUE sea la vista por defecto
+  // Estado inicial "CA": Listado por defecto
   const [view, setView] = useState<"OP" | "CA">("CA");
 
   return (
@@ -20,24 +20,24 @@ export default function BodegasInternasPage({ warehouseName }: Props) {
         </div>
         
         <div className="flex gap-2 bg-slate-100 p-1 rounded-xl">
-          {/* Botón CARGUE posicionado a la izquierda */}
+          {/* Listado a la izquierda */}
           <button 
             onClick={() => setView("CA")}
             className={`px-4 py-2 rounded-lg font-medium transition-all ${
               view === "CA" ? "bg-white shadow text-blue-600" : "text-slate-500"
             }`}
           >
-            CARGUE
+            Listado
           </button>
 
-          {/* Botón OPERACIÓN posicionado a la derecha */}
+          {/* Grafico a la derecha */}
           <button 
             onClick={() => setView("OP")}
             className={`px-4 py-2 rounded-lg font-medium transition-all ${
               view === "OP" ? "bg-white shadow text-blue-600" : "text-slate-500"
             }`}
           >
-            OPERACIÓN
+            Grafico
           </button>
         </div>
       </div>

@@ -372,7 +372,7 @@ const Operacion: React.FC<OperacionExternasProps> = ({
       <div
         className={`${inter.className} rounded-xl border border-dashed border-slate-200 bg-slate-50/80 px-6 py-12 text-center text-sm text-slate-600`}
       >
-        No hay registros de inventario externo para esta bodega. Revisá la pestaña CARGUE o recargá los
+        No hay registros de inventario externo para esta bodega. Revisá la vista Listado o recargá los
         datos.
       </div>
     );

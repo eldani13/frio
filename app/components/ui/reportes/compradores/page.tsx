@@ -13,29 +13,29 @@ export default function CompradoresPage() {
         <h1 className="text-2xl font-bold">Compradores</h1>
         
         <div className="flex gap-2 bg-slate-100 p-1 rounded-xl">
-          {/* Botón CARGUE primero a la izquierda */}
+          {/* Listado primero a la izquierda */}
           <button 
             onClick={() => setView("CA")}
             className={`px-4 py-2 rounded-lg font-medium transition-all ${
               view === "CA" ? "bg-white shadow text-blue-600" : "text-slate-500"
             }`}
           >
-            CARGUE
+            Listado
           </button>
 
-          {/* Botón OPERACIÓN segundo */}
+          {/* Grafico segundo */}
           <button 
             onClick={() => setView("OP")}
             className={`px-4 py-2 rounded-lg font-medium transition-all ${
               view === "OP" ? "bg-white shadow text-blue-600" : "text-slate-500"
             }`}
           >
-            OPERACIÓN
+            Grafico
           </button>
         </div>
       </div>
 
-      {/* Renderizado condicional priorizando CARGUE */}
+      {/* Renderizado condicional priorizando Listado */}
       <div className="mt-4">
         {view === "CA" ? <ListadoCargue /> : <Operacion />}
       </div>

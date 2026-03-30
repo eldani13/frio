@@ -2969,7 +2969,7 @@ export default function BodegaDashboard() {
           <>
             {isAdmin ? (
               <div className="flex flex-wrap items-center justify-between gap-3">
-                <div className="flex-1 min-w-[260px]">
+                {/* <div className="flex-1 min-w-[260px]">
                   <WarehouseSelector
                     role={role}
                     warehouseId={warehouseId}
@@ -2979,14 +2979,14 @@ export default function BodegaDashboard() {
                     onCreateWarehouse={handleCreateWarehouse}
                     isLoading={warehousesLoading}
                   />
-                </div>
-                <button
+                </div> */}
+                {/* <button
                   type="button"
                   onClick={() => setAdminSection("menu")}
                   className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
                 >
                   Volver al menú de administrador
-                </button>
+                </button> */}
               </div>
             ) : null}
 

@@ -9,15 +9,22 @@ type Props = {
   loading?: boolean;
   error?: string | null;
   onRetry?: () => void;
+  /** Momento en que los datos se obtuvieron correctamente desde la API */
+  lastUpdatedAt?: Date | null;
 };
+
+const dateTimeFormatter = new Intl.DateTimeFormat("es-CO", {
+  dateStyle: "short",
+  timeStyle: "short",
+});
 
 const numberFormatter = new Intl.NumberFormat("es-CO", {
   minimumFractionDigits: 0,
   maximumFractionDigits: 2,
 });
 
-export default function ListadoCargue({ items, loading, error, onRetry }: Props) {
-  const PAGE_SIZE = 20;
+export default function ListadoCargue({ items, loading, error, onRetry, lastUpdatedAt = null }: Props) {
+  const PAGE_SIZE = 10;
   const [page, setPage] = useState(1);
 
   const totalKg = useMemo(
@@ -51,16 +58,24 @@ export default function ListadoCargue({ items, loading, error, onRetry }: Props)
           <p className="text-xs text-slate-600 mt-1">
             {items.length} registros · Página {currentPage} de {pageCount}
           </p>
+          {lastUpdatedAt ? (
+            <p className="text-xs text-slate-500 mt-1.5 tabular-nums">
+              Última actualización:{" "}
+              <span className="font-semibold text-slate-700">{dateTimeFormatter.format(lastUpdatedAt)}</span>
+            </p>
+          ) : !loading ? (
+            <p className="text-xs text-slate-400 mt-1.5">Aún no hay datos cargados</p>
+          ) : null}
         </div>
 
-        <div className="flex items-center gap-3">
-          {error ? <span className="text-xs text-red-600 font-semibold">{error}</span> : null}
+        <div className="flex items-center gap-3 self-start sm:self-center">
+          {error ? <span className="text-xs text-red-600 font-semibold max-w-[220px] text-right">{error}</span> : null}
           {onRetry ? (
             <button
               type="button"
               onClick={onRetry}
               disabled={loading}
-              className="px-3 py-2 text-xs font-bold uppercase tracking-wider rounded-xl border border-slate-200 bg-white shadow-sm hover:border-slate-300 disabled:opacity-50"
+              className="px-3 py-2 text-xs font-bold uppercase tracking-wider rounded-xl border border-slate-200 bg-white shadow-sm hover:border-slate-300 disabled:opacity-50 shrink-0"
             >
               {loading ? "Actualizando…" : "Recargar"}
             </button>
@@ -69,48 +84,48 @@ export default function ListadoCargue({ items, loading, error, onRetry }: Props)
       </div>
       
       <div className="overflow-x-auto">
-        <table className="w-full text-left border-separate border-spacing-0">
+        <table className="w-max min-w-full text-left border-separate border-spacing-0">
           <thead>
             <tr className="bg-white">
-              <th className="p-4 text-xs font-bold text-slate-400 uppercase tracking-widest border-b border-slate-100">RD</th>
-              <th className="p-4 text-xs font-bold text-slate-400 uppercase tracking-widest border-b border-slate-100">Renglón</th>
-              <th className="p-4 text-xs font-bold text-slate-400 uppercase tracking-widest border-b border-slate-100">Lote</th>
-              <th className="p-4 text-xs font-bold text-slate-400 uppercase tracking-widest border-b border-slate-100">Descripción</th>
-              <th className="p-4 text-xs font-bold text-slate-400 uppercase tracking-widest border-b border-slate-100">Marca</th>
-              <th className="p-4 text-xs font-bold text-slate-400 uppercase tracking-widest border-b border-slate-100">Embalaje</th>
-              <th className="p-4 text-xs font-bold text-slate-400 uppercase tracking-widest border-b border-slate-100 text-right">Peso Unit.</th>
-              <th className="p-4 text-xs font-bold text-slate-400 uppercase tracking-widest border-b border-slate-100 text-right">Piezas</th>
-              <th className="p-4 text-xs font-bold text-slate-400 uppercase tracking-widest border-b border-slate-100 text-right">Kilos actual</th>
-              <th className="p-4 text-xs font-bold text-slate-400 uppercase tracking-widest border-b border-slate-100">Caducidad</th>
-              <th className="p-4 text-xs font-bold text-slate-400 uppercase tracking-widest border-b border-slate-100">Fecha ingreso</th>
-              <th className="p-4 text-xs font-bold text-slate-400 uppercase tracking-widest border-b border-slate-100">Llave única</th>
-              <th className="p-4 text-xs font-bold text-slate-400 uppercase tracking-widest border-b border-slate-100 text-center">Estado</th>
+              <th className="whitespace-nowrap px-4 py-3 text-xs font-bold text-slate-400 uppercase tracking-widest border-b border-slate-200">RD</th>
+              <th className="whitespace-nowrap px-4 py-3 text-xs font-bold text-slate-400 uppercase tracking-widest border-b border-slate-200">Renglón</th>
+              <th className="whitespace-nowrap px-4 py-3 text-xs font-bold text-slate-400 uppercase tracking-widest border-b border-slate-200">Lote</th>
+              <th className="whitespace-nowrap px-4 py-3 text-xs font-bold text-slate-400 uppercase tracking-widest border-b border-slate-200">Descripción</th>
+              <th className="whitespace-nowrap px-4 py-3 text-xs font-bold text-slate-400 uppercase tracking-widest border-b border-slate-200">Marca</th>
+              <th className="whitespace-nowrap px-4 py-3 text-xs font-bold text-slate-400 uppercase tracking-widest border-b border-slate-200">Embalaje</th>
+              <th className="whitespace-nowrap px-4 py-3 text-xs font-bold text-slate-400 uppercase tracking-widest border-b border-slate-200 text-right">Peso Unit.</th>
+              <th className="whitespace-nowrap px-4 py-3 text-xs font-bold text-slate-400 uppercase tracking-widest border-b border-slate-200 text-right">Piezas</th>
+              <th className="whitespace-nowrap px-4 py-3 text-xs font-bold text-slate-400 uppercase tracking-widest border-b border-slate-200 text-right">Kilos actual</th>
+              <th className="whitespace-nowrap px-4 py-3 text-xs font-bold text-slate-400 uppercase tracking-widest border-b border-slate-200">Caducidad</th>
+              <th className="whitespace-nowrap px-4 py-3 text-xs font-bold text-slate-400 uppercase tracking-widest border-b border-slate-200">Fecha ingreso</th>
+              <th className="whitespace-nowrap px-4 py-3 text-xs font-bold text-slate-400 uppercase tracking-widest border-b border-slate-200">Llave única</th>
+              <th className="whitespace-nowrap px-4 py-3 text-xs font-bold text-slate-400 uppercase tracking-widest border-b border-slate-200 text-center">Estado</th>
             </tr>
           </thead>
           <tbody className="text-slate-700 text-[14px]">
             {loading
               ? Array.from({ length: 4 }).map((_, idx) => (
                   <tr key={`skeleton-${idx}`} className="animate-pulse">
-                    <td className="p-4 border-b border-slate-50"><div className="h-4 w-20 rounded bg-slate-200" /></td>
-                    <td className="p-4 border-b border-slate-50"><div className="h-4 w-12 rounded bg-slate-200" /></td>
-                    <td className="p-4 border-b border-slate-50"><div className="h-4 w-20 rounded bg-slate-200" /></td>
-                    <td className="p-4 border-b border-slate-50"><div className="h-4 w-48 rounded bg-slate-200" /></td>
-                    <td className="p-4 border-b border-slate-50"><div className="h-4 w-24 rounded bg-slate-200" /></td>
-                    <td className="p-4 border-b border-slate-50"><div className="h-4 w-16 rounded bg-slate-200" /></td>
-                    <td className="p-4 border-b border-slate-50 text-right"><div className="h-4 w-16 rounded bg-slate-200 inline-block" /></td>
-                    <td className="p-4 border-b border-slate-50 text-right"><div className="h-4 w-14 rounded bg-slate-200 inline-block" /></td>
-                    <td className="p-4 border-b border-slate-50 text-right"><div className="h-4 w-16 rounded bg-slate-200 inline-block" /></td>
-                    <td className="p-4 border-b border-slate-50"><div className="h-4 w-20 rounded bg-slate-200" /></td>
-                    <td className="p-4 border-b border-slate-50"><div className="h-4 w-24 rounded bg-slate-200" /></td>
-                    <td className="p-4 border-b border-slate-50"><div className="h-4 w-24 rounded bg-slate-200" /></td>
-                    <td className="p-4 border-b border-slate-50 text-center"><div className="h-4 w-20 rounded bg-slate-200 inline-block" /></td>
+                    <td className="whitespace-nowrap px-4 py-4 border-b border-slate-100"><div className="h-4 w-20 rounded bg-slate-200" /></td>
+                    <td className="whitespace-nowrap px-4 py-4 border-b border-slate-100"><div className="h-4 w-12 rounded bg-slate-200" /></td>
+                    <td className="whitespace-nowrap px-4 py-4 border-b border-slate-100"><div className="h-4 w-20 rounded bg-slate-200" /></td>
+                    <td className="whitespace-nowrap px-4 py-4 border-b border-slate-100"><div className="h-4 w-[28rem] max-w-none rounded bg-slate-200" /></td>
+                    <td className="whitespace-nowrap px-4 py-4 border-b border-slate-100"><div className="h-4 w-24 rounded bg-slate-200" /></td>
+                    <td className="whitespace-nowrap px-4 py-4 border-b border-slate-100"><div className="h-4 w-16 rounded bg-slate-200" /></td>
+                    <td className="whitespace-nowrap px-4 py-4 border-b border-slate-100 text-right"><div className="h-4 w-16 rounded bg-slate-200 inline-block" /></td>
+                    <td className="whitespace-nowrap px-4 py-4 border-b border-slate-100 text-right"><div className="h-4 w-14 rounded bg-slate-200 inline-block" /></td>
+                    <td className="whitespace-nowrap px-4 py-4 border-b border-slate-100 text-right"><div className="h-4 w-16 rounded bg-slate-200 inline-block" /></td>
+                    <td className="whitespace-nowrap px-4 py-4 border-b border-slate-100"><div className="h-4 w-20 rounded bg-slate-200" /></td>
+                    <td className="whitespace-nowrap px-4 py-4 border-b border-slate-100"><div className="h-4 w-24 rounded bg-slate-200" /></td>
+                    <td className="whitespace-nowrap px-4 py-4 border-b border-slate-100"><div className="h-4 w-32 rounded bg-slate-200" /></td>
+                    <td className="whitespace-nowrap px-4 py-4 border-b border-slate-100 text-center"><div className="h-4 w-20 rounded bg-slate-200 inline-block" /></td>
                   </tr>
                 ))
               : null}
 
             {showEmpty ? (
               <tr>
-                <td colSpan={4} className="p-5 text-center text-sm text-slate-500">
+                <td colSpan={4} className="px-4 py-8 text-center text-sm text-slate-500">
                   No hay inventario disponible en la base externa.
                 </td>
               </tr>
@@ -118,32 +133,37 @@ export default function ListadoCargue({ items, loading, error, onRetry }: Props)
 
             {!loading && !showEmpty
               ? pageItems.map((d) => (
-                  <tr key={d.id} className="hover:bg-slate-50 transition-colors">
-                    <td className="p-4 border-b border-slate-50 text-slate-700 tabular-nums">{d.rd ?? "—"}</td>
-                    <td className="p-4 border-b border-slate-50 text-slate-700 tabular-nums">{d.renglon ?? "—"}</td>
-                    <td className="p-4 border-b border-slate-50 font-bold text-slate-900">{d.lote}</td>              
-                    <td className="p-4 border-b border-slate-50">
-                      <span className="px-3 py-1 bg-slate-100 text-slate-700 rounded-lg font-semibold text-[12px]">
+                  <tr key={d.id} className="hover:bg-slate-50/80 transition-colors">
+                    <td className="whitespace-nowrap px-4 py-4 border-b border-slate-100 text-slate-700 tabular-nums">{d.rd ?? "—"}</td>
+                    <td className="whitespace-nowrap px-4 py-4 border-b border-slate-100 text-slate-700 tabular-nums">{d.renglon ?? "—"}</td>
+                    <td className="whitespace-nowrap px-4 py-4 border-b border-slate-100 font-bold text-slate-900">{d.lote}</td>
+                    <td
+                      className="whitespace-nowrap px-4 py-4 border-b border-slate-100"
+                      title={d.descripcion}
+                    >
+                      <span className="inline-block rounded-lg bg-slate-100 px-3 py-1.5 font-semibold text-[13px] text-slate-700">
                         {d.descripcion}
                       </span>
                     </td>
-                    <td className="p-4 border-b border-slate-50 text-slate-700">{d.marca || ""}</td>
-                    <td className="p-4 border-b border-slate-50 text-slate-700">{d.embalaje || ""}</td>
-                    <td className="p-4 border-b border-slate-50 text-right tabular-nums">
+                    <td className="whitespace-nowrap px-4 py-4 border-b border-slate-100 text-slate-700">{d.marca || ""}</td>
+                    <td className="whitespace-nowrap px-4 py-4 border-b border-slate-100 text-slate-700">{d.embalaje || ""}</td>
+                    <td className="whitespace-nowrap px-4 py-4 border-b border-slate-100 text-right tabular-nums">
                       {d.pesoUnitario !== null ? `${numberFormatter.format(d.pesoUnitario)} Kg` : "—"}
                     </td>
-                    <td className="p-4 border-b border-slate-50 text-right tabular-nums">
+                    <td className="whitespace-nowrap px-4 py-4 border-b border-slate-100 text-right tabular-nums">
                       {d.piezas !== null ? numberFormatter.format(d.piezas) : "—"}
                     </td>
-                    <td className="p-4 border-b border-slate-50 text-right font-bold text-slate-900 tabular-nums">
+                    <td className="whitespace-nowrap px-4 py-4 border-b border-slate-100 text-right font-bold text-slate-900 tabular-nums">
                       {numberFormatter.format(d.kilosActual ?? d.kilos)} Kg
                     </td>
-                    <td className="p-4 border-b border-slate-50 text-slate-700">{d.caducidad || ""}</td>
-                    <td className="p-4 border-b border-slate-50 text-slate-700">{d.fechaIngreso || ""}</td>
-                    <td className="p-4 border-b border-slate-50 text-slate-700 break-all">{d.llaveUnica ?? ""}</td>
-                    <td className="p-4 border-b border-slate-50 text-center">
-                      <div className="flex justify-center items-center gap-2 font-medium">
-                        <span className="w-2 h-2 rounded-full bg-[#A8D5BA]"></span>
+                    <td className="whitespace-nowrap px-4 py-4 border-b border-slate-100 text-slate-700">{d.caducidad || ""}</td>
+                    <td className="whitespace-nowrap px-4 py-4 border-b border-slate-100 text-slate-700">{d.fechaIngreso || ""}</td>
+                    <td className="whitespace-nowrap px-4 py-4 border-b border-slate-100 text-slate-700" title={d.llaveUnica ?? undefined}>
+                      {d.llaveUnica ?? ""}
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-4 border-b border-slate-100 text-center">
+                      <div className="flex items-center justify-center gap-2 font-medium">
+                        <span className="h-2 w-2 shrink-0 rounded-full bg-[#A8D5BA]" aria-hidden />
                         {d.estado}
                       </div>
                     </td>
@@ -153,13 +173,13 @@ export default function ListadoCargue({ items, loading, error, onRetry }: Props)
           </tbody>
           <tfoot className="bg-slate-50/50">
             <tr>
-              <td colSpan={9} className="p-5 text-sm font-bold text-slate-900 text-right uppercase tracking-wider">
+              <td colSpan={9} className="px-4 py-5 text-sm font-bold text-slate-900 text-right uppercase tracking-wider">
                 Total Inventario
               </td>
-              <td className="p-5 text-[18px] font-bold text-slate-950 text-right border-l border-slate-100 bg-white tabular-nums">
+              <td className="px-4 py-5 text-[18px] font-bold text-slate-950 text-right border-l border-slate-200 bg-white tabular-nums">
                 {numberFormatter.format(totalKg)} Kg
               </td>
-              <td colSpan={3} className="p-5 bg-white border-l border-slate-100"></td>
+              <td colSpan={3} className="px-4 py-5 bg-white border-l border-slate-200"></td>
             </tr>
           </tfoot>
         </table>

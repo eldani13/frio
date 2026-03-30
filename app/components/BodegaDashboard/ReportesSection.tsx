@@ -128,22 +128,22 @@ const ReportesSection: React.FC<ReportesSectionProps> = ({
     void OrdenCompraService.getAll(idCliente, codeCuenta).then(setOrdenesCompra);
   }, [idCliente, codeCuenta]);
 
-  // Menú principal cliente: Reportes, Catálogo, Asignaciones
+  // Menú principal cliente: Asignaciones, Catálogo, Reportes, Órdenes de compra
   if (isCliente && viewMode === null) {
     return (
       <section className="p-4 sm:p-8">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 max-w-6xl mx-auto">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 max-w-7xl mx-auto">
            {/* BOTÓN ASIGNACIONES */}
            <button
             type="button"
             onClick={() => setViewMode("asignaciones")}
-            className="group relative flex flex-col items-center justify-center gap-4 rounded-[2rem] bg-gradient-to-br from-[#d1ede0] to-[#b0d6c3] p-10 shadow-lg shadow-emerald-100/50 transition-all duration-300 hover:-translate-y-2 hover:shadow-2xl hover:shadow-emerald-200 active:scale-95 sm:col-span-2 lg:col-span-1"
+            className="group relative flex flex-col items-center justify-center gap-4 rounded-[2rem] bg-gradient-to-br from-[#d1ede0] to-[#b0d6c3] p-10 shadow-lg shadow-emerald-100/50 transition-all duration-300 hover:-translate-y-2 hover:shadow-2xl hover:shadow-emerald-200 active:scale-95"
           >
             <span className="flex h-20 w-20 items-center justify-center rounded-2xl bg-white/60 text-emerald-700 shadow-inner group-hover:scale-110 transition-transform duration-300">
               <BiUserCheck size={40} />
             </span>
             <div className="text-center">
-              <h3 className="text-2xl font-black text-slate-800 tracking-tight">Asignaciones</h3>              
+              <h3 className="text-2xl font-black text-slate-800 tracking-tight">Asignacion y Creacion</h3>              
             </div>
           </button>       
 
@@ -175,12 +175,26 @@ const ReportesSection: React.FC<ReportesSectionProps> = ({
             </div>
           </button>
 
+          {/* BOTÓN ÓRDENES DE COMPRA */}
+          <button
+            type="button"
+            onClick={() => setViewMode("ordenesCompra")}
+            className="group relative flex flex-col items-center justify-center gap-4 rounded-[2rem] bg-gradient-to-br from-[#ebe4f5] to-[#d4c4eb] p-10 shadow-lg shadow-violet-100/50 transition-all duration-300 hover:-translate-y-2 hover:shadow-2xl hover:shadow-violet-200/80 active:scale-95"
+          >
+            <span className="flex h-20 w-20 items-center justify-center rounded-2xl bg-white/60 text-violet-800 shadow-inner group-hover:scale-110 transition-transform duration-300">
+              <MdAssignment size={40} />
+            </span>
+            <div className="text-center">
+              <h3 className="text-2xl font-black text-slate-800 tracking-tight">Órdenes de compra</h3>
+            </div>
+          </button>
+
         </div>
       </section>
     );
   }
 
-  // Submenú Asignaciones (cliente)
+  // Submenú Asignaciones (cliente): Creación vs Asignaciones
   if (isCliente && viewMode === "asignaciones") {
     return (
       <section className="rounded-2xl bg-white p-8 shadow-sm border border-slate-200">
@@ -193,104 +207,105 @@ const ReportesSection: React.FC<ReportesSectionProps> = ({
             <HiOutlineArrowLeft size={18} />
             Volver al menú
           </button>
-          <div className="flex flex-col gap-3">
-            <button
-              type="button"
-              onClick={() => setViewMode("proveedores")}
-              className="group w-full rounded-2xl bg-[#e2d5f3] p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md flex items-center justify-between cursor-pointer active:scale-95"
-            >
-              <div className="flex items-center gap-4">
-                <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-white/50 text-slate-800 shadow-sm">
-                  <MdBusiness size={24} />
-                </span>
-                <p className="text-lg font-bold text-slate-900">Proveedores</p>
-              </div>
-              <HiOutlineArrowRight size={18} className="text-slate-500 group-hover:translate-x-1 transition-transform" />
-            </button>
 
-            <button
-              type="button"
-              onClick={() => setViewMode("compradores")}
-              className="group w-full rounded-2xl bg-[#d1f2fb] p-4 transition-all hover:-translate-y-0.5 hover:shadow-md flex items-center justify-between cursor-pointer active:scale-95"
-            >
-              <div className="flex items-center gap-4">
-                <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-white/40 text-slate-800 shadow-sm">
-                  <MdShoppingCart size={24} />
-                </span>
-                <p className="text-lg font-bold text-slate-900">Compradores</p>
-              </div>
-              <HiOutlineArrowRight size={20} className="text-slate-500 group-hover:translate-x-1 transition-transform" />
-            </button>
+          <div className="flex flex-col gap-10">
+            <div className="flex flex-col gap-3">
+              <h2 className="text-xs font-bold uppercase tracking-widest text-slate-500 pl-1">
+                Creación
+              </h2>
+              <div className="flex flex-col gap-3">
+                <button
+                  type="button"
+                  onClick={() => setViewMode("proveedores")}
+                  className="group w-full rounded-2xl bg-[#e2d5f3] p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md flex items-center justify-between cursor-pointer active:scale-95"
+                >
+                  <div className="flex items-center gap-4">
+                    <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-white/50 text-slate-800 shadow-sm">
+                      <MdBusiness size={24} />
+                    </span>
+                    <p className="text-lg font-bold text-slate-900">Proveedores</p>
+                  </div>
+                  <HiOutlineArrowRight size={18} className="text-slate-500 group-hover:translate-x-1 transition-transform" />
+                </button>
 
-            <button
-              type="button"
-              onClick={() => setViewMode("ordenesCompra")}
-              className="group w-full rounded-2xl bg-[#e8dff5] p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md flex items-center justify-between cursor-pointer active:scale-95"
-            >
-              <div className="flex items-center gap-4">
-                <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-white/50 text-violet-900 shadow-sm">
-                  <MdAssignment size={24} />
-                </span>
-                <p className="text-lg font-bold text-slate-900">Órdenes de Compras</p>
-              </div>
-              <HiOutlineArrowRight size={18} className="text-slate-500 group-hover:translate-x-1 transition-transform" />
-            </button>
+                <button
+                  type="button"
+                  onClick={() => setViewMode("compradores")}
+                  className="group w-full rounded-2xl bg-[#d1f2fb] p-4 transition-all hover:-translate-y-0.5 hover:shadow-md flex items-center justify-between cursor-pointer active:scale-95"
+                >
+                  <div className="flex items-center gap-4">
+                    <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-white/40 text-slate-800 shadow-sm">
+                      <MdShoppingCart size={24} />
+                    </span>
+                    <p className="text-lg font-bold text-slate-900">Compradores</p>
+                  </div>
+                  <HiOutlineArrowRight size={20} className="text-slate-500 group-hover:translate-x-1 transition-transform" />
+                </button>
 
-            <button
-              type="button"
-              onClick={() => setViewMode("asignarBodegasInterna")}
-              className="group w-full rounded-2xl bg-[#b0d6c3] p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md flex items-center justify-between cursor-pointer active:scale-95"
-            >
-              <div className="flex items-center gap-4">
-                <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-white/50 text-slate-800 shadow-sm">
-                  <BiUserCheck size={24} />
-                </span>
-                <p className="text-lg font-bold text-slate-900">Bodega interna</p>
-              </div>
-              <HiOutlineArrowRight size={18} className="text-slate-500 group-hover:translate-x-1 transition-transform" />
-            </button>
+                <button
+                  type="button"
+                  onClick={() => setViewMode("camiones")}
+                  className="group w-full rounded-2xl bg-[#d1f2fb] p-4 transition-all hover:-translate-y-0.5 hover:shadow-md flex items-center justify-between cursor-pointer active:scale-95"
+                >
+                  <div className="flex items-center gap-4">
+                    <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-white/40 text-slate-800 shadow-sm">
+                      <HiOutlineTruck size={24} />
+                    </span>
+                    <p className="text-lg font-bold text-slate-900">Camiones</p>
+                  </div>
+                  <HiOutlineArrowRight size={20} className="text-slate-500 group-hover:translate-x-1 transition-transform" />
+                </button>
 
-            <button
-              type="button"
-              onClick={() => setViewMode("asignarBodegasExterna")}
-              className="group w-full rounded-2xl bg-[#b0d6c3] p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md flex items-center justify-between cursor-pointer active:scale-95"
-            >
-              <div className="flex items-center gap-4">
-                <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-white/50 text-slate-800 shadow-sm">
-                  <BiUserCheck size={24} />
-                </span>
-                <p className="text-lg font-bold text-slate-900">Bodega externa</p>
+                <button
+                  type="button"
+                  onClick={() => setViewMode("plantas")}
+                  className="group w-full rounded-2xl bg-[#e2d5f3] p-4 transition-all hover:-translate-y-0.5 hover:shadow-md flex items-center justify-between cursor-pointer active:scale-95"
+                >
+                  <div className="flex items-center gap-4">
+                    <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-white/40 text-slate-800 shadow-sm">
+                      <MdFactory size={24} />
+                    </span>
+                    <p className="text-lg font-bold text-slate-900">Plantas</p>
+                  </div>
+                  <HiOutlineArrowRight size={20} className="text-slate-500 group-hover:translate-x-1 transition-transform" />
+                </button>
               </div>
-              <HiOutlineArrowRight size={18} className="text-slate-500 group-hover:translate-x-1 transition-transform" />
-            </button>
+            </div>
 
-            <button
-              type="button"
-              onClick={() => setViewMode("camiones")}
-              className="group w-full rounded-2xl bg-[#d1f2fb] p-4 transition-all hover:-translate-y-0.5 hover:shadow-md flex items-center justify-between cursor-pointer active:scale-95"
-            >
-              <div className="flex items-center gap-4">
-                <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-white/40 text-slate-800 shadow-sm">
-                  <HiOutlineTruck size={24} />
-                </span>
-                <p className="text-lg font-bold text-slate-900">Camiones</p>
-              </div>
-              <HiOutlineArrowRight size={20} className="text-slate-500 group-hover:translate-x-1 transition-transform" />
-            </button>
+            <div className="flex flex-col gap-3 border-t border-slate-200 pt-10">
+              <h2 className="text-xs font-bold uppercase tracking-widest text-slate-500 pl-1">
+                Asignaciones
+              </h2>
+              <div className="flex flex-col gap-3">
+                <button
+                  type="button"
+                  onClick={() => setViewMode("asignarBodegasInterna")}
+                  className="group w-full rounded-2xl bg-[#b0d6c3] p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md flex items-center justify-between cursor-pointer active:scale-95"
+                >
+                  <div className="flex items-center gap-4">
+                    <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-white/50 text-slate-800 shadow-sm">
+                      <BiUserCheck size={24} />
+                    </span>
+                    <p className="text-lg font-bold text-slate-900">Bodega interna</p>
+                  </div>
+                  <HiOutlineArrowRight size={18} className="text-slate-500 group-hover:translate-x-1 transition-transform" />
+                </button>
 
-            <button
-              type="button"
-              onClick={() => setViewMode("plantas")}
-              className="group w-full rounded-2xl bg-[#e2d5f3] p-4 transition-all hover:-translate-y-0.5 hover:shadow-md flex items-center justify-between cursor-pointer active:scale-95"
-            >
-              <div className="flex items-center gap-4">
-                <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-white/40 text-slate-800 shadow-sm">
-                  <MdFactory size={24} />
-                </span>
-                <p className="text-lg font-bold text-slate-900">Plantas</p>
+                <button
+                  type="button"
+                  onClick={() => setViewMode("asignarBodegasExterna")}
+                  className="group w-full rounded-2xl bg-[#b0d6c3] p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md flex items-center justify-between cursor-pointer active:scale-95"
+                >
+                  <div className="flex items-center gap-4">
+                    <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-white/50 text-slate-800 shadow-sm">
+                      <BiUserCheck size={24} />
+                    </span>
+                    <p className="text-lg font-bold text-slate-900">Bodega externa</p>
+                  </div>
+                  <HiOutlineArrowRight size={18} className="text-slate-500 group-hover:translate-x-1 transition-transform" />
+                </button>
               </div>
-              <HiOutlineArrowRight size={20} className="text-slate-500 group-hover:translate-x-1 transition-transform" />
-            </button>
+            </div>
           </div>
         </div>
       </section>
@@ -306,12 +321,12 @@ const ReportesSection: React.FC<ReportesSectionProps> = ({
             type="button"
             onClick={() => {
               setOrdenCompraModalOpen(false);
-              setViewMode("asignaciones");
+              setViewMode(null);
             }}
             className="self-start flex items-center gap-2 text-sm font-semibold text-slate-600 hover:text-slate-900 transition-colors"
           >
             <HiOutlineArrowLeft size={18} />
-            Volver a Asignaciones
+            Volver al menú
           </button>
 
           <header className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">

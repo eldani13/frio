@@ -13,24 +13,24 @@ export default function ProveedoresPage() {
         <h1 className="text-2xl font-bold text-slate-800">Proveedores</h1>
         
         <div className="flex gap-2 bg-slate-100 p-1 rounded-xl shadow-inner">
-          {/* Botón CARGUE (Principal / Izquierda) */}
+          {/* Listado (principal / izquierda) */}
           <button 
             onClick={() => setView("CA")}
             className={`px-4 py-2 rounded-lg font-bold transition-all ${
               view === "CA" ? "bg-white shadow text-blue-600" : "text-slate-500 hover:text-slate-700"
             }`}
           >
-            CARGUE
+            Listado
           </button>
 
-          {/* Botón OPERACIÓN (Secundario / Derecha) */}
+          {/* Grafico (secundario / derecha) */}
           <button 
             onClick={() => setView("OP")}
             className={`px-4 py-2 rounded-lg font-bold transition-all ${
               view === "OP" ? "bg-white shadow text-blue-600" : "text-slate-500 hover:text-slate-700"
             }`}
           >
-            OPERACIÓN
+            Grafico
           </button>
         </div>
       </div>
