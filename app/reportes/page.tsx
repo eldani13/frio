@@ -159,8 +159,7 @@ const ReportesSection = () => {
   };
 
   const modulos = [
-    { id: "PROVEEDOR", label: "Proveedor", value: "0 Kg)", icon: <MdBusiness size={28} />, color: "bg-white" },
-    { id: "COMPRADOR", label: "Ventas", value: "(0 Kg)", icon: <MdShoppingCart size={28} />, color: "bg-white" },
+    { id: "PROVEEDOR", label: "Proveedor", value: "(0 Kg)", icon: <MdBusiness size={28} />, color: "bg-white" },
     { id: "TRANSPORTE", label: "Transporte", value: "(0 Kg)", icon: <HiOutlineTruck size={28} />, color: "bg-white" },
     { id: "BODEGA_INT", label: "Bodega interna", value: "(0 Kg)", icon: <BiPackage size={28} />, color: "bg-white" },
     {
@@ -173,6 +172,7 @@ const ReportesSection = () => {
       icon: <MdFactory size={28} />,
       color: "bg-white",
     },
+    { id: "COMPRADOR", label: "Ventas", value: "(0 Kg)", icon: <MdShoppingCart size={28} />, color: "bg-white" },
   ];
 
   if (!activeModule) {

@@ -1,315 +1,414 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React from "react";
+import { Inter } from "next/font/google";
 import {
-  MdBarChart,
-  MdMoveToInbox,
-  MdLogout,
-  MdInbox,
-  MdLocalShipping,
-  MdClose,
+  MdShoppingBag,
+  MdInventory2,
+  MdShowChart,
+  MdCalendarMonth,
 } from "react-icons/md";
-import { IoAlert } from "react-icons/io5";
 import {
   Bar,
   BarChart,
   CartesianGrid,
   Cell,
+  Line,
+  LineChart,
   Pie,
   PieChart,
   ResponsiveContainer,
-  Tooltip,
   XAxis,
   YAxis,
 } from "recharts";
-import { useBodegaHistory } from "@/app/components/BodegaDashboard/BodegaHistoryContext";
-import type { Box, BodegaOrder, Slot } from "@/app/interfaces/bodega";
 
-const Operacion: React.FC = () => {
-  // 1. DATA SOURCE: Obtenemos el historial real del contexto
-  const { ingresos, salidas, movimientosBodega, alertas } = useBodegaHistory();
+const inter = Inter({ subsets: ["latin"], weight: ["400", "600", "700"] });
 
-  // 2. ESTADOS LOCALES
-  const [activeClientId, setActiveClientId] = useState("cliente1");
-  const [selectedBoxId, setSelectedBoxId] = useState("");
-  const [viewMode, setViewMode] = useState<string | null>("reporte");
-  const [reportDetailModal, setReportDetailModal] = useState<{
-    type: "ingresos" | "salidas" | "movimientos" | "despachados" | "alertas";
-  } | null>(null);
+/** Datos estáticos solo para maquetar el diseño (sin lógica de negocio). */
+const TOP5_PRODUCTOS = [
+  { name: "HAMBURGUESA DE CARNE DE RES 70...", kg: 5600 },
+  { name: "BBASHOF FROZEN-HIGH CHOICE BEE", kg: 4200 },
+  { name: "RIBEYE PREMIUM IMPORTADO", kg: 3100 },
+  { name: "COSTILLA AHUMADA BBQ", kg: 2400 },
+  { name: "PULLED PORK CONGELADO", kg: 1800 },
+];
 
-  // 3. DATOS DE SOPORTE INTERNOS (Arrays vacíos por defecto para evitar errores de undefined)
-  const inboundBoxes: Box[] = [];
-  const outboundBoxes: Box[] = [];
-  const dispatchedBoxes: Box[] = [];
-  const slots: Slot[] = [];
+const DISTRIBUCION_CATEGORIA = [
+  { name: "Otros", value: 38, fill: "#93C5FD" },
+  { name: "Tomahawk", value: 16, fill: "#86BC8E" },
+  { name: "Chuck", value: 14, fill: "#6B9E72" },
+  { name: "Hamburguesas", value: 9, fill: "#F9C8D2" },
+  { name: "Steaks Premium", value: 8, fill: "#FDE68A" },
+  { name: "Short Loin", value: 5, fill: "#D1D5DB" },
+  { name: "Pollo", value: 6, fill: "#E8DCC8" },
+  { name: "Cortadillo", value: 4, fill: "#C4B5FD" },
+];
 
-  const sortByPosition = <T extends { position: number }>(items: T[]) =>
-    [...items].sort((a, b) => a.position - b.position);
+const EVOLUCION_MENSUAL = [
+  { mes: "Ene", kg: 7200 },
+  { mes: "Feb", kg: 9100 },
+  { mes: "Mar", kg: 7800 },
+];
 
-  const clientOptions = ["cliente1", "cliente2", "cliente3"];
+const COLORS = {
+  text: "#1A1C1E",
+  muted: "#6B7280",
+  greenBg: "#F0FAF0",
+  greenBorder: "#4ADE80",
+  greenSub: "#166534",
+  blueBg: "#EFF6FF",
+  blueBorder: "#60A5FA",
+  blueSub: "#1E40AF",
+  yellowBg: "#FFFBEB",
+  yellowBorder: "#FDE047",
+  yellowSub: "#854D0E",
+  barGreen: "#A7D0B3",
+  lineBlue: "#A0C4FF",
+  lineDotStroke: "#60A5FA",
+  grid: "#E5E7EB",
+} as const;
 
-  // 4. LÓGICA DE FILTRADO
-  const clientBoxes = useMemo(() => {
-    if (!activeClientId) return [];
-    const candidates = [...inboundBoxes, ...outboundBoxes, ...dispatchedBoxes, ...slots];
-    const seen = new Set<string>();
-    return candidates
-      .filter((item) => item.client === activeClientId)
-      .map((item) => ({
-        value: item.autoId || `pos-${item.position}`,
-        label: `${item.autoId ?? `Pos ${item.position}`}${item.name ? ` · ${item.name}` : ""}`,
-      }))
-      .filter((item) => {
-        if (!item.value || seen.has(item.value)) return false;
-        seen.add(item.value);
-        return true;
-      });
-  }, [activeClientId, inboundBoxes, outboundBoxes, dispatchedBoxes, slots]);
+type Accent = "green" | "blue" | "yellow" | "neutral";
 
-  const clientAutoIds = useMemo(() => {
-    const ids = new Set<string>();
-    [inboundBoxes, outboundBoxes, dispatchedBoxes, slots].forEach((list) => {
-      list.forEach((item) => {
-        if (item.client === activeClientId && item.autoId) ids.add(item.autoId);
-      });
-    });
-    return ids;
-  }, [activeClientId, inboundBoxes, outboundBoxes, dispatchedBoxes, slots]);
-
-  // 5. FILTRADO DE DATOS REALES
-  const filteredIngresos = useMemo(() =>
-    ingresos.filter(b => b.client === activeClientId), [ingresos, activeClientId]);
-
-  const filteredSalidas = useMemo(() =>
-    salidas.filter(o => o.client === activeClientId), [salidas, activeClientId]);
-
-  const filteredMovimientos = useMemo(() =>
-    movimientosBodega.filter(o => o.client === activeClientId), [movimientosBodega, activeClientId]);
-
-  const filteredAlerts = useMemo(() => {
-    return alertas.filter((alert) => {
-      const haystack = `${alert.id} ${alert.description ?? ""} ${alert.meta ?? ""}`.toLowerCase();
-      // Si no hay IDs de cliente específicos, mostramos todas (o ajusta según tu lógica)
-      if (clientAutoIds.size === 0) return true;
-      return Array.from(clientAutoIds).some(id => haystack.includes(id.toLowerCase()));
-    });
-  }, [alertas, clientAutoIds]);
-
-  // 6. RECONSTRUCCIÓN DE DATA PARA GRÁFICAS
-  const reportData = useMemo(() => [
-    { name: "Ingresos", value: filteredIngresos.length, fill: "#10B981" },
-    { name: "Salidas", value: filteredSalidas.length, fill: "#F43F5E" },
-    { name: "Movimientos", value: filteredMovimientos.length, fill: "#3B82F6" },
-    { name: "Despachados", value: dispatchedBoxes.filter(b => b.client === activeClientId).length, fill: "#64748B" },
-    { name: "Alertas", value: filteredAlerts.length, fill: "#EF4444" },
-  ], [filteredIngresos, filteredSalidas, filteredMovimientos, dispatchedBoxes, filteredAlerts, activeClientId]);
-
-  const pieData = useMemo(() => reportData.filter((item) => item.value > 0), [reportData]);
-
-  const renderPieLabel = ({ name, percent }: any) => `${name.substring(0, 4)} ${(percent * 100).toFixed(0)}%`;
+function KpiCard({
+  accent,
+  icon,
+  label,
+  value,
+  sublabel,
+}: {
+  accent: Accent;
+  icon: React.ReactNode;
+  label: string;
+  value: string;
+  sublabel: string;
+}) {
+  const styles =
+    accent === "green"
+      ? {
+          wrap: "border-[#BBF7D0] bg-[#F0FAF0]",
+          iconBox: "bg-[#4ADE80] text-white",
+          sub: "text-[#166534]",
+        }
+      : accent === "blue"
+        ? {
+            wrap: "border-[#BFDBFE] bg-[#EFF6FF]",
+            iconBox: "bg-[#60A5FA] text-white",
+            sub: "text-[#1E40AF]",
+          }
+        : accent === "yellow"
+          ? {
+              wrap: "border-[#FEF08A] bg-[#FFFBEB]",
+              iconBox: "bg-[#FDE047] text-[#1A1C1E]",
+              sub: "text-[#854D0E]",
+            }
+          : {
+              wrap: "border-[#E5E7EB] bg-[#F9FAFB]",
+              iconBox: "bg-[#9CA3AF] text-white",
+              sub: "text-[#6B7280]",
+            };
 
   return (
-    <div className="flex flex-col gap-6 w-full animate-fade-in p-4 bg-white">
-
-      {/* ================= ENCABEZADO ================= */}
-      <div className="flex flex-wrap items-center justify-between gap-3 bg-white p-4 rounded-3xl border border-slate-100 shadow-sm">
-        <div>
-          <h2 className="text-xl font-bold text-slate-900">Reportes</h2>
-         
+    <div
+      className={`flex flex-col gap-3 rounded-[12px] border px-5 py-5 ${styles.wrap}`}
+    >
+      <div className="flex items-start gap-3">
+        <div
+          className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-lg ${styles.iconBox}`}
+        >
+          {icon}
         </div>
-
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2 bg-slate-100/80 p-1.5 rounded-2xl border border-slate-200">
-            <div className="flex items-center gap-2 bg-white px-3 py-1.5 rounded-xl shadow-sm">
-              <span className="text-[10px] font-black uppercase text-slate-400 border-r pr-2">Cliente</span>
-              <select
-                value={activeClientId}
-                onChange={(e) => setActiveClientId(e.target.value)}
-                className="bg-transparent text-sm font-bold text-slate-800 focus:outline-none min-w-[120px]"
-              >
-                {clientOptions.map((opt) => (
-                  <option key={opt} value={opt}>{opt.replace("cliente", "Cliente ")}</option>
-                ))}
-              </select>
-            </div>
-
-            <div className="flex items-center gap-2 bg-white px-3 py-1.5 rounded-xl shadow-sm">
-              <span className="text-[10px] font-black uppercase text-slate-400 border-r pr-2">Caja</span>
-              <select
-                value={selectedBoxId}
-                onChange={(e) => setSelectedBoxId(e.target.value)}
-                className="bg-transparent text-sm font-bold text-slate-800 focus:outline-none min-w-[140px]"
-              >
-                <option value="">Seleccionar...</option>
-                {clientBoxes.map((box) => (
-                  <option key={box.value} value={box.value}>{box.label}</option>
-                ))}
-              </select>
-            </div>
-          </div>
+        <div className="min-w-0 flex-1 pt-0.5">
+          <p
+            className="text-sm font-normal leading-tight"
+            style={{ color: COLORS.muted }}
+          >
+            {label}
+          </p>
+          <p
+            className="mt-1 text-[28px] font-bold leading-none tracking-tight"
+            style={{ color: COLORS.text }}
+          >
+            {value}
+          </p>
+          <p className={`mt-1.5 text-sm font-medium ${styles.sub}`}>
+            {sublabel}
+          </p>
         </div>
       </div>
+    </div>
+  );
+}
 
-      {/* ================= GRÁFICAS ================= */}
-      <div className="mt-6 grid gap-8 lg:grid-cols-[1.4fr_1fr]">
-        <div className="rounded-3xl border border-slate-200 bg-linear-to-br from-slate-50 to-white p-6 shadow-sm flex flex-col">
-          <div className="flex items-center justify-between mb-2">
-            <h3 className="text-base font-bold text-slate-800 flex items-center gap-2">
-              <MdBarChart size={20} className="text-blue-500" /> Totales por tipo
-            </h3>
-            <span className="text-xs text-slate-400 font-bold uppercase">Barras</span>
-          </div>
-          <div className="flex-1 min-h-[220px]">
-            <ResponsiveContainer width="100%" height={220}>
-              <BarChart data={reportData} barSize={32}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E7EB" />
-                <XAxis dataKey="name" tick={{ fontSize: 12, fill: "#64748b", fontWeight: 500 }} axisLine={false} tickLine={false} />
-                <YAxis allowDecimals={false} tick={{ fontSize: 12, fill: "#64748b", fontWeight: 500 }} axisLine={false} tickLine={false} />
-                <Tooltip contentStyle={{ borderRadius: 12, border: "none", boxShadow: "0 4px 12px rgba(0,0,0,0.1)" }} />
-                <Bar dataKey="value" radius={[8, 8, 0, 0]}>
-                  {reportData.map((entry, index) => <Cell key={index} fill={entry.fill} />)}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
+function PieLabel(props: {
+  cx?: number;
+  cy?: number;
+  midAngle?: number;
+  innerRadius?: number;
+  outerRadius?: number;
+  name?: string;
+  fill?: string;
+}) {
+  const {
+    cx = 0,
+    cy = 0,
+    midAngle = 0,
+    innerRadius = 0,
+    outerRadius = 0,
+    name = "",
+    fill = "#000",
+  } = props;
+  const RADIAN = Math.PI / 180;
+  const radius = innerRadius + (outerRadius - innerRadius) * 1.22;
+  const x = cx + radius * Math.cos(-midAngle * RADIAN);
+  const y = cy + radius * Math.sin(-midAngle * RADIAN);
+  const anchor = x > cx ? "start" : "end";
+  return (
+    <text
+      x={x}
+      y={y}
+      fill={fill}
+      textAnchor={anchor}
+      dominantBaseline="central"
+      className="text-[11px] font-medium"
+      style={{ fontFamily: inter.style.fontFamily }}
+    >
+      {name}
+    </text>
+  );
+}
+
+const Operacion: React.FC = () => {
+  return (
+    <div
+      className={`${inter.className} w-full bg-white px-6 py-8`}
+      style={{ color: COLORS.text }}
+    >
+      {/* —— Inventario Actual (2026) —— */}
+      <section className="mb-10">
+        <h2
+          className="mb-6 text-lg font-bold tracking-tight"
+          style={{ color: COLORS.text }}
+        >
+          Inventario Actual (2026)
+        </h2>
+
+        <div className="mb-8 grid gap-4 sm:grid-cols-3">
+          <KpiCard
+            accent="green"
+            icon={<MdShoppingBag className="h-5 w-5" aria-hidden />}
+            label="Total Kilogramos"
+            value="8.215"
+            sublabel="kg en bodega"
+          />
+          <KpiCard
+            accent="blue"
+            icon={<MdInventory2 className="h-5 w-5" aria-hidden />}
+            label="Total Piezas"
+            value="323"
+            sublabel="unidades"
+          />
+          <KpiCard
+            accent="yellow"
+            icon={<MdShowChart className="h-5 w-5" aria-hidden />}
+            label="Productos (SKUs)"
+            value="10"
+            sublabel="variedades"
+          />
         </div>
 
-        <div className="rounded-3xl border border-slate-200 bg-linear-to-br from-slate-50 to-white p-6 shadow-sm flex flex-col">
-          <div className="flex items-center justify-between mb-2">
-            <h3 className="text-base font-bold text-slate-800 flex items-center gap-2">
-              <div className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" /> Distribución
+        <div className="grid gap-6 lg:grid-cols-2">
+          <div className="rounded-[12px] border border-[#E5E7EB] bg-white px-5 py-5">
+            <h3
+              className="mb-4 text-base font-bold tracking-tight"
+              style={{ color: COLORS.text }}
+            >
+              Top 5 Productos (2026)
             </h3>
-            <span className="text-xs text-slate-400 font-bold uppercase">Torta</span>
+            <div className="h-[280px] w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart
+                  data={TOP5_PRODUCTOS}
+                  margin={{ top: 8, right: 8, left: 0, bottom: 48 }}
+                  barCategoryGap="18%"
+                >
+                  <CartesianGrid
+                    strokeDasharray="2 4"
+                    vertical={false}
+                    stroke={COLORS.grid}
+                  />
+                  <XAxis
+                    dataKey="name"
+                    tick={{
+                      fontSize: 10,
+                      fill: COLORS.muted,
+                      fontWeight: 500,
+                    }}
+                    interval={0}
+                    tickFormatter={(v) => String(v).toUpperCase()}
+                    axisLine={false}
+                    tickLine={false}
+                    height={40}
+                  />
+                  <YAxis
+                    domain={[0, 6000]}
+                    ticks={[0, 1500, 3000, 4500, 6000]}
+                    tick={{
+                      fontSize: 11,
+                      fill: COLORS.muted,
+                      fontWeight: 500,
+                    }}
+                    axisLine={false}
+                    tickLine={false}
+                    width={44}
+                  />
+                  <Bar dataKey="kg" radius={[6, 6, 0, 0]} maxBarSize={48}>
+                    {TOP5_PRODUCTOS.map((_, i) => (
+                      <Cell key={i} fill={COLORS.barGreen} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
           </div>
-          <div className="flex-1 min-h-[220px]">
-            <ResponsiveContainer width="100%" height={220}>
-              <PieChart>
-                <Tooltip />
-                {pieData.length > 0 && (
+
+          <div className="rounded-[12px] border border-[#E5E7EB] bg-white px-5 py-5">
+            <h3
+              className="mb-2 text-base font-bold tracking-tight"
+              style={{ color: COLORS.text }}
+            >
+              Distribución por Categoría
+            </h3>
+            <div className="h-[300px] w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart margin={{ top: 16, right: 56, bottom: 16, left: 56 }}>
                   <Pie
-                    data={pieData}
+                    data={DISTRIBUCION_CATEGORIA}
                     dataKey="value"
                     nameKey="name"
-                    innerRadius={55}
-                    outerRadius={85}
-                    paddingAngle={3}
-                    label={renderPieLabel}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={0}
+                    outerRadius={88}
+                    paddingAngle={1}
+                    label={PieLabel}
                     labelLine={false}
                   >
-                    {pieData.map((entry, index) => <Cell key={index} fill={entry.fill} />)}
+                    {DISTRIBUCION_CATEGORIA.map((entry, i) => (
+                      <Cell key={i} fill={entry.fill} stroke="none" />
+                    ))}
                   </Pie>
-                )}
-              </PieChart>
-            </ResponsiveContainer>
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
           </div>
         </div>
-      </div>
+      </section>
 
-      {/* ================= BOTONES DE ACCIÓN (Métricas rápidas) ================= */}
-      <div className="mt-8 grid gap-4 sm:grid-cols-2 md:grid-cols-4">
-        <button
-          onClick={() => setReportDetailModal({ type: "ingresos" })}
-          className="rounded-2xl border border-slate-100 bg-white p-5 flex flex-col items-center hover:shadow-md transition w-full"
+      {/* —— Inventario Histórico (2025) —— */}
+      <section className="mb-10">
+        <h2
+          className="mb-6 text-lg font-bold tracking-tight"
+          style={{ color: COLORS.text }}
         >
-          <MdInbox size={32} className="text-green-500 mb-2" />
-          <span className="text-xs font-semibold uppercase text-slate-500">Ingresos</span>
-          <span className="mt-1 text-2xl font-bold text-slate-900">{filteredIngresos.length}</span>
-        </button>
-
-        <button
-          onClick={() => setReportDetailModal({ type: "salidas" })}
-          className="rounded-2xl border border-slate-100 bg-white p-5 flex flex-col items-center hover:shadow-md transition w-full"
-        >
-          <MdLogout size={32} className="text-pink-500 mb-2" />
-          <span className="text-xs font-semibold uppercase text-slate-500">Salidas</span>
-          <span className="mt-1 text-2xl font-bold text-slate-900">{filteredSalidas.length}</span>
-        </button>
-
-        <button
-          onClick={() => setReportDetailModal({ type: "movimientos" })}
-          className="rounded-2xl border border-slate-100 bg-white p-5 flex flex-col items-center hover:shadow-md transition w-full"
-        >
-          <MdMoveToInbox size={32} className="text-blue-500 mb-2" />
-          <span className="text-xs font-semibold uppercase text-slate-500">Movimientos</span>
-          <span className="mt-1 text-2xl font-bold text-slate-900">{filteredMovimientos.length}</span>
-        </button>
-
-        <button
-          onClick={() => setReportDetailModal({ type: "despachados" })}
-          className="rounded-2xl border border-slate-100 bg-white p-5 flex flex-col items-center hover:shadow-md transition w-full"
-        >
-          <MdLocalShipping size={32} className="text-gray-500 mb-2" />
-          <span className="text-xs font-semibold uppercase text-slate-500">Despachados</span>
-          <span className="mt-1 text-2xl font-bold text-slate-900">0</span>
-        </button>
-
-        <button
-          onClick={() => setReportDetailModal({ type: "alertas" })}
-          className="rounded-2xl border border-slate-100 bg-white p-5 flex flex-col items-center hover:shadow-md transition w-full col-span-full md:col-span-4"
-        >
-          <IoAlert size={32} className="text-red-500 mb-2" />
-          <span className="text-xs font-semibold uppercase text-slate-500">Alertas</span>
-          <span className="mt-1 text-2xl font-bold text-slate-900">{filteredAlerts.length}</span>
-        </button>
-      </div>
-
-    {/* ================= MODAL DE DETALLE CON ESTILO ORIGINAL ================= */}
-    {reportDetailModal && (
-    <div 
-        className="fixed inset-0 z-50 flex items-center justify-center backdrop-blur-sm animate-fade-in p-2 sm:p-4"
-        role="dialog"
-        aria-modal="true"
-        onClick={() => setReportDetailModal(null)}
-        style={{ background: "rgba(0,0,0,0.1)" }}
-    >
-        <div 
-        className="w-full max-w-2xl rounded-3xl shadow-2xl relative overflow-hidden animate-fade-in-up"
-        onClick={(e) => e.stopPropagation()}
-        style={{
-            fontFamily: '"Space Grotesk", "Work Sans", sans-serif',
-            background: "rgba(255,255,255,0.92)",
-            border: "1px solid #dbeafe",
-            backdropFilter: "blur(8px)",
-        }}
-        >
-        {/* Header con gradiente y botón cerrar flotante */}
-        <div 
-            className="flex flex-col items-center justify-center pt-8 pb-4 px-8 border-b border-blue-100 rounded-t-3xl relative"
-            style={{
-            background: "linear-gradient(90deg, #e0f2fe 0%, #ffffff 100%)",
-            }}
-        >
-            <span className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-blue-100 shadow mb-2">
-            <MdBarChart size={32} className="text-blue-500" />
-            </span>
-            <h3 className="text-2xl font-extrabold text-blue-700 drop-shadow mb-1 tracking-tight text-center">
-            {reportDetailModal.type === "ingresos" ? "Detalle de ingresos" :
-            reportDetailModal.type === "salidas" ? "Detalle de salidas" :
-            reportDetailModal.type === "movimientos" ? "Detalle de movimientos a bodega" :
-            reportDetailModal.type === "alertas" ? "Detalle de alertas" : "Detalle de despachados"}
-            </h3>
-            <button 
-            onClick={() => setReportDetailModal(null)} 
-            className="absolute top-4 right-4 text-slate-400 hover:text-blue-500 transition-colors"
-            >
-            <MdClose size={28} />
-            </button>
+          Inventario Histórico (2025)
+        </h2>
+        <div className="grid gap-4 sm:grid-cols-3">
+          <KpiCard
+            accent="neutral"
+            icon={<MdShoppingBag className="h-5 w-5" aria-hidden />}
+            label="Total Kilogramos"
+            value="8.697"
+            sublabel="kg históricos"
+          />
+          <KpiCard
+            accent="neutral"
+            icon={<MdInventory2 className="h-5 w-5" aria-hidden />}
+            label="Total Piezas"
+            value="1.141"
+            sublabel="unidades"
+          />
+          <KpiCard
+            accent="neutral"
+            icon={<MdCalendarMonth className="h-5 w-5" aria-hidden />}
+            label="Productos (SKUs)"
+            value="20"
+            sublabel="variedades"
+          />
         </div>
+      </section>
 
-        {/* Cuerpo del modal con fondo semitransparente y scroll personalizado */}
-        <div 
-            className="max-h-[60vh] overflow-y-auto px-8 py-6 flex flex-col items-center" 
-            style={{ background: "rgba(255,255,255,0.88)" }}
-        >
-            <div className="w-full">
-            {/* Aquí va el contenido dinámico (ul/li) según el tipo de modal */}
+      {/* —— Evolución Mensual 2026 —— */}
+      <section>
+        <div className="rounded-[12px] border border-[#E5E7EB] bg-white px-5 py-5">
+          <h3
+            className="mb-4 text-base font-bold tracking-tight"
+            style={{ color: COLORS.text }}
+          >
+            Evolución Mensual 2026
+          </h3>
+          <div className="h-[300px] w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart
+                data={EVOLUCION_MENSUAL}
+                margin={{ top: 8, right: 16, left: 0, bottom: 8 }}
+              >
+                <CartesianGrid
+                  strokeDasharray="2 4"
+                  vertical={false}
+                  stroke={COLORS.grid}
+                />
+                <XAxis
+                  dataKey="mes"
+                  tick={{
+                    fontSize: 12,
+                    fill: COLORS.muted,
+                    fontWeight: 500,
+                  }}
+                  axisLine={false}
+                  tickLine={false}
+                />
+                <YAxis
+                  domain={[0, 10000]}
+                  ticks={[0, 2500, 5000, 7500, 10000]}
+                  tick={{
+                    fontSize: 11,
+                    fill: COLORS.muted,
+                    fontWeight: 500,
+                  }}
+                  axisLine={false}
+                  tickLine={false}
+                  width={44}
+                />
+                <Line
+                  type="monotone"
+                  dataKey="kg"
+                  name="kg"
+                  stroke={COLORS.lineBlue}
+                  strokeWidth={2}
+                  dot={{
+                    r: 5,
+                    fill: COLORS.lineBlue,
+                    stroke: COLORS.lineDotStroke,
+                    strokeWidth: 2,
+                  }}
+                  activeDot={{ r: 6 }}
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+          <div className="mt-2 flex justify-center">
+            <div className="flex items-center gap-2 text-sm font-medium text-[#1E40AF]">
+              <span
+                className="inline-block h-2.5 w-2.5 rounded-full"
+                style={{ backgroundColor: COLORS.lineBlue }}
+                aria-hidden
+              />
+              kg
             </div>
+          </div>
         </div>
-        </div>
-    </div>
-)}
-      
-      
+      </section>
     </div>
   );
 };

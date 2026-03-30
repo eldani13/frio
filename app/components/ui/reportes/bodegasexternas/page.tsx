@@ -100,7 +100,7 @@ export default function BodegasExternasPage({ warehouseName, warehouseId, onTota
         {view === "CA" ? (
           <ListadoCargue items={items} loading={loading} error={error} onRetry={loadInventory} />
         ) : (
-          <Operacion totalKg={totalKg} loading={loading} itemCount={items.length} />
+          <Operacion items={items} loading={loading} error={error} />
         )}
       </div>
     </div>

@@ -4,6 +4,11 @@ import { ProviderService } from "@/app/services/providerService";
 import { Provider } from "@/app/types/provider";
 import { ProviderTable } from "@/app/components/ui/providers/ProviderTable";
 import { ProviderForm } from "@/app/components/ui/providers/ProviderForm";
+import {
+  ProviderOrdenesModal,
+  type ProveedorOrdenCompraRow,
+} from "@/app/components/ui/providers/ProviderOrdenesModal";
+import { OrdenCompraService } from "@/app/services/ordenCompraService";
 import { HiOutlinePlus, HiOutlineSquares2X2 } from "react-icons/hi2";
 import { useAuth } from "@/app/context/AuthContext";
 
@@ -11,6 +16,9 @@ export default function ProvidersPage() {
   const [providers, setProviders] = useState<Provider[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedProvider, setSelectedProvider] = useState<Provider | null>(null);
+  const [ordenesModalProvider, setOrdenesModalProvider] = useState<Provider | null>(null);
+  const [ordenesList, setOrdenesList] = useState<ProveedorOrdenCompraRow[]>([]);
+  const [ordenesLoading, setOrdenesLoading] = useState(false);
 
   const { session } = useAuth();
   const codeCuenta = session?.codeCuenta ?? "";
@@ -27,6 +35,38 @@ export default function ProvidersPage() {
   useEffect(() => {
     void load();
   }, [idCliente, codeCuenta]);
+
+  useEffect(() => {
+    if (!ordenesModalProvider?.id || !idCliente.trim()) {
+      setOrdenesList([]);
+      return;
+    }
+    let cancelled = false;
+    setOrdenesLoading(true);
+    void OrdenCompraService.getByProveedor(idCliente, codeCuenta, ordenesModalProvider.id)
+      .then((list) => {
+        if (cancelled) return;
+        setOrdenesList(
+          list.map((o) => ({
+            id: o.id ?? o.numero,
+            ordenCompra: o.numero,
+            estado: o.estado,
+            resumenProductos: (o.lineItems ?? [])
+              .map((li) => `${li.titleSnapshot} ×${li.cantidad}`)
+              .join(" · "),
+          })),
+        );
+      })
+      .catch(() => {
+        if (!cancelled) setOrdenesList([]);
+      })
+      .finally(() => {
+        if (!cancelled) setOrdenesLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [ordenesModalProvider?.id, idCliente, codeCuenta]);
 
   const handleSuccess = async (name: string) => {
     if (!idCliente) return;
@@ -65,17 +105,32 @@ export default function ProvidersPage() {
         </button>
       </header>
 
-      <ProviderTable 
-        providers={providers} 
-        onEdit={(p) => { setSelectedProvider(p); setIsModalOpen(true); }} 
-        onDelete={handleDelete} 
+      <ProviderTable
+        providers={providers}
+        onSelectProvider={(p) => {
+          setOrdenesList([]);
+          setOrdenesModalProvider(p);
+        }}
+        onEdit={(p) => {
+          setSelectedProvider(p);
+          setIsModalOpen(true);
+        }}
+        onDelete={handleDelete}
       />
 
-      <ProviderForm 
-        isOpen={isModalOpen} 
+      <ProviderForm
+        isOpen={isModalOpen}
         provider={selectedProvider}
-        onClose={() => setIsModalOpen(false)} 
-        onSuccess={handleSuccess} 
+        onClose={() => setIsModalOpen(false)}
+        onSuccess={handleSuccess}
+      />
+
+      <ProviderOrdenesModal
+        isOpen={ordenesModalProvider !== null}
+        provider={ordenesModalProvider}
+        ordenes={ordenesList}
+        loading={ordenesLoading}
+        onClose={() => setOrdenesModalProvider(null)}
       />
     </main>
   );

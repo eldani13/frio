@@ -7,12 +7,21 @@ import CatalogosPage from "@/app/catalogos/page";
 import CamionesPage from "@/app/camiones/page";
 import ReportesPage from "@/app/reportes/page";
 import AsignarBodegasPage from "@/app/asignarbodegas/page";
+import { OrdenCompraFormModal } from "@/app/components/ui/ordenes/OrdenCompraFormModal";
+import { useAuth } from "@/app/context/AuthContext";
+import { CatalogoService } from "@/app/services/catalogoService";
+import { OrdenCompraService } from "@/app/services/ordenCompraService";
+import { ProviderService } from "@/app/services/providerService";
+import type { Catalogo } from "@/app/types/catalogo";
+import type { OrdenCompra } from "@/app/types/ordenCompra";
+import type { Provider } from "@/app/types/provider";
 
-import { MdBusiness, MdFactory, MdShoppingCart } from "react-icons/md";
+import { MdAssignment, MdBusiness, MdFactory, MdShoppingCart } from "react-icons/md";
 import { BiBarChartAlt2, BiCollection, BiUserCheck } from "react-icons/bi";
 import {
   HiOutlineArrowLeft,
   HiOutlineArrowRight,
+  HiOutlinePlus,
   HiOutlineTruck,
 } from "react-icons/hi2";
 
@@ -22,15 +31,26 @@ interface ReportesSectionProps {
   setReportDetailModal: (modal: null) => void;
 }
 
+function resumenOrdenCatalogo(o: OrdenCompra): string {
+  return (o.lineItems ?? [])
+    .map((li) => `${li.titleSnapshot} ×${li.cantidad}`)
+    .join(" · ");
+}
+
 const ReportesSection: React.FC<ReportesSectionProps> = ({
   isCliente = false,
   menuResetNonce,
   setReportDetailModal,
 }) => {
+  const { session } = useAuth();
+  const idCliente = session?.clientId ?? "";
+  const codeCuenta = session?.codeCuenta ?? "";
+
   const [viewMode, setViewMode] = React.useState<
     | "reporte"
     | "catalogo"
     | "asignaciones"
+    | "ordenesCompra"
     | "proveedores"
     | "plantas"
     | "compradores"
@@ -39,6 +59,12 @@ const ReportesSection: React.FC<ReportesSectionProps> = ({
     | "camiones"
     | null
   >(isCliente ? null : "reporte");
+
+  const [ordenesCompra, setOrdenesCompra] = React.useState<OrdenCompra[]>([]);
+  const [catalogosOrden, setCatalogosOrden] = React.useState<Catalogo[]>([]);
+  const [proveedoresOrden, setProveedoresOrden] = React.useState<Provider[]>([]);
+  const [ordenesDataLoading, setOrdenesDataLoading] = React.useState(false);
+  const [ordenCompraModalOpen, setOrdenCompraModalOpen] = React.useState(false);
 
   // Resetear vista cuando cambia el rol de cliente
   React.useEffect(() => {
@@ -58,15 +84,55 @@ const ReportesSection: React.FC<ReportesSectionProps> = ({
     prevMenuNonce.current = menuResetNonce;
     setViewMode(null);
     setReportDetailModal(null);
+    setOrdenCompraModalOpen(false);
   }, [isCliente, menuResetNonce, setReportDetailModal]);
+
+  React.useEffect(() => {
+    if (!isCliente || viewMode !== "ordenesCompra") return;
+    if (!idCliente.trim()) {
+      setOrdenesCompra([]);
+      setCatalogosOrden([]);
+      setProveedoresOrden([]);
+      return;
+    }
+    let cancelled = false;
+    setOrdenesDataLoading(true);
+    void Promise.all([
+      OrdenCompraService.getAll(idCliente, codeCuenta),
+      CatalogoService.getAll(idCliente, codeCuenta),
+      ProviderService.getAll(idCliente, codeCuenta),
+    ])
+      .then(([ordenes, cats, provs]) => {
+        if (cancelled) return;
+        setOrdenesCompra(ordenes);
+        setCatalogosOrden(cats);
+        setProveedoresOrden(provs);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setOrdenesCompra([]);
+          setCatalogosOrden([]);
+          setProveedoresOrden([]);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setOrdenesDataLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isCliente, viewMode, idCliente, codeCuenta]);
+
+  const reloadOrdenesCompra = React.useCallback(() => {
+    if (!idCliente.trim()) return;
+    void OrdenCompraService.getAll(idCliente, codeCuenta).then(setOrdenesCompra);
+  }, [idCliente, codeCuenta]);
 
   // Menú principal cliente: Reportes, Catálogo, Asignaciones
   if (isCliente && viewMode === null) {
     return (
       <section className="p-4 sm:p-8">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 max-w-6xl mx-auto">
-          
-
            {/* BOTÓN ASIGNACIONES */}
            <button
             type="button"
@@ -108,7 +174,6 @@ const ReportesSection: React.FC<ReportesSectionProps> = ({
               <h3 className="text-2xl font-black text-slate-800 tracking-tight">Reportes</h3>              
             </div>
           </button>
-         
 
         </div>
       </section>
@@ -155,6 +220,20 @@ const ReportesSection: React.FC<ReportesSectionProps> = ({
                 <p className="text-lg font-bold text-slate-900">Compradores</p>
               </div>
               <HiOutlineArrowRight size={20} className="text-slate-500 group-hover:translate-x-1 transition-transform" />
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setViewMode("ordenesCompra")}
+              className="group w-full rounded-2xl bg-[#e8dff5] p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md flex items-center justify-between cursor-pointer active:scale-95"
+            >
+              <div className="flex items-center gap-4">
+                <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-white/50 text-violet-900 shadow-sm">
+                  <MdAssignment size={24} />
+                </span>
+                <p className="text-lg font-bold text-slate-900">Órdenes de Compras</p>
+              </div>
+              <HiOutlineArrowRight size={18} className="text-slate-500 group-hover:translate-x-1 transition-transform" />
             </button>
 
             <button
@@ -214,6 +293,143 @@ const ReportesSection: React.FC<ReportesSectionProps> = ({
             </button>
           </div>
         </div>
+      </section>
+    );
+  }
+
+  // Vista Órdenes de Compra (cliente)
+  if (isCliente && viewMode === "ordenesCompra") {
+    return (
+      <section className="rounded-2xl bg-white p-6 sm:p-8 shadow-sm border border-slate-200">
+        <div className="mx-auto flex w-full max-w-5xl flex-col gap-6">
+          <button
+            type="button"
+            onClick={() => {
+              setOrdenCompraModalOpen(false);
+              setViewMode("asignaciones");
+            }}
+            className="self-start flex items-center gap-2 text-sm font-semibold text-slate-600 hover:text-slate-900 transition-colors"
+          >
+            <HiOutlineArrowLeft size={18} />
+            Volver a Asignaciones
+          </button>
+
+          <header className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-4">
+              <div className="rounded-2xl bg-[#e8dff5] p-3 text-violet-900">
+                <MdAssignment size={28} />
+              </div>
+              <div>
+                <h1 className="text-2xl font-extrabold tracking-tight text-slate-900">
+                  Órdenes de Compras
+                </h1>
+                <p className="text-sm text-slate-500">
+                  Cada orden usa productos de tu catálogo y un proveedor registrado.
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setOrdenCompraModalOpen(true)}
+              disabled={!idCliente.trim() || proveedoresOrden.length === 0 || catalogosOrden.length === 0}
+              className="inline-flex items-center justify-center gap-2 rounded-[10px] bg-[#A8D5BA] px-5 py-2.5 text-sm font-semibold text-[#2D5A3F] shadow-sm transition hover:bg-[#97c4a9] active:scale-[0.98] disabled:pointer-events-none disabled:opacity-50"
+            >
+              <HiOutlinePlus strokeWidth={2.5} className="h-5 w-5" />
+              Agregar orden de compra
+            </button>
+          </header>
+
+          {!idCliente.trim() ? (
+            <p className="rounded-xl border border-dashed border-slate-200 p-6 text-center text-sm text-slate-500">
+              Iniciá sesión como cliente para ver y crear órdenes de compra.
+            </p>
+          ) : proveedoresOrden.length === 0 || catalogosOrden.length === 0 ? (
+            <p className="rounded-xl border border-amber-100 bg-amber-50/80 p-4 text-sm text-amber-900">
+              Necesitás al menos un <strong>proveedor</strong> (Asignaciones → Proveedores) y productos en el{" "}
+              <strong>catálogo</strong> para armar órdenes vinculadas al catálogo.
+            </p>
+          ) : null}
+
+          <div className="overflow-hidden rounded-xl border border-slate-200">
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[640px] border-collapse text-left text-sm">
+                <thead>
+                  <tr className="border-b border-slate-200 bg-slate-50">
+                    <th className="px-4 py-3 font-bold uppercase tracking-wide text-[11px] text-slate-500">
+                      Nº OC
+                    </th>
+                    <th className="px-4 py-3 font-bold uppercase tracking-wide text-[11px] text-slate-500">
+                      Proveedor
+                    </th>
+                    <th className="px-4 py-3 font-bold uppercase tracking-wide text-[11px] text-slate-500">
+                      Fecha
+                    </th>
+                    <th className="px-4 py-3 font-bold uppercase tracking-wide text-[11px] text-slate-500">
+                      Productos (catálogo)
+                    </th>
+                    <th className="px-4 py-3 font-bold uppercase tracking-wide text-[11px] text-slate-500">
+                      Estado
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {ordenesDataLoading ? (
+                    <tr>
+                      <td colSpan={5} className="px-4 py-12 text-center text-slate-500">
+                        Cargando órdenes…
+                      </td>
+                    </tr>
+                  ) : ordenesCompra.length === 0 ? (
+                    <tr>
+                      <td colSpan={5} className="px-4 py-12 text-center text-slate-500">
+                        No hay órdenes registradas. Usá &quot;Agregar orden de compra&quot; para crear la
+                        primera (con líneas del catálogo).
+                      </td>
+                    </tr>
+                  ) : (
+                    ordenesCompra.map((oc) => (
+                      <tr
+                        key={oc.id ?? oc.numero}
+                        className="border-b border-slate-100 transition-colors hover:bg-slate-50/80"
+                      >
+                        <td className="px-4 py-3 font-semibold text-slate-900">{oc.numero}</td>
+                        <td className="px-4 py-3 text-slate-700">{oc.proveedorNombre}</td>
+                        <td className="px-4 py-3 text-slate-600">{oc.fecha}</td>
+                        <td
+                          className="max-w-md px-4 py-3 text-slate-700"
+                          title={resumenOrdenCatalogo(oc)}
+                        >
+                          <span className="line-clamp-2 text-[13px]">{resumenOrdenCatalogo(oc) || "—"}</span>
+                        </td>
+                        <td className="px-4 py-3">
+                          <span
+                            className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold ${
+                              oc.estado === "Terminado"
+                                ? "bg-emerald-100 text-emerald-800"
+                                : "bg-sky-100 text-sky-900"
+                            }`}
+                          >
+                            {oc.estado}
+                          </span>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <OrdenCompraFormModal
+          isOpen={ordenCompraModalOpen}
+          onClose={() => setOrdenCompraModalOpen(false)}
+          idCliente={idCliente}
+          codeCuenta={codeCuenta}
+          productos={catalogosOrden}
+          proveedores={proveedoresOrden}
+          onSuccess={reloadOrdenesCompra}
+        />
       </section>
     );
   }

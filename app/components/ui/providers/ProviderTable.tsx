@@ -5,9 +5,11 @@ interface Props {
   providers: Provider[];
   onEdit: (provider: Provider) => void;
   onDelete: (id: string) => void;
+  /** Al hacer clic en la fila (no en acciones) se selecciona el proveedor. */
+  onSelectProvider?: (provider: Provider) => void;
 }
 
-export const ProviderTable = ({ providers, onEdit, onDelete }: Props) => {
+export const ProviderTable = ({ providers, onEdit, onDelete, onSelectProvider }: Props) => {
   return (
     <div className="bg-white rounded-[12px] border border-gray-100 overflow-hidden shadow-sm">
       <table className="w-full text-left border-collapse">
@@ -21,11 +23,15 @@ export const ProviderTable = ({ providers, onEdit, onDelete }: Props) => {
         </thead>
         <tbody className="divide-y divide-gray-50">
           {providers.map((p) => (
-            <tr key={p.id} className="hover:bg-gray-50 transition-colors">
+            <tr
+              key={p.id}
+              className={`transition-colors hover:bg-gray-50 ${onSelectProvider ? "cursor-pointer" : ""}`}
+              onClick={() => onSelectProvider?.(p)}
+            >
               <td className="p-4 text-[14px] text-gray-700">{p.numericId}</td>
               <td className="p-4 text-[14px] font-mono font-bold text-[#2D5A3F]">{p.code}</td>
               <td className="p-4 text-[14px] text-gray-900 font-medium">{p.name}</td>
-              <td className="p-4 text-right">
+              <td className="p-4 text-right" onClick={(e) => e.stopPropagation()}>
                 <div className="flex justify-end gap-1">
                   {/* Botón Editar - Azul Suave */}
                   <button 
