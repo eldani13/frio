@@ -2,6 +2,8 @@
 export interface OrdenCompraLineItem {
   catalogoProductId: string;
   cantidad: number;
+  /** Kilogramos totales de esta línea (opcional en documentos antiguos). */
+  pesoKg?: number;
   /** Copia al crear la orden para listados aunque el catálogo cambie. */
   titleSnapshot: string;
   skuSnapshot?: string;
@@ -15,6 +17,8 @@ export interface OrdenCompra {
   /** Ej. OC-0001 */
   numero: string;
   proveedorId: string;
+  /** Código base36 del proveedor al momento de la orden (ej. 0001). */
+  proveedorCode?: string;
   proveedorNombre: string;
   fecha: string;
   /** `"En curso"` | `"Terminado"` (órdenes antiguas pueden tener otros valores). */

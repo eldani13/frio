@@ -1,12 +1,12 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { FiArchive, FiBox, FiRepeat, FiSearch, FiAlertTriangle } from "react-icons/fi";
+import { FiArchive, FiBox, FiCpu, FiRepeat, FiSearch, FiAlertTriangle } from "react-icons/fi";
 
 import React, { useState, useMemo } from "react";
+import { clientLabelFromList, formatBoxQuantityKg } from "@/app/lib/bodegaDisplay";
 import EntradaAlertButton from "../common/EntradaAlertButton";
 import { RiUserReceivedLine } from "react-icons/ri";
 
 const HIGH_TEMP_THRESHOLD = 5;
-
 
 // Estado para forzar re-render cuando se asigna una alerta debe ir dentro del componente
 
@@ -51,6 +51,7 @@ export default function OrdenesJefeSection(props: {
   orderModalType: string | null;
   setOrderModalType: (type: string | null) => void;
   headerActions?: React.ReactNode;
+  clients?: Array<{ id: string; name: string }>;
 }) {
   const ITEMS_PER_PAGE = 4;
   const [entradaPage, setEntradaPage] = useState(0);
@@ -93,6 +94,7 @@ export default function OrdenesJefeSection(props: {
     handleCreateOrderSalida,
     orderModalType,
     setOrderModalType,
+    clients = [],
   } = props;
 
   // Mark optional handler as intentionally unused in this view
@@ -115,6 +117,7 @@ export default function OrdenesJefeSection(props: {
     zone: ZoneKey;
     kind: ModalKind;
   } | null>(null);
+  const [showProcesamientoModal, setShowProcesamientoModal] = useState(false);
 
   React.useEffect(() => {
     const maxPage = Math.max(
@@ -216,7 +219,7 @@ export default function OrdenesJefeSection(props: {
     <section className="grid gap-4 lg:grid-cols-2 xl:grid-cols-4">
       {isJefe && (
         <div className="col-span-4 mb-8">
-          <div className="flex flex-col gap-4 sm:grid sm:grid-cols-2 lg:grid-cols-4">
+          <div className="flex flex-col gap-4 sm:grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
             {/* Ingresos */}
             <button
               type="button"
@@ -258,6 +261,18 @@ export default function OrdenesJefeSection(props: {
               <span className="text-[11px] text-slate-500">
                 Consultar inventario
               </span>
+            </button>
+            {/* Procesamiento (acción pendiente de implementar) */}
+            <button
+              type="button"
+              className="flex flex-col items-start rounded-xl p-3 shadow-sm bg-white text-slate-900 h-20 border border-slate-200 group transition hover:bg-slate-50"
+              onClick={() => {}}
+            >
+              <div className="flex items-center gap-1 mb-1">
+                <FiCpu className="w-5 h-5 text-slate-500" />
+                <span className="text-base font-semibold">Procesamiento</span>
+              </div>
+              <span className="text-[11px] text-slate-500">Próximamente</span>
             </button>
             {/* Crear Salida */}
             <button
@@ -335,7 +350,13 @@ export default function OrdenesJefeSection(props: {
                     </div>
                     <div className="flex items-center gap-2">
                       <span className="font-semibold text-slate-600">Cliente:</span>
-                      <span>{selectedBoxModal.client || "—"}</span>
+                      <span>
+                        {clientLabelFromList(selectedBoxModal.client || "", clients)}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="font-semibold text-slate-600">Cantidad:</span>
+                      <span>{formatBoxQuantityKg(selectedBoxModal.quantityKg)}</span>
                     </div>
                     <div className="flex items-center gap-2">
                       <span className="font-semibold text-slate-600">Posición:</span>
@@ -591,9 +612,9 @@ export default function OrdenesJefeSection(props: {
               </div>
             </div>
           )}
-          <div className="flex flex-col lg:flex-row items-stretch gap-8">
-            {/* Entrada division left */}
-            <div className="flex flex-col items-start rounded-3xl border border-green-200 bg-emerald-50 p-2 sm:p-4 w-full max-w-full sm:max-w-xs lg:max-w-60 h-full lg:min-h-[435px]">
+          {/* Mismo criterio que EstadoBodegaSection (admin): grid estira fila al contenido más alto; mapa completo sin recorte */}
+          <div className="grid gap-6 xl:grid-cols-[1fr_1.8fr_1fr] 2xl:grid-cols-[1fr_2.1fr_1fr]">
+            <div className="flex h-full min-h-0 flex-col items-start rounded-3xl border border-green-200 bg-emerald-50 p-2 sm:p-4 min-h-45 w-full max-w-full sm:max-w-xs lg:max-w-60">
               <div className="flex items-center justify-between w-full mb-2">
                 <h3 className="text-sm sm:text-lg font-semibold text-emerald-600 flex items-center gap-2">
                   <span className="inline-block">
@@ -757,7 +778,8 @@ export default function OrdenesJefeSection(props: {
                           {box.name || "Sin nombre"}
                         </div>
                         <div>Id: {box.autoId}</div>
-                        <div>Cliente: {box.client || "—"}</div>
+                        <div>Cliente: {clientLabelFromList(box.client || "", clients)}</div>
+                        <div>Cantidad: {formatBoxQuantityKg(box.quantityKg)}</div>
                         <div>
                           Temp:{" "}
                           {typeof box.temperature === "number"
@@ -797,8 +819,8 @@ export default function OrdenesJefeSection(props: {
                 )}
               </div>
             </div>
-            {/* Mapa de Bodega section center */}
-            <div className="flex-[1.2] rounded-2xl bg-white p-2 sm:p-4 shadow-md border border-blue-200 w-full relative h-full lg:min-h-[380px] flex flex-col">
+            <div className="min-w-0 flex flex-col">
+            <div className="self-start w-full rounded-2xl border border-blue-200 bg-white p-2 sm:p-4 shadow-md relative">
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-2 sm:mb-4">
                 <h2 className="text-sm sm:text-lg font-semibold text-slate-900 flex items-center gap-1 sm:gap-2">
                   <span className="inline-block">
@@ -1154,6 +1176,13 @@ export default function OrdenesJefeSection(props: {
                   );
                 })}
               </div>
+              <button
+                type="button"
+                onClick={() => setShowProcesamientoModal(true)}
+                className="mt-3 w-full rounded-xl border border-blue-200 bg-slate-50 py-3 px-4 text-center text-sm font-semibold text-slate-800 shadow-sm transition hover:bg-blue-50 hover:border-blue-300 focus:outline-none focus:ring-2 focus:ring-blue-300"
+              >
+                Procesamiento
+              </button>
               <div className="flex flex-wrap items-center justify-end mt-2 sm:mt-4 gap-1 sm:gap-3">
                 <div className="flex items-center gap-1">
                   <span className="w-2 h-2 sm:w-3 sm:h-3 rounded-full bg-cyan-400 inline-block"></span>
@@ -1168,9 +1197,38 @@ export default function OrdenesJefeSection(props: {
                   </span>
                 </div>
               </div>
+              {showProcesamientoModal ? (
+                <div
+                  className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+                  role="dialog"
+                  aria-modal="true"
+                  aria-labelledby="procesamiento-jefe-modal-title"
+                  onClick={() => setShowProcesamientoModal(false)}
+                >
+                  <div
+                    className="w-full max-w-sm rounded-2xl border border-blue-200 bg-white p-6 shadow-xl"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <h3
+                      id="procesamiento-jefe-modal-title"
+                      className="text-lg font-semibold text-slate-900 text-center"
+                    >
+                      Procesamiento
+                    </h3>
+                    <p className="mt-3 text-center text-sm text-slate-600">Disponible próximamente</p>
+                    <button
+                      type="button"
+                      onClick={() => setShowProcesamientoModal(false)}
+                      className="mt-6 w-full rounded-lg border border-slate-200 bg-white py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                    >
+                      Cerrar
+                    </button>
+                  </div>
+                </div>
+              ) : null}
             </div>
-            {/* Salida division right */}
-            <div className="flex flex-col items-start rounded-3xl border border-pink-200 bg-pink-50 p-4 sm:p-6 w-full max-w-full sm:max-w-xs lg:max-w-60 h-full lg:min-h-108.75">
+            </div>
+            <div className="flex h-full min-h-0 flex-col items-start rounded-3xl border border-pink-200 bg-pink-50 p-4 sm:p-6 min-h-30 w-full max-w-full sm:max-w-xs lg:max-w-60">
               <h3 className="text-base sm:text-lg font-semibold text-pink-600 mb-2 flex items-center gap-2">
                 <span className="inline-block">
                   <FiBox className="w-5 h-5 text-pink-400" />
@@ -1193,7 +1251,8 @@ export default function OrdenesJefeSection(props: {
                           {box.name || "Sin nombre"}
                         </div>
                         <div>Id: {box.autoId}</div>
-                        <div>Cliente: {box.client || "—"}</div>
+                        <div>Cliente: {clientLabelFromList(box.client || "", clients)}</div>
+                        <div>Cantidad: {formatBoxQuantityKg(box.quantityKg)}</div>
                         <div>
                           Temp:{" "}
                           {typeof box.temperature === "number"

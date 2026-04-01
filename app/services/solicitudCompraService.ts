@@ -8,23 +8,19 @@ import {
   orderBy,
   limit,
 } from "firebase/firestore";
-import type { OrdenCompra, OrdenCompraLineItem } from "@/app/types/ordenCompra";
+import type { SolicitudCompra, SolicitudLineItem } from "@/app/types/solicitudCompra";
 
 const PARENT = "clientes";
-const SUB = "ordenesCompra";
+const SUB = "solicitudesCompra";
 
 const col = (idCliente: string) => collection(db, PARENT, idCliente, SUB);
 
-/** Firestore no acepta `undefined` en ningún campo; omitimos opcionales vacíos. */
-function lineItemForFirestore(item: OrdenCompraLineItem): Record<string, string | number> {
+function lineItemForFirestore(item: SolicitudLineItem): Record<string, string | number> {
   const row: Record<string, string | number> = {
     catalogoProductId: item.catalogoProductId,
-    cantidad: item.cantidad,
+    pesoKg: Number(item.pesoKg),
     titleSnapshot: item.titleSnapshot ?? "",
   };
-  if (item.pesoKg != null && Number.isFinite(Number(item.pesoKg)) && Number(item.pesoKg) > 0) {
-    row.pesoKg = Number(item.pesoKg);
-  }
   if (item.skuSnapshot != null && String(item.skuSnapshot).trim() !== "") {
     row.skuSnapshot = String(item.skuSnapshot);
   }
@@ -34,27 +30,18 @@ function lineItemForFirestore(item: OrdenCompraLineItem): Record<string, string 
   return row;
 }
 
-export const OrdenCompraService = {
-  async getAll(idCliente: string, codeCuenta: string): Promise<OrdenCompra[]> {
+export const SolicitudCompraService = {
+  async getAll(idCliente: string, codeCuenta: string): Promise<SolicitudCompra[]> {
     try {
       if (!idCliente?.trim()) return [];
       const q = query(col(idCliente), where("codeCuenta", "==", codeCuenta));
       const snap = await getDocs(q);
-      const list = snap.docs.map((d) => ({ id: d.id, ...d.data() } as OrdenCompra));
+      const list = snap.docs.map((d) => ({ id: d.id, ...d.data() } as SolicitudCompra));
       return list.sort((a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0));
     } catch (e: unknown) {
-      console.error("OrdenCompraService.getAll", e);
+      console.error("SolicitudCompraService.getAll", e);
       return [];
     }
-  },
-
-  async getByProveedor(
-    idCliente: string,
-    codeCuenta: string,
-    proveedorId: string,
-  ): Promise<OrdenCompra[]> {
-    const all = await this.getAll(idCliente, codeCuenta);
-    return all.filter((o) => o.proveedorId === proveedorId);
   },
 
   async create(
@@ -66,7 +53,7 @@ export const OrdenCompraService = {
       proveedorNombre: string;
       fecha: string;
       estado: string;
-      lineItems: OrdenCompraLineItem[];
+      lineItems: SolicitudLineItem[];
     },
   ) {
     if (!idCliente?.trim()) throw new Error("idCliente requerido");
@@ -76,14 +63,14 @@ export const OrdenCompraService = {
     const lastSnap = await getDocs(qLast);
     let nextId = 1;
     if (!lastSnap.empty) {
-      const last = lastSnap.docs[0].data() as OrdenCompra;
+      const last = lastSnap.docs[0].data() as SolicitudCompra;
       nextId = (Number(last.numericId) || 0) + 1;
     }
 
     const doc = {
       codeCuenta: codeCuenta ?? "",
       numericId: nextId,
-      numero: `OC-${String(nextId).padStart(4, "0")}`,
+      numero: `SOL-${String(nextId).padStart(4, "0")}`,
       proveedorId: payload.proveedorId,
       proveedorCode: String(payload.proveedorCode ?? "").trim(),
       proveedorNombre: payload.proveedorNombre?.trim() ?? "",

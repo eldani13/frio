@@ -68,12 +68,22 @@ export default function ProvidersPage() {
     };
   }, [ordenesModalProvider?.id, idCliente, codeCuenta]);
 
-  const handleSuccess = async (name: string) => {
+  const handleSuccess = async (data: {
+    name: string;
+    nombre: string;
+    telefono: string;
+    email: string;
+  }) => {
     if (!idCliente) return;
     if (selectedProvider?.id) {
-      await ProviderService.update(idCliente, selectedProvider.id, { name });
+      await ProviderService.update(idCliente, selectedProvider.id, {
+        name: data.name,
+        nombre: data.nombre,
+        telefono: data.telefono,
+        email: data.email,
+      });
     } else {
-      await ProviderService.create(name, idCliente, codeCuenta);
+      await ProviderService.create(data, idCliente, codeCuenta);
     }
     await load();
   };
@@ -87,7 +97,7 @@ export default function ProvidersPage() {
   };
 
   return (
-    <main className="max-w-4xl mx-auto p-8 font-['Inter']">
+    <main className="max-w-6xl mx-auto p-8 font-['Inter']">
       <header className="mb-10 flex justify-between items-center">
         <div className="flex items-center gap-4">
           <div className="p-3 bg-[#f8edb1] rounded-2xl text-[#2D5A3F]">

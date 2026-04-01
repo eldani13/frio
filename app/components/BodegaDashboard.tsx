@@ -12,10 +12,6 @@ import { SlGraph } from "react-icons/sl";
 import {
   FiAlertTriangle,
   FiClipboard,
-  FiShoppingCart,
-  FiTruck,
-  FiHome,
-  FiExternalLink,
 } from "react-icons/fi";
 import {
   addDoc,
@@ -83,13 +79,6 @@ const DEFAULT_TOTAL_SLOTS = 12;
 const WAREHOUSE_ID = DEFAULT_WAREHOUSE_ID;
 
 type AlertReason = "no_tuve_tiempo" | "no_quise" | "no_pude";
-
-type AdminSection =
-  | "menu"
-  | "compras"
-  | "transporte"
-  | "bodega_interna"
-  | "bodega_externa";
 
 type WarehouseMeta = {
   id: string;
@@ -167,7 +156,8 @@ const isValidRole = (value: unknown): value is Role =>
   value === "operario" ||
   value === "jefe" ||
   value === "cliente" ||
-  value === "configurador";
+  value === "configurador" ||
+  value === "operadorCuentas";
 
 const normalizeSlots = (value: unknown, expectedSize = DEFAULT_TOTAL_SLOTS): Slot[] | null => {
   if (!Array.isArray(value)) {
@@ -209,6 +199,9 @@ const normalizeSlots = (value: unknown, expectedSize = DEFAULT_TOTAL_SLOTS): Slo
         : typeof record.customer === "string"
           ? record.customer
           : "";
+    const qRaw = record.quantityKg;
+    const quantityKg =
+      typeof qRaw === "number" && Number.isFinite(qRaw) ? qRaw : undefined;
 
     map.set(position, {
       position,
@@ -216,31 +209,32 @@ const normalizeSlots = (value: unknown, expectedSize = DEFAULT_TOTAL_SLOTS): Slo
       name: normalizedName,
       temperature: normalizedTemp,
       client: normalizedClient,
+      ...(quantityKg !== undefined ? { quantityKg } : {}),
     });
   }
 
-  const sortedPositions = [...map.keys()].sort((a, b) => a - b);
+  /** Siempre 1…target: antes se apilaban primero las posiciones “presentes” y los huecos al final (p. ej. 1 abajo). */
   const result: Slot[] = [];
-  for (const pos of sortedPositions) {
-    if (pos > target) break;
-    const slot = map.get(pos);
-    if (slot) {
-      result.push(slot);
-    }
-    if (result.length >= target) break;
-  }
-
-  for (let pos = 1; result.length < target; pos += 1) {
-    if (!map.has(pos)) {
+  for (let pos = 1; pos <= target; pos += 1) {
+    const existing = map.get(pos);
+    if (existing) {
+      result.push(existing);
+    } else {
       result.push({ position: pos, autoId: "", name: "", temperature: null, client: "" });
     }
   }
 
-  return result.slice(0, target);
+  return result;
 };
 
 const resizeSlotsToCapacity = (slots: Slot[], capacity: number) =>
   normalizeSlots(slots, capacity) ?? createInitialSlots(capacity);
+
+const readQuantityKg = (item: Box | Slot | undefined): number | undefined => {
+  if (!item) return undefined;
+  const q = item.quantityKg;
+  return typeof q === "number" && Number.isFinite(q) ? q : undefined;
+};
 
 const filterBoxesByCapacity = (items: Box[], capacity: number) =>
   items.filter((item) => item.position <= capacity);
@@ -277,6 +271,9 @@ const normalizeBoxes = (value: unknown): Box[] | null => {
         : name
           ? createAutoId("BOX")
           : "";
+    const qRaw = record.quantityKg;
+    const quantityKg =
+      typeof qRaw === "number" && Number.isFinite(qRaw) ? qRaw : undefined;
 
     boxes.push({
       position,
@@ -289,6 +286,7 @@ const normalizeBoxes = (value: unknown): Box[] | null => {
           : typeof record.customer === "string"
             ? record.customer
             : "cliente1",
+      ...(quantityKg !== undefined ? { quantityKg } : {}),
     });
   }
 
@@ -445,9 +443,6 @@ export default function BodegaDashboard() {
     temperature: number | null;
   } | null>(null);
   const [orderModalType, setOrderModalType] = React.useState<string | null>(null);
-  const [reportDetailModal, setReportDetailModal] = useState<null | {
-    type: "ingresos" | "salidas" | "movimientos" | "despachados" | "alertas";
-  }>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [isHydrated, setIsHydrated] = useState(false);
   const [dateLabel, setDateLabel] = useState("");
@@ -503,9 +498,9 @@ export default function BodegaDashboard() {
   const [loginUser, setLoginUser] = useState<string>("");
   const [loginPassword, setLoginPassword] = useState<string>("");
   const [loginError, setLoginError] = useState<string>("");
-  const [adminSection, setAdminSection] = useState<AdminSection>("bodega_interna");
   /** Pulso para que clientes en Reportes vuelvan al submenú de vistas al pulsar Menú en el header */
   const [reportesClienteMenuNonce, setReportesClienteMenuNonce] = useState(0);
+  const [configuradorMenuNonce, setConfiguradorMenuNonce] = useState(0);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
@@ -533,14 +528,6 @@ export default function BodegaDashboard() {
     });
     return () => unsubscribe();
   }, []);
-
-  useEffect(() => {
-    if (session?.role === "administrador") {
-      setAdminSection("menu");
-    } else {
-      setAdminSection("bodega_interna");
-    }
-  }, [session?.role]);
 
   const [slots, setSlots] = useState<Slot[]>(() => createInitialSlots());
   const [message, setMessage] = useState<string>("");
@@ -579,7 +566,8 @@ export default function BodegaDashboard() {
   const [ingresoPosition, setIngresoPosition] = useState<number>(1);
   const [ingresoName, setIngresoName] = useState<string>("");
   const [ingresoTemp, setIngresoTemp] = useState<string>("");
-  const [ingresoClient, setIngresoClient] = useState<string>("");
+  const [ingresoQuantityKg, setIngresoQuantityKg] = useState<string>("");
+  const [ingresoClientId, setIngresoClientId] = useState<string>("");
   const [clientFilterId, setClientFilterId] = useState<string>("");
   const [clients, setClients] = useState<Client[]>([]);
   const [newClientName, setNewClientName] = useState<string>("");
@@ -1937,13 +1925,12 @@ export default function BodegaDashboard() {
   const isCustodio = role === "custodio";
   const isJefe = role === "jefe";
   const isCliente = role === "cliente";
+  const isOperadorCuentas = role === "operadorCuentas";
+  const isCuentaUsuario = isCliente || isOperadorCuentas;
   const isConfigurator = role === "configurador";
   const clientId = session?.clientId ?? null;
-  const effectiveClientId = isCliente ? clientFilterId || clientId || "cliente1" : clientId;
+  const effectiveClientId = isCuentaUsuario ? clientFilterId || clientId || "cliente1" : clientId;
   const canManageAlerts = isJefe;
-
-  const showAdminMenu = isAdmin && adminSection !== "bodega_interna";
-  const showDashboard = !isAdmin || adminSection === "bodega_interna" || isConfigurator;
 
   const canSeeBodega = isAdmin || isOperario;
   const canUseIngresoForm = isCustodio;
@@ -2002,96 +1989,29 @@ export default function BodegaDashboard() {
     fetchUsers();
   }, [fetchUsers, session]);
 
-  const filterByClient = <T extends { client?: string }>(items: T[]) =>
-    isCliente && effectiveClientId ? items.filter((item) => item.client === effectiveClientId) : items;
+  const configuradorClients = useMemo(
+    () => clients.filter((c) => c.createdByRole === "configurador" && !c.disabled),
+    [clients],
+  );
 
-  const orderMatchesClientLoose = (order: BodegaOrder) => {
-    if (!isCliente || !effectiveClientId) return true;
-    if (order.client) return order.client === effectiveClientId;
-    const findByZone = (zone: OrderSource, position: number) => {
-      if (zone === "ingresos") return inboundBoxes.find((b) => b.position === position);
-      if (zone === "salida") return outboundBoxes.find((b) => b.position === position);
-      return slots.find((s) => s.position === position);
-    };
-    const source = findByZone(order.sourceZone, order.sourcePosition);
-    if (source?.client === effectiveClientId) return true;
-    if (order.targetPosition) {
-      const targetSlot = slots.find((s) => s.position === order.targetPosition);
-      if (targetSlot?.client === effectiveClientId) return true;
-      const targetOut = outboundBoxes.find((b) => b.position === order.targetPosition);
-      if (targetOut?.client === effectiveClientId) return true;
-    }
-    return false;
-  };
+  useEffect(() => {
+    if (ingresoClientId) return;
+    if (!configuradorClients.length) return;
+    const sid = session?.clientId;
+    const pick =
+      sid && configuradorClients.some((c) => c.id === sid)
+        ? sid
+        : configuradorClients[0].id;
+    setIngresoClientId(pick);
+  }, [configuradorClients, session?.clientId, ingresoClientId]);
+
+  const filterByClient = <T extends { client?: string }>(items: T[]) =>
+    isCuentaUsuario && effectiveClientId ? items.filter((item) => item.client === effectiveClientId) : items;
 
   const inboundClient = filterByClient(inboundBoxes);
   const outboundClient = filterByClient(outboundBoxes);
   const dispatchedClient = filterByClient(dispatchedBoxes);
   const slotsClient = filterByClient(slots);
-
-  const ordersClient = isCliente ? orders.filter(orderMatchesClientLoose) : orders;
-
-  const historyIngresosClient = isCliente ? filterByClient(historyIngresos) : historyIngresos;
-  const historySalidasClient = isCliente
-    ? historySalidas.filter(orderMatchesClientLoose)
-    : historySalidas;
-  const historyMovimientosClient = isCliente
-    ? historyMovimientos.filter(orderMatchesClientLoose)
-    : historyMovimientos;
-
-  const clientAutoIds = useMemo(() => {
-    if (!isCliente || !effectiveClientId) return new Set<string>();
-    const ids = new Set<string>();
-    [inboundClient, outboundClient, slotsClient, dispatchedClient].forEach((list) => {
-      list.forEach((item) => {
-        if (item.autoId) ids.add(item.autoId);
-      });
-    });
-    return ids;
-  }, [dispatchedClient, effectiveClientId, inboundClient, isCliente, outboundClient, slotsClient]);
-
-  const filteredAlertItems = useMemo(() => {
-    if (!isCliente || !effectiveClientId) return computedAlerts.nextAlerts;
-    if (clientAutoIds.size === 0) return [];
-    return computedAlerts.nextAlerts.filter((alert) => {
-      const haystack = `${alert.id} ${alert.description ?? ""} ${alert.meta ?? ""}`;
-      for (const id of clientAutoIds) {
-        if (haystack.includes(id)) return true;
-      }
-      return false;
-    });
-  }, [clientAutoIds, computedAlerts.nextAlerts, effectiveClientId, isCliente]);
-
-  const ingresosCount = isCliente ? historyIngresosClient.length : stats.ingresos;
-  const salidasCount = isCliente ? historySalidasClient.length : stats.salidas;
-  const movimientosCount = isCliente
-    ? historyMovimientosClient.filter((order) => order.type === "a_bodega").length
-    : stats.movimientosBodega;
-  const despachadosCount = isCliente ? dispatchedClient.length : dispatchedBoxes.length;
-  const alertasCount = isCliente ? filteredAlertItems.length : alertas.length;
-
-  const reportData = useMemo(
-    () => [
-      { name: "Ingresos", value: ingresosCount, fill: "#38bdf8" },
-      { name: "Salidas", value: salidasCount, fill: "#f97316" },
-      {
-        name: "Movimientos a bodega",
-        value: movimientosCount,
-        fill: "#22c55e",
-      },
-      {
-        name: "Despachados",
-        value: despachadosCount,
-        fill: "#0ea5e9",
-      },
-      {
-        name: "Alertas",
-        value: alertasCount,
-        fill: "#ef4444",
-      },
-    ],
-    [alertasCount, despachadosCount, ingresosCount, movimientosCount, salidasCount],
-  );
 
   const handleSelectSlot = (position: number) => {
     setSelectedPosition(position);
@@ -2104,13 +2024,19 @@ export default function BodegaDashboard() {
     }
 
     if (!ingresoName.trim()) {
-      setMessage("Ingresa un nombre valido.");
+      setMessage("Selecciona un producto del catálogo del cliente.");
       return;
     }
 
     const parsedTemp = Number(ingresoTemp);
     if (Number.isNaN(parsedTemp)) {
       setMessage("Ingresa una temperatura valida.");
+      return;
+    }
+
+    const parsedKg = Number(ingresoQuantityKg);
+    if (Number.isNaN(parsedKg) || parsedKg <= 0) {
+      setMessage("Ingresa una cantidad valida en kg (mayor a 0).");
       return;
     }
 
@@ -2125,12 +2051,18 @@ export default function BodegaDashboard() {
       return;
     }
 
+    if (!ingresoClientId.trim()) {
+      setMessage("Selecciona un cliente para asociar la caja al catálogo.");
+      return;
+    }
+
     const newBox: Box = {
       position: nextPosition,
       autoId: createAutoId("CAJ"),
       name: ingresoName.trim(),
       temperature: parsedTemp,
-      client: ingresoClient,
+      client: ingresoClientId.trim(),
+      quantityKg: parsedKg,
     };
 
     setInboundBoxes((prev) => sortByPosition([newBox, ...prev]));
@@ -2138,7 +2070,7 @@ export default function BodegaDashboard() {
     addIngreso(newBox);
     setIngresoName("");
     setIngresoTemp("");
-    setIngresoClient("");
+    setIngresoQuantityKg("");
     setMessage(`Caja registrada en ingresos ${nextPosition}.`);
   };
 
@@ -2332,6 +2264,7 @@ export default function BodegaDashboard() {
       const boxName = sourceBox?.name ?? "";
       const boxTemp = sourceBox?.temperature ?? 0;
       const boxClient = sourceBox?.client ?? "";
+      const qtyToSlot = readQuantityKg(sourceBox as Box | Slot);
       setSlots((prev) =>
         prev.map((item) =>
           item.position === target
@@ -2341,6 +2274,7 @@ export default function BodegaDashboard() {
               name: boxName,
               temperature: boxTemp,
               client: boxClient,
+              ...(qtyToSlot !== undefined ? { quantityKg: qtyToSlot } : { quantityKg: undefined }),
             }
             : item,
         ),
@@ -2372,6 +2306,9 @@ export default function BodegaDashboard() {
       const boxName = sourceIsBodega ? boxFromBodega?.name ?? "" : boxFromIngreso?.name ?? "";
       const boxTemp = sourceIsBodega ? boxFromBodega?.temperature ?? 0 : boxFromIngreso?.temperature ?? 0;
       const boxClient = sourceIsBodega ? boxFromBodega?.client ?? "" : boxFromIngreso?.client ?? "";
+      const qtyToSalida = sourceIsBodega
+        ? readQuantityKg(boxFromBodega)
+        : readQuantityKg(boxFromIngreso);
 
       setOutboundBoxes((prev) =>
         sortByPosition([
@@ -2381,6 +2318,7 @@ export default function BodegaDashboard() {
             name: boxName,
             temperature: boxTemp,
             client: boxClient,
+            ...(qtyToSalida !== undefined ? { quantityKg: qtyToSalida } : {}),
           },
           ...prev,
         ]),
@@ -2392,7 +2330,7 @@ export default function BodegaDashboard() {
       setSlots((prev) =>
         prev.map((item) =>
           item.position === order.sourcePosition
-            ? { ...item, autoId: "", name: "", temperature: null, client: "" }
+            ? { ...item, autoId: "", name: "", temperature: null, client: "", quantityKg: undefined }
             : item,
         ),
       );
@@ -2716,9 +2654,9 @@ export default function BodegaDashboard() {
           visible: isConfigurator,
         },
         { key: "alertas", label: "Gestion de alertas", visible: false },
-        { key: "reportes", label: "Reportes", visible: isAdmin || isCliente },
+        { key: "reportes", label: "Reportes", visible: isAdmin || isCuentaUsuario },
       ].filter((tab) => tab.visible),
-    [isAdmin, isCliente, isCustodio, isOperario, isJefe, canUseOrderForm, isConfigurator],
+    [isAdmin, isCuentaUsuario, isCustodio, isOperario, isJefe, canUseOrderForm, isConfigurator],
   );
 
   useEffect(() => {
@@ -2732,155 +2670,6 @@ export default function BodegaDashboard() {
       setActiveTab((tabs[0]?.key ?? "ingresos") as typeof activeTab);
     }
   }, [activeTab, isJefe, tabs]);
-
-  const renderAdminLanding = () => {
-    const cards: Array<{
-      key: AdminSection;
-      label: string;
-      icon: React.ReactNode;
-      helper: string;
-      span?: string;
-    }> = [
-        {
-          key: "compras",
-          label: "Compras",
-          icon: <FiShoppingCart className="h-6 w-6" />,
-          helper: "Órdenes y abastecimiento",
-          span: "sm:col-span-2",
-        },
-        {
-          key: "transporte",
-          label: "Transporte",
-          icon: <FiTruck className="h-6 w-6" />,
-          helper: "Rutas y entregas",
-          span: "sm:col-span-2",
-        },
-        {
-          key: "bodega_interna",
-          label: "Bodega interna",
-          icon: <FiHome className="h-6 w-6" />,
-          helper: "Control de slots y movimientos",
-        },
-        {
-          key: "bodega_externa",
-          label: "Bodega externa",
-          icon: <FiExternalLink className="h-6 w-6" />,
-          helper: "Integraciones externas",
-        },
-      ];
-
-    return (
-      <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.25em] text-slate-400">Panel administrador</p>
-            <h2 className="mt-1 text-xl font-semibold text-slate-900">Selecciona un módulo</h2>
-            <p className="mt-1 text-sm text-slate-600">
-              Elige la operación que quieres gestionar. Bodega interna abre la vista completa de slots.
-            </p>
-          </div>
-        </div>
-        <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
-          {cards.map((card) => (
-            <button
-              key={card.key}
-              type="button"
-              onClick={() => setAdminSection(card.key)}
-              className={`group flex h-full flex-col items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-5 text-center shadow-sm transition hover:-translate-y-1 hover:border-slate-300 hover:bg-white hover:shadow-md ${card.span ?? ""}`.trim()}
-            >
-              <div className="flex items-center justify-center gap-3">
-                <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-900 text-white shadow-sm">
-                  {card.icon}
-                </span>
-                <div className="text-center">
-                  <p className="text-base font-semibold text-slate-900">{card.label}</p>
-                  <p className="text-xs text-slate-500">{card.helper}</p>
-                </div>
-              </div>
-              <span className="text-sm font-semibold text-emerald-600 opacity-0 transition group-hover:opacity-100">
-                Abrir módulo →
-              </span>
-            </button>
-          ))}
-        </div>
-      </section>
-    );
-  };
-
-  const renderAdminPlaceholder = (title: string, description: string) => (
-    <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-      <div className="flex flex-col gap-4">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.25em] text-slate-400">Vista en preparación</p>
-          <h2 className="mt-1 text-xl font-semibold text-slate-900">{title}</h2>
-          <p className="mt-1 text-sm text-slate-600">{description}</p>
-        </div>
-
-        {title === "Bodega externa" ? (
-          <div className="overflow-hidden rounded-xl border border-slate-200 bg-slate-50">
-            <div className="grid grid-cols-4 gap-0 border-b border-slate-200 bg-white px-4 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
-              <span>ID único</span>
-              <span className="col-span-2">Descripción</span>
-              <span className="text-right">Peso / Temp</span>
-            </div>
-            {[
-              {
-                id: "EXT-001",
-                description: "Operador aliado zona norte",
-                weight: "12.4 t",
-                temperature: "4 °C",
-              },
-              {
-                id: "EXT-002",
-                description: "Túnel de frío externo",
-                weight: "8.9 t",
-                temperature: "2 °C",
-              },
-              {
-                id: "EXT-003",
-                description: "Bodega portuaria transitoria",
-                weight: "15.2 t",
-                temperature: "5 °C",
-              },
-            ].map((row) => (
-              <div
-                key={row.id}
-                className="grid grid-cols-4 gap-0 border-b border-slate-200 px-4 py-3 text-sm last:border-b-0"
-              >
-                <span className="font-semibold text-slate-900">{row.id}</span>
-                <span className="col-span-2 truncate text-slate-800">{row.description}</span>
-                <div className="flex items-center justify-end gap-2 text-slate-700">
-                  <span className="whitespace-nowrap rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-700">
-                    {row.weight}
-                  </span>
-                  <span className="whitespace-nowrap rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700">
-                    {row.temperature}
-                  </span>
-                </div>
-              </div>
-            ))}
-          </div>
-        ) : null}
-
-        <div className="flex flex-wrap gap-3">
-          <button
-            type="button"
-            onClick={() => setAdminSection("menu")}
-            className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
-          >
-            Volver al menú
-          </button>
-          <button
-            type="button"
-            onClick={() => setAdminSection("bodega_interna")}
-            className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800"
-          >
-            Ir a bodega interna
-          </button>
-        </div>
-      </div>
-    </section>
-  );
 
   if (!isHydrated) {
     return (
@@ -2940,33 +2729,16 @@ export default function BodegaDashboard() {
           userDisplayName={session?.displayName}
           onLogout={handleLogout}
           onGoMenu={() => {
-            if (isAdmin) {
-              setAdminSection("menu");
-              return;
-            }
-            if (isCliente && activeTab === "reportes") {
+            if (isCuentaUsuario && activeTab === "reportes") {
               setReportesClienteMenuNonce((n) => n + 1);
+            }
+            if (isConfigurator && activeTab === "configuracion") {
+              setConfiguradorMenuNonce((n) => n + 1);
             }
           }}
           role={role}
         />
-        {showAdminMenu ? (
-          <>
-            {adminSection === "menu" ? renderAdminLanding() : null}
-            {adminSection === "compras"
-              ? renderAdminPlaceholder("Compras", "Administra adquisiciones, proveedores y órdenes de compra.")
-              : null}
-            {adminSection === "transporte"
-              ? renderAdminPlaceholder("Transporte", "Coordina rutas, entregas y transporte de mercancía.")
-              : null}
-            {adminSection === "bodega_externa"
-              ? renderAdminPlaceholder("Bodega externa", "Conecta y sincroniza con bodegas externas.")
-              : null}
-          </>
-        ) : null}
-
-        {showDashboard ? (
-          <>
+        <>
             {isAdmin ? (
               <div className="flex flex-wrap items-center justify-between gap-3">
                 {/* <div className="flex-1 min-w-[260px]">
@@ -2980,13 +2752,6 @@ export default function BodegaDashboard() {
                     isLoading={warehousesLoading}
                   />
                 </div> */}
-                {/* <button
-                  type="button"
-                  onClick={() => setAdminSection("menu")}
-                  className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
-                >
-                  Volver al menú de administrador
-                </button> */}
               </div>
             ) : null}
 
@@ -3034,6 +2799,8 @@ export default function BodegaDashboard() {
                 setSelectedPosition={setSelectedPosition}
                 outboundBoxes={outboundBoxes}
                 sortByPosition={sortByPosition}
+                clients={clients}
+                role={role}
               />
             ) : null}
 
@@ -3080,6 +2847,7 @@ export default function BodegaDashboard() {
                 handleCreateUser={handleCreateUser}
                 toggleUserDisabled={toggleUserDisabled}
                 handleUpdateUser={handleUpdateUser}
+                menuResetNonce={configuradorMenuNonce}
               />
             ) : null}
 
@@ -3089,26 +2857,29 @@ export default function BodegaDashboard() {
                 canUseIngresoForm={canUseIngresoForm}
                 slots={slots}
                 orders={orders}
-                inboundBoxes={isCliente ? inboundClient : inboundBoxes}
-                outboundBoxes={isCliente ? outboundClient : outboundBoxes}
+                inboundBoxes={isCuentaUsuario ? inboundClient : inboundBoxes}
+                outboundBoxes={isCuentaUsuario ? outboundClient : outboundBoxes}
                 ingresoPosition={ingresoPosition}
                 ingresoName={ingresoName}
                 ingresoTemp={ingresoTemp}
-                ingresoClient={ingresoClient}
+                ingresoQuantityKg={ingresoQuantityKg}
+                ingresoClientId={ingresoClientId}
+                setIngresoClientId={setIngresoClientId}
                 setIngresoName={setIngresoName}
                 setIngresoTemp={setIngresoTemp}
-                setIngresoClient={setIngresoClient}
+                setIngresoQuantityKg={setIngresoQuantityKg}
                 handleIngreso={handleIngreso}
                 createReturnOrder={createReturnOrder}
                 sortByPosition={sortByPosition}
                 handleDispatchBox={handleDispatchBox}
                 availableBodegaTargets={availableBodegaTargets}
-                isCliente={isCliente}
+                isCliente={isCuentaUsuario}
                 clientFilterId={clientFilterId}
-                clientCatalog={clients
-                  .filter((client) => client.createdByRole === "configurador" && !client.disabled)
-                  .map((client) => client.name)}
+                clientsForCatalog={configuradorClients}
                 onClientChange={setClientFilterId}
+                warehouseId={warehouseId}
+                onWarehouseSelect={handleSelectWarehouse}
+                warehousesFallback={warehouses}
               />
             ) : null}
 
@@ -3151,6 +2922,7 @@ export default function BodegaDashboard() {
                 setOrderModalType={setOrderModalType}
                 llamadasJefe={llamadasJefe}
                 onUpdateLlamadasJefe={setLlamadasJefe}
+                clients={clients}
               />
             ) : null}
 
@@ -3325,26 +3097,19 @@ export default function BodegaDashboard() {
               </section>
             ) : null}
 
-            {activeTab === "reportes" && (isAdmin || isCliente) ? (
+            {activeTab === "reportes" && (isAdmin || isCuentaUsuario) ? (
               <ReportesSection
-                reportData={reportData}
-                inboundBoxes={isCliente ? inboundClient : inboundBoxes}
-                outboundBoxes={isCliente ? outboundClient : outboundBoxes}
-                dispatchedBoxes={isCliente ? dispatchedClient : dispatchedBoxes}
-                orders={isCliente ? ordersClient : orders}
-                slots={isCliente ? slotsClient : slots}
+                inboundBoxes={isCuentaUsuario ? inboundClient : inboundBoxes}
+                outboundBoxes={isCuentaUsuario ? outboundClient : outboundBoxes}
+                dispatchedBoxes={isCuentaUsuario ? dispatchedClient : dispatchedBoxes}
+                slots={isCuentaUsuario ? slotsClient : slots}
                 sortByPosition={sortByPosition}
-                reportDetailModal={reportDetailModal}
-                setReportDetailModal={setReportDetailModal}
-                isCliente={isCliente}
-                clientId={effectiveClientId ?? undefined}
-                clientFilterId={clientFilterId}
-                onClientChange={setClientFilterId}
-                menuResetNonce={isCliente ? reportesClienteMenuNonce : undefined}
+                clients={clients}
+                isCliente={isCuentaUsuario}
+                menuResetNonce={isCuentaUsuario ? reportesClienteMenuNonce : undefined}
               />
             ) : null}
-          </>
-        ) : null}
+        </>
 
         {alertsPanelOpen ? (
           <div

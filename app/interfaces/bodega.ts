@@ -4,9 +4,18 @@ export type Slot = {
 	name: string;
 	temperature: number | null;
 	client: string;
+	/** Peso en kg asociado a la caja (opcional). */
+	quantityKg?: number;
 };
 
-export type Role = "custodio" | "administrador" | "operario" | "jefe" | "cliente" | "configurador";
+export type Role =
+	| "custodio"
+	| "administrador"
+	| "operario"
+	| "jefe"
+	| "cliente"
+	| "configurador"
+	| "operadorCuentas";
 
 export type Client = {
 	id: string;
@@ -42,6 +51,8 @@ export type Box = {
 	name: string;
 	temperature: number;
 	client: string;
+	/** Cantidad en kilogramos. */
+	quantityKg?: number;
 };
 
 export type OrderType = "a_bodega" | "a_salida" | "revisar";

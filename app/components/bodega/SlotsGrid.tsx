@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { FiArchive } from "react-icons/fi";
 import type { SlotsGridProps } from "../../interfaces/bodega/SlotsGrid";
 import type { Role } from "../../interfaces/bodega";
@@ -21,6 +22,8 @@ export default function SlotsGrid({
   pageSize = slots.length,
   onPageChange,
 }: ExtendedSlotsGridProps) {
+  const [procesamientoModalOpen, setProcesamientoModalOpen] = useState(false);
+  const showProcesamientoStrip = role === "administrador" || role === "jefe";
   const totalPages = Math.max(1, Math.ceil(slots.length / pageSize));
   const currentPage = Math.min(Math.max(page, 0), totalPages - 1);
   const start = currentPage * pageSize;
@@ -56,6 +59,15 @@ export default function SlotsGrid({
           />
         ))}
       </div>
+      {showProcesamientoStrip ? (
+        <button
+          type="button"
+          onClick={() => setProcesamientoModalOpen(true)}
+          className="mt-3 w-full rounded-xl border border-blue-200 bg-slate-50 py-3 px-4 text-center text-sm font-semibold text-slate-800 shadow-sm transition hover:bg-blue-50 hover:border-blue-300 focus:outline-none focus:ring-2 focus:ring-blue-300"
+        >
+          Procesamiento
+        </button>
+      ) : null}
       {totalPages > 1 ? (
         <div className="flex items-center justify-between mt-3 text-xs text-slate-700">
           <button
@@ -94,6 +106,32 @@ export default function SlotsGrid({
           </div>
         </div>
       </div>
+      {procesamientoModalOpen ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="procesamiento-modal-title"
+          onClick={() => setProcesamientoModalOpen(false)}
+        >
+          <div
+            className="w-full max-w-sm rounded-2xl border border-blue-200 bg-white p-6 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 id="procesamiento-modal-title" className="text-lg font-semibold text-slate-900 text-center">
+              Procesamiento
+            </h3>
+            <p className="mt-3 text-center text-sm text-slate-600">Disponible próximamente</p>
+            <button
+              type="button"
+              onClick={() => setProcesamientoModalOpen(false)}
+              className="mt-6 w-full rounded-lg border border-slate-200 bg-white py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+            >
+              Cerrar
+            </button>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

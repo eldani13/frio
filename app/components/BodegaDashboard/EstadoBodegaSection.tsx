@@ -3,8 +3,9 @@ import { FiArchive, FiBox, FiAlertTriangle } from "react-icons/fi";
 import React, { useState, useEffect } from "react";
 import SlotsGrid from "../bodega/SlotsGrid";
 import SelectedSlotCard from "../bodega/SelectedSlotCard";
-import type { Box, Slot, Role } from "../../interfaces/bodega";
+import type { Box, Client, Slot, Role } from "../../interfaces/bodega";
 import EntradaAlertButton from "../common/EntradaAlertButton";
+import { clientLabelFromList, formatBoxQuantityKg } from "@/app/lib/bodegaDisplay";
 
 
 type Props = {
@@ -18,6 +19,8 @@ type Props = {
   outboundBoxes: Box[];
   sortByPosition: <T extends { position: number }>(items: T[]) => T[];
   role?: Role;
+  /** Para mostrar nombre de cliente en Entrada/Salida (el id se guarda en la caja). */
+  clients?: Pick<Client, "id" | "name">[];
 };
 
 
@@ -33,6 +36,7 @@ export default function EstadoBodegaSection(props: Props) {
     outboundBoxes,
     sortByPosition,
     role,
+    clients = [],
   } = props;
 
   const ITEMS_PER_PAGE = 4;
@@ -177,7 +181,10 @@ export default function EstadoBodegaSection(props: Props) {
                                 Id: {item.autoId}
                               </p>
                               <p className="mt-1 text-xs text-slate-600 truncate">
-                                Cliente: {item.client || "—"}
+                                Cliente: {clientLabelFromList(item.client || "", clients)}
+                              </p>
+                              <p className="mt-1 text-xs text-slate-600 truncate">
+                                Cantidad: {formatBoxQuantityKg(item.quantityKg)}
                               </p>
                               <p className="mt-2 text-xs font-semibold text-red-600">
                                 Temp: {item.temperature} °C
@@ -208,7 +215,8 @@ export default function EstadoBodegaSection(props: Props) {
                       {box.name || "Sin nombre"}
                     </div>
                     <div>Id: {box.autoId}</div>
-                    <div>Cliente: {box.client || "—"}</div>
+                    <div>Cliente: {clientLabelFromList(box.client || "", clients)}</div>
+                    <div>Cantidad: {formatBoxQuantityKg(box.quantityKg)}</div>
                     <div>
                       Temp:{" "}
                       {typeof box.temperature === "number"
@@ -270,6 +278,7 @@ export default function EstadoBodegaSection(props: Props) {
           onClose={() => setSelectedPosition(null)}
           onSave={() => undefined}
           canEdit={false}
+          clients={clients}
         />
       </div>
 
@@ -297,7 +306,8 @@ export default function EstadoBodegaSection(props: Props) {
                     {box.name || "Sin nombre"}
                   </div>
                   <div>Id: {box.autoId}</div>
-                  <div>Cliente: {box.client || "—"}</div>
+                  <div>Cliente: {clientLabelFromList(box.client || "", clients)}</div>
+                  <div>Cantidad: {formatBoxQuantityKg(box.quantityKg)}</div>
                   <div>
                     Temp:{" "}
                     {typeof box.temperature === "number"

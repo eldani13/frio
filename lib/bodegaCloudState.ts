@@ -69,6 +69,16 @@ export async function ensureWarehouseState(warehouseId: string) {
   }
 }
 
+/** Lectura puntual del estado del mapa (p. ej. totales en reportes sin suscripción). */
+export async function fetchWarehouseStateOnce(
+  warehouseId: string,
+): Promise<CloudWarehouseState> {
+  const snap = await getDoc(stateDocRef(warehouseId));
+  if (!snap.exists()) return defaultWarehouseState;
+  const data = snap.data() as Partial<CloudWarehouseState>;
+  return { ...defaultWarehouseState, ...data };
+}
+
 export function subscribeWarehouseState(
   warehouseId: string,
   handler: (state: CloudWarehouseState) => void,

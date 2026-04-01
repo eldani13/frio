@@ -4,10 +4,10 @@ import React, { useEffect, useState } from "react";
 import { HiOutlinePlus, HiOutlineTrash, HiOutlineXMark } from "react-icons/hi2";
 import type { Catalogo } from "@/app/types/catalogo";
 import type { Provider } from "@/app/types/provider";
-import type { OrdenCompraLineItem } from "@/app/types/ordenCompra";
-import { OrdenCompraService } from "@/app/services/ordenCompraService";
+import type { SolicitudLineItem } from "@/app/types/solicitudCompra";
+import { SolicitudCompraService } from "@/app/services/solicitudCompraService";
 
-type DraftLine = OrdenCompraLineItem;
+type DraftLine = SolicitudLineItem;
 
 interface Props {
   isOpen: boolean;
@@ -19,7 +19,7 @@ interface Props {
   onSuccess: () => void;
 }
 
-export function OrdenCompraFormModal({
+export function SolicitudCompraFormModal({
   isOpen,
   onClose,
   idCliente,
@@ -33,7 +33,7 @@ export function OrdenCompraFormModal({
   const [estado, setEstado] = useState("En curso");
   const [lines, setLines] = useState<DraftLine[]>([]);
   const [pickProductId, setPickProductId] = useState("");
-  const [pickCantidad, setPickCantidad] = useState("1");
+  const [pickPesoKg, setPickPesoKg] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -44,7 +44,7 @@ export function OrdenCompraFormModal({
     setEstado("En curso");
     setLines([]);
     setPickProductId("");
-    setPickCantidad("1");
+    setPickPesoKg("");
     setError(null);
   }, [isOpen]);
 
@@ -57,14 +57,15 @@ export function OrdenCompraFormModal({
       setError("Seleccioná un producto del catálogo.");
       return;
     }
-    const q = Math.max(1, Math.floor(Number(pickCantidad) || 0));
-    if (q < 1) {
-      setError("La cantidad debe ser al menos 1.");
+    const pesoRaw = String(pickPesoKg).replace(",", ".").trim();
+    const pesoNum = Number(pesoRaw);
+    if (!Number.isFinite(pesoNum) || pesoNum <= 0) {
+      setError("Ingresá un peso en kg mayor a 0.");
       return;
     }
     const line: DraftLine = {
       catalogoProductId: p.id,
-      cantidad: q,
+      pesoKg: pesoNum,
       titleSnapshot: p.title || "Sin título",
       ...(p.sku != null && String(p.sku).trim() !== "" ? { skuSnapshot: String(p.sku) } : {}),
       ...(p.code != null && String(p.code).trim() !== ""
@@ -73,7 +74,7 @@ export function OrdenCompraFormModal({
     };
     setLines((prev) => [...prev, line]);
     setPickProductId("");
-    setPickCantidad("1");
+    setPickPesoKg("");
   };
 
   const removeLine = (index: number) => {
@@ -99,7 +100,7 @@ export function OrdenCompraFormModal({
 
     setSaving(true);
     try {
-      await OrdenCompraService.create(idCliente, codeCuenta, {
+      await SolicitudCompraService.create(idCliente, codeCuenta, {
         proveedorId: prov.id,
         proveedorCode: prov.code ?? "",
         proveedorNombre: prov.name,
@@ -110,7 +111,7 @@ export function OrdenCompraFormModal({
       onSuccess();
       onClose();
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "No se pudo guardar la orden.";
+      const msg = err instanceof Error ? err.message : "No se pudo guardar la solicitud.";
       setError(msg);
     } finally {
       setSaving(false);
@@ -122,7 +123,7 @@ export function OrdenCompraFormModal({
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/20 p-4 backdrop-blur-sm"
       role="dialog"
       aria-modal="true"
-      aria-labelledby="orden-compra-modal-title"
+      aria-labelledby="solicitud-modal-title"
       onClick={onClose}
     >
       <div
@@ -130,8 +131,8 @@ export function OrdenCompraFormModal({
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mb-4 flex items-center justify-between">
-          <h2 id="orden-compra-modal-title" className="text-lg font-semibold text-gray-900">
-            Nueva orden de compra
+          <h2 id="solicitud-modal-title" className="text-lg font-semibold text-gray-900">
+            Nueva solicitud
           </h2>
           <button
             type="button"
@@ -144,8 +145,7 @@ export function OrdenCompraFormModal({
         </div>
 
         <p className="mb-4 text-xs text-[#6B7280]">
-          Cada línea debe ser un producto de tu <strong>catálogo</strong> (mismo SKU y datos que en
-          Catálogo). Solo se registra la <strong>cantidad</strong>.
+          Indicá el <strong>peso en kg</strong> por cada producto del <strong>catálogo</strong>.
         </p>
 
         {error ? (
@@ -155,17 +155,17 @@ export function OrdenCompraFormModal({
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label
-              htmlFor="oc-proveedor-id"
+              htmlFor="sol-proveedor-id"
               className="mb-1 block text-[11px] font-bold uppercase text-gray-500"
             >
               Proveedor
             </label>
             <select
-              id="oc-proveedor-id"
+              id="sol-proveedor-id"
               value={proveedorId}
               onChange={(e) => setProveedorId(e.target.value)}
               required
-              className="w-full rounded-[8px] border border-gray-200 px-4 py-2 text-sm focus:border-[#A8D5BA] focus:outline-none"
+              className="w-full rounded-[8px] border border-gray-200 px-4 py-2 text-sm focus:border-cyan-500 focus:outline-none"
             >
               <option value="">Seleccionar proveedor…</option>
               {proveedores.map((pr) => (
@@ -179,32 +179,32 @@ export function OrdenCompraFormModal({
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label
-                htmlFor="oc-fecha"
+                htmlFor="sol-fecha"
                 className="mb-1 block text-[11px] font-bold uppercase text-gray-500"
               >
                 Fecha
               </label>
               <input
-                id="oc-fecha"
+                id="sol-fecha"
                 type="date"
                 value={fecha}
                 onChange={(e) => setFecha(e.target.value)}
                 required
-                className="w-full rounded-[8px] border border-gray-200 px-4 py-2 text-sm focus:border-[#A8D5BA] focus:outline-none"
+                className="w-full rounded-[8px] border border-gray-200 px-4 py-2 text-sm focus:border-cyan-500 focus:outline-none"
               />
             </div>
             <div>
               <label
-                htmlFor="oc-estado"
+                htmlFor="sol-estado"
                 className="mb-1 block text-[11px] font-bold uppercase text-gray-500"
               >
                 Estado
               </label>
               <select
-                id="oc-estado"
+                id="sol-estado"
                 value={estado}
                 onChange={(e) => setEstado(e.target.value)}
-                className="w-full rounded-[8px] border border-gray-200 px-4 py-2 text-sm focus:border-[#A8D5BA] focus:outline-none"
+                className="w-full rounded-[8px] border border-gray-200 px-4 py-2 text-sm focus:border-cyan-500 focus:outline-none"
               >
                 <option value="En curso">En curso</option>
                 <option value="Terminado">Terminado</option>
@@ -212,18 +212,18 @@ export function OrdenCompraFormModal({
             </div>
           </div>
 
-          <div className="rounded-lg border border-dashed border-[#A8D5BA]/60 bg-[#f8faf8] p-3">
+          <div className="rounded-lg border border-dashed border-cyan-200 bg-cyan-50/40 p-3">
             <p className="mb-2 text-[11px] font-bold uppercase text-gray-500">Productos del catálogo</p>
             <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-end">
               <div className="min-w-0 flex-1 sm:min-w-[200px]">
-                <label className="sr-only" htmlFor="oc-catalogo">
+                <label className="sr-only" htmlFor="sol-catalogo">
                   Producto
                 </label>
                 <select
-                  id="oc-catalogo"
+                  id="sol-catalogo"
                   value={pickProductId}
                   onChange={(e) => setPickProductId(e.target.value)}
-                  className="w-full rounded-[8px] border border-gray-200 bg-white px-3 py-2 text-sm focus:border-[#A8D5BA] focus:outline-none"
+                  className="w-full rounded-[8px] border border-gray-200 bg-white px-3 py-2 text-sm focus:border-cyan-500 focus:outline-none"
                 >
                   <option value="">Elegí producto del catálogo…</option>
                   {productos.map((c) => (
@@ -234,28 +234,27 @@ export function OrdenCompraFormModal({
                   ))}
                 </select>
               </div>
-              <div className="w-full sm:w-24">
+              <div className="w-full sm:w-32">
                 <label
                   className="mb-0.5 block text-[10px] font-bold uppercase text-gray-500 sm:sr-only"
-                  htmlFor="oc-cantidad-line"
+                  htmlFor="sol-peso-kg"
                 >
-                  Cantidad
+                  Peso (kg)
                 </label>
                 <input
-                  id="oc-cantidad-line"
-                  type="number"
-                  min={1}
-                  step={1}
-                  value={pickCantidad}
-                  onChange={(e) => setPickCantidad(e.target.value)}
-                  placeholder="Cantidad"
-                  className="w-full rounded-[8px] border border-gray-200 bg-white px-3 py-2 text-sm focus:border-[#A8D5BA] focus:outline-none"
+                  id="sol-peso-kg"
+                  type="text"
+                  inputMode="decimal"
+                  value={pickPesoKg}
+                  onChange={(e) => setPickPesoKg(e.target.value)}
+                  placeholder="Peso (kg)"
+                  className="w-full rounded-[8px] border border-gray-200 bg-white px-3 py-2 text-sm focus:border-cyan-500 focus:outline-none"
                 />
               </div>
               <button
                 type="button"
                 onClick={addLine}
-                className="inline-flex items-center justify-center gap-1 rounded-[8px] bg-[#0f172a] px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800"
+                className="inline-flex items-center justify-center gap-1 rounded-[8px] bg-cyan-700 px-3 py-2 text-sm font-semibold text-white hover:bg-cyan-800"
               >
                 <HiOutlinePlus className="h-4 w-4" />
                 Agregar
@@ -263,7 +262,9 @@ export function OrdenCompraFormModal({
             </div>
 
             {lines.length === 0 ? (
-              <p className="mt-3 text-center text-xs text-gray-500">Todavía no hay líneas en esta orden.</p>
+              <p className="mt-3 text-center text-xs text-gray-500">
+                Todavía no hay líneas en esta solicitud.
+              </p>
             ) : (
               <ul className="mt-3 space-y-2">
                 {lines.map((ln, i) => (
@@ -275,7 +276,7 @@ export function OrdenCompraFormModal({
                       <p className="truncate font-medium text-gray-900">{ln.titleSnapshot}</p>
                       <p className="text-xs text-gray-500">
                         {ln.skuSnapshot ? `SKU ${ln.skuSnapshot} · ` : null}
-                        Cant. {ln.cantidad}
+                        {ln.pesoKg != null ? `${ln.pesoKg} kg` : ""}
                       </p>
                     </div>
                     <button
@@ -303,9 +304,9 @@ export function OrdenCompraFormModal({
             <button
               type="submit"
               disabled={saving}
-              className="rounded-[8px] bg-[#A8D5BA] px-5 py-2 text-sm font-semibold text-[#2D5A3F] transition hover:bg-[#97c4a9] active:scale-[0.98] disabled:opacity-50"
+              className="rounded-[8px] bg-cyan-600 px-5 py-2 text-sm font-semibold text-white transition hover:bg-cyan-700 active:scale-[0.98] disabled:opacity-50"
             >
-              {saving ? "Guardando…" : "Guardar orden"}
+              {saving ? "Guardando…" : "Guardar solicitud"}
             </button>
           </div>
         </form>

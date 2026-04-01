@@ -16,8 +16,11 @@ export const ProviderTable = ({ providers, onEdit, onDelete, onSelectProvider }:
         <thead className="bg-[#A8D5BA]/10">
           <tr>
             <th className="p-4 text-[12px] font-medium text-gray-500 uppercase">ID</th>
-            <th className="p-4 text-[12px] font-medium text-gray-500 uppercase">Código </th>
+            <th className="p-4 text-[12px] font-medium text-gray-500 uppercase">Código</th>
             <th className="p-4 text-[12px] font-medium text-gray-500 uppercase">Proveedor</th>
+            <th className="p-4 text-[12px] font-medium text-gray-500 uppercase">Nombre</th>
+            <th className="p-4 text-[12px] font-medium text-gray-500 uppercase">Teléfono</th>
+            <th className="p-4 text-[12px] font-medium text-gray-500 uppercase">Email</th>
             <th className="p-4 text-[12px] font-medium text-gray-500 uppercase text-right">Acciones</th>
           </tr>
         </thead>
@@ -28,9 +31,12 @@ export const ProviderTable = ({ providers, onEdit, onDelete, onSelectProvider }:
               className={`transition-colors hover:bg-gray-50 ${onSelectProvider ? "cursor-pointer" : ""}`}
               onClick={() => onSelectProvider?.(p)}
             >
-              <td className="p-4 text-[14px] text-gray-700">{p.numericId}</td>
-              <td className="p-4 text-[14px] font-mono font-bold text-[#2D5A3F]">{p.code}</td>
+              <td className="p-4 text-[14px] text-gray-700 whitespace-nowrap">{p.numericId}</td>
+              <td className="p-4 text-[14px] font-mono font-bold text-[#2D5A3F] whitespace-nowrap">{p.code}</td>
               <td className="p-4 text-[14px] text-gray-900 font-medium">{p.name}</td>
+              <td className="p-4 text-[14px] text-gray-700">{p.nombre?.trim() || "—"}</td>
+              <td className="p-4 text-[14px] text-gray-700">{p.telefono?.trim() || "—"}</td>
+              <td className="p-4 text-[14px] text-gray-700 break-all max-w-[200px]">{p.email?.trim() || "—"}</td>
               <td className="p-4 text-right" onClick={(e) => e.stopPropagation()}>
                 <div className="flex justify-end gap-1">
                   {/* Botón Editar - Azul Suave */}

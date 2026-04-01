@@ -1,10 +1,67 @@
-import React, { useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { FiArchive, FiBox, FiAlertCircle } from "react-icons/fi";
 import { IoCloseOutline } from "react-icons/io5";
-import type { Box, Slot, BodegaOrder } from "../../interfaces/bodega";
-import { useEffect } from "react";
+import type { Box, Client, Slot, BodegaOrder, WarehouseMeta } from "../../interfaces/bodega";
+import { CatalogoService } from "@/app/services/catalogoService";
+import { AsignarBodegaService } from "@/app/services/asignarbodegaService";
+import type { Catalogo } from "@/app/types/catalogo";
 
 const HIGH_TEMP_THRESHOLD = 5;
+
+function boxMatchesSalidaFilter(
+  box: Box,
+  filterId: string,
+  clients: Pick<Client, "id" | "name">[],
+): boolean {
+  if (!filterId.trim()) return true;
+  if (box.client === filterId) return true;
+  const row = clients.find((c) => c.id === filterId);
+  if (row && box.client.trim() === row.name.trim()) return true;
+  return false;
+}
+
+function catalogLabel(p: { title?: string; sku?: string }) {
+  const t = p.title?.trim() || "Sin título";
+  const s = p.sku?.trim();
+  return s ? `${t} (${s})` : t;
+}
+
+function formatQuantityKg(kg: number | undefined) {
+  if (kg === undefined || kg === null || Number.isNaN(kg)) return "—";
+  return `${kg} kg`;
+}
+
+function mergeWarehousesForClient(
+  byCode: WarehouseMeta[],
+  fallback: WarehouseMeta[],
+  clientId: string,
+  accountCode: string,
+): WarehouseMeta[] {
+  const map = new Map<string, WarehouseMeta>();
+  const add = (w: WarehouseMeta) => {
+    if (!w?.id || w.disabled) return;
+    map.set(w.id, w);
+  };
+  byCode.forEach(add);
+  const codeTrim = accountCode.trim();
+  fallback.forEach((w) => {
+    const cc = (w.codeCuenta ?? "").trim();
+    if (!cc) return;
+    if (codeTrim && cc === codeTrim) add(w);
+    if (cc === clientId) add(w);
+  });
+  return Array.from(map.values()).sort((a, b) =>
+    (a.name ?? a.id).localeCompare(b.name ?? b.id, "es", { sensitivity: "base" }),
+  );
+}
+
+function warehouseOptionLabel(w: WarehouseMeta) {
+  const name = w.name?.trim() || w.id;
+  const st = w.status?.trim();
+  if (st === "externa" || st === "external") return `${name} · externa`;
+  if (st === "interna") return `${name} · interna`;
+  return name;
+}
 
 type Props = {
   isCustodio: boolean;
@@ -16,10 +73,12 @@ type Props = {
   ingresoPosition: number;
   ingresoName: string;
   ingresoTemp: string;
-  ingresoClient: string;
+  ingresoQuantityKg: string;
+  ingresoClientId: string;
+  setIngresoClientId: (v: string) => void;
   setIngresoName: (v: string) => void;
   setIngresoTemp: (v: string) => void;
-  setIngresoClient: (v: string) => void;
+  setIngresoQuantityKg: (v: string) => void;
   handleIngreso: () => void;
   createReturnOrder: (box: Box, targetPosition: number) => string | null;
   sortByPosition: <T extends { position: number }>(items: T[]) => T[];
@@ -28,7 +87,10 @@ type Props = {
   isCliente?: boolean;
   clientFilterId?: string;
   onClientChange?: (id: string) => void;
-  clientCatalog?: string[];
+  clientsForCatalog: Client[];
+  warehouseId: string;
+  onWarehouseSelect: (id: string) => void;
+  warehousesFallback: WarehouseMeta[];
 };
 
 export default function IngresosSection(props: Props) {
@@ -42,10 +104,12 @@ export default function IngresosSection(props: Props) {
     ingresoPosition,
     ingresoName,
     ingresoTemp,
-    ingresoClient,
+    ingresoQuantityKg,
+    ingresoClientId,
+    setIngresoClientId,
     setIngresoName,
     setIngresoTemp,
-    setIngresoClient,
+    setIngresoQuantityKg,
     handleIngreso,
     createReturnOrder,
     sortByPosition,
@@ -54,47 +118,108 @@ export default function IngresosSection(props: Props) {
     isCliente = false,
     clientFilterId,
     onClientChange,
-    clientCatalog = [],
+    clientsForCatalog,
+    warehouseId,
+    onWarehouseSelect,
+    warehousesFallback,
   } = props;
 
-  const ingresoClientOptions = useMemo(() => {
-    const unique = new Set<string>();
-    clientCatalog.forEach((name) => {
-      if (name && name.trim()) {
-        unique.add(name.trim());
-      }
-    });
-    if (clientFilterId) unique.add(clientFilterId);
-    if (ingresoClient) unique.add(ingresoClient);
-    return Array.from(unique);
-  }, [clientCatalog, clientFilterId, ingresoClient]);
+  const [linkedWarehouses, setLinkedWarehouses] = useState<WarehouseMeta[]>([]);
+  const [linkedWarehousesLoading, setLinkedWarehousesLoading] = useState(false);
+
+  const [catalogProducts, setCatalogProducts] = useState<Catalogo[]>([]);
+  const [catalogLoading, setCatalogLoading] = useState(false);
+  const [selectedCatalogProductId, setSelectedCatalogProductId] = useState("");
+
+  const selectedClientRow = useMemo(
+    () => clientsForCatalog.find((c) => c.id === ingresoClientId),
+    [clientsForCatalog, ingresoClientId],
+  );
+
+  const catalogCodeCuenta = selectedClientRow?.code?.trim() ?? "";
+
+  const loadCatalog = useCallback(async () => {
+    if (!ingresoClientId.trim() || !catalogCodeCuenta) {
+      setCatalogProducts([]);
+      return;
+    }
+    setCatalogLoading(true);
+    try {
+      const data = await CatalogoService.getAll(ingresoClientId.trim(), catalogCodeCuenta);
+      const sorted = [...data].sort((a, b) =>
+        (a.title || "").localeCompare(b.title || "", "es", { sensitivity: "base" }),
+      );
+      setCatalogProducts(sorted);
+    } finally {
+      setCatalogLoading(false);
+    }
+  }, [ingresoClientId, catalogCodeCuenta]);
 
   useEffect(() => {
-    if (!ingresoClient && ingresoClientOptions.length > 0) {
-      const first = ingresoClientOptions[0];
-      if (first) setIngresoClient(first);
+    void loadCatalog();
+  }, [loadCatalog]);
+
+  const loadLinkedWarehouses = useCallback(async () => {
+    if (!ingresoClientId.trim()) {
+      setLinkedWarehouses([]);
+      return;
     }
-  }, [ingresoClient, ingresoClientOptions, setIngresoClient]);
-
-  const clientOptions = useMemo(() => {
-    const unique = new Set<string>();
-    outboundBoxes.forEach((box) => {
-      if (box.client && box.client.trim()) {
-        unique.add(box.client.trim());
+    setLinkedWarehousesLoading(true);
+    try {
+      let byCode: WarehouseMeta[] = [];
+      if (catalogCodeCuenta) {
+        byCode = await AsignarBodegaService.getWarehousesByCode(catalogCodeCuenta);
       }
-    });
-    return Array.from(unique);
-  }, [outboundBoxes]);
+      const merged = mergeWarehousesForClient(
+        byCode,
+        warehousesFallback,
+        ingresoClientId.trim(),
+        catalogCodeCuenta,
+      );
+      setLinkedWarehouses(merged);
+    } finally {
+      setLinkedWarehousesLoading(false);
+    }
+  }, [ingresoClientId, catalogCodeCuenta, warehousesFallback]);
 
-  const initialSelected = clientFilterId ?? "";
-  const selectedClient =
-    initialSelected && clientOptions.includes(initialSelected)
-      ? initialSelected
-      : "";
+  useEffect(() => {
+    void loadLinkedWarehouses();
+  }, [loadLinkedWarehouses]);
 
-  const outboundFiltered = selectedClient
-    ? outboundBoxes.filter((box) => box.client === selectedClient)
-    : outboundBoxes;
+  useEffect(() => {
+    setSelectedCatalogProductId("");
+    setIngresoName("");
+    setIngresoQuantityKg("");
+  }, [ingresoClientId, setIngresoName, setIngresoQuantityKg]);
+
+  const clientLabel = useCallback(
+    (clientField: string) => {
+      if (!clientField?.trim()) return "—";
+      const row = clientsForCatalog.find((c) => c.id === clientField);
+      if (row) return row.name;
+      return clientField;
+    },
+    [clientsForCatalog],
+  );
+
+  const salidaFilterValue = clientFilterId ?? "";
+
+  const outboundFiltered = useMemo(
+    () =>
+      outboundBoxes.filter((box) =>
+        boxMatchesSalidaFilter(box, salidaFilterValue, clientsForCatalog),
+      ),
+    [outboundBoxes, salidaFilterValue, clientsForCatalog],
+  );
+
+  useEffect(() => {
+    if (!linkedWarehouses.length) return;
+    if (linkedWarehouses.some((w) => w.id === warehouseId)) return;
+    onWarehouseSelect(linkedWarehouses[0].id);
+  }, [linkedWarehouses, warehouseId, onWarehouseSelect]);
+
+  const ingresoAllowedByWarehouse =
+    !linkedWarehousesLoading && linkedWarehouses.length > 0;
 
   const [selectedBoxId, setSelectedBoxId] = useState<string>("");
 
@@ -135,9 +260,23 @@ export default function IngresosSection(props: Props) {
 
   if (!isCustodio) return null;
 
-  const handleClientSelect = (value: string) => {
+  const handleSalidaClientFilterChange = (value: string) => {
     onClientChange?.(value);
+    if (value) {
+      setIngresoClientId(value);
+      setSelectedCatalogProductId("");
+      setIngresoName("");
+      setIngresoQuantityKg("");
+    }
     setSelectedBoxId("");
+  };
+
+  const handleIngresoClienteChange = (value: string) => {
+    setIngresoClientId(value);
+    onClientChange?.(value);
+    setSelectedCatalogProductId("");
+    setIngresoName("");
+    setIngresoQuantityKg("");
   };
 
   const boxOptions = outboundFiltered.map((box) => ({
@@ -192,7 +331,8 @@ export default function IngresosSection(props: Props) {
                     <p>Id único: {box.autoId}</p>
                     <p>Nombre: {box.name}</p>
                     <p>Temperatura: {box.temperature} °C</p>
-                    <p>Cliente: {box.client || "—"}</p>
+                    <p>Cantidad: {formatQuantityKg(box.quantityKg)}</p>
+                    <p>Cliente: {clientLabel(box.client)}</p>
                   </div>
                 ))}
               </div>
@@ -228,29 +368,93 @@ export default function IngresosSection(props: Props) {
                 Cliente
               </label>
               <select
-                value={ingresoClient}
-                onChange={(event) => setIngresoClient(event.target.value)}
+                value={ingresoClientId}
+                onChange={(event) => handleIngresoClienteChange(event.target.value)}
                 className="w-full rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-700 mb-2"
               >
-                {ingresoClientOptions.length === 0 ? (
-                  <option value="">Sin clientes</option>
+                {clientsForCatalog.length === 0 ? (
+                  <option value="">Sin clientes configurados</option>
                 ) : (
-                  ingresoClientOptions.map((option) => (
-                    <option key={option} value={option}>
-                      {option}
+                  clientsForCatalog.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
                     </option>
                   ))
                 )}
               </select>
               <label className="text-sm font-medium text-slate-600">
-                Nombre de la caja
+                Bodega de la cuenta
               </label>
-              <input
-                value={ingresoName}
-                onChange={(event) => setIngresoName(event.target.value)}
-                className="w-full rounded-lg border border-emerald-200 px-3 py-2 text-sm text-emerald-800"
-                placeholder="Ej: Caja banano"
-              />
+              {linkedWarehousesLoading && ingresoClientId.trim() ? (
+                <p className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
+                  Cargando bodegas…
+                </p>
+              ) : null}
+              {!linkedWarehousesLoading &&
+              linkedWarehouses.length === 0 &&
+              ingresoClientId.trim() ? (
+                <p
+                  role="status"
+                  className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900"
+                >
+                  Esta cuenta no tiene bodegas vinculadas.
+                </p>
+              ) : null}
+              {!linkedWarehousesLoading && linkedWarehouses.length > 0 ? (
+                <select
+                  value={
+                    linkedWarehouses.some((w) => w.id === warehouseId)
+                      ? warehouseId
+                      : linkedWarehouses[0]?.id ?? ""
+                  }
+                  onChange={(event) => onWarehouseSelect(event.target.value)}
+                  className="w-full rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-700"
+                >
+                  {linkedWarehouses.map((w) => (
+                    <option key={w.id} value={w.id}>
+                      {warehouseOptionLabel(w)}
+                    </option>
+                  ))}
+                </select>
+              ) : null}
+              {!catalogCodeCuenta && ingresoClientId && linkedWarehouses.length > 0 ? (
+                <p className="text-xs text-amber-700">
+                  Este cliente no tiene código de cuenta; no se puede cargar el catálogo. Completalo en
+                  configuración.
+                </p>
+              ) : null}
+              <label className="text-sm font-medium text-slate-600">
+                Producto (catálogo)
+              </label>
+              <select
+                value={selectedCatalogProductId}
+                onChange={(event) => {
+                  const id = event.target.value;
+                  setSelectedCatalogProductId(id);
+                  const p = catalogProducts.find((x) => x.id === id);
+                  setIngresoName(p ? catalogLabel(p) : "");
+                }}
+                disabled={
+                  catalogLoading ||
+                  !catalogCodeCuenta ||
+                  catalogProducts.length === 0 ||
+                  !ingresoAllowedByWarehouse
+                }
+                className="w-full rounded-lg border border-emerald-200 px-3 py-2 text-sm text-emerald-800 disabled:bg-slate-100 disabled:text-slate-500"
+              >
+                <option value="">
+                  {catalogLoading
+                    ? "Cargando catálogo…"
+                    : catalogProducts.length === 0
+                      ? "Sin productos (revisa el catálogo del cliente)"
+                      : "Selecciona un producto"}
+                </option>
+                {catalogProducts.map((p) => (
+                  <option key={p.id} value={p.id ?? ""}>
+                    {catalogLabel(p)}
+                  </option>
+                ))}
+              </select>
               <label className="text-sm font-medium text-slate-600">
                 Temperatura (°C)
               </label>
@@ -258,13 +462,26 @@ export default function IngresosSection(props: Props) {
                 value={ingresoTemp}
                 onChange={(event) => setIngresoTemp(event.target.value)}
                 type="number"
-                className="w-full rounded-lg border border-emerald-200 px-3 py-2 text-sm text-emerald-800"
+                disabled={!ingresoAllowedByWarehouse}
+                className="w-full rounded-lg border border-emerald-200 px-3 py-2 text-sm text-emerald-800 disabled:bg-slate-100 disabled:text-slate-500"
                 placeholder="Ej: -8"
+              />
+              <label className="text-sm font-medium text-slate-600">Cantidad (kg)</label>
+              <input
+                value={ingresoQuantityKg}
+                onChange={(event) => setIngresoQuantityKg(event.target.value)}
+                type="number"
+                min={0}
+                step="any"
+                disabled={!ingresoAllowedByWarehouse}
+                className="w-full rounded-lg border border-emerald-200 px-3 py-2 text-sm text-emerald-800 disabled:bg-slate-100 disabled:text-slate-500"
+                placeholder="Ej: 250.5"
               />
               <button
                 type="button"
                 onClick={handleIngreso}
-                className="mt-2 flex w-full items-center justify-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-500"
+                disabled={!ingresoAllowedByWarehouse}
+                className="mt-2 flex w-full items-center justify-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:bg-slate-400 disabled:hover:bg-slate-400"
               >
                 <FiArchive className="w-4 h-4" /> Registrar ingreso
               </button>
@@ -313,7 +530,8 @@ export default function IngresosSection(props: Props) {
                       <p>Id único: {box.autoId}</p>
                       <p>Nombre: {box.name}</p>
                       <p>Temperatura: {box.temperature} °C</p>
-                      <p>Cliente: {box.client || "—"}</p>
+                      <p>Cantidad: {formatQuantityKg(box.quantityKg)}</p>
+                      <p>Cliente: {clientLabel(box.client)}</p>
                     </div>
                   ))}
                 </div>
@@ -351,17 +569,23 @@ export default function IngresosSection(props: Props) {
                       Cliente
                     </label>
                     <select
-                      value={selectedClient}
-                      onChange={(event) => handleClientSelect(event.target.value)}
+                      value={salidaFilterValue}
+                      onChange={(event) => handleSalidaClientFilterChange(event.target.value)}
                       disabled={isCliente && !onClientChange}
                       className="w-full rounded-lg border border-pink-200 px-3 py-2 text-sm bg-pink-50 text-pink-700"
                     >
                       <option value="">Todos</option>
-                      {clientOptions.map((option) => (
-                        <option key={option} value={option}>
-                          {option.replace("cliente", "Cliente ")}
+                      {clientsForCatalog.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.name}
                         </option>
                       ))}
+                      {salidaFilterValue &&
+                      !clientsForCatalog.some((c) => c.id === salidaFilterValue) ? (
+                        <option value={salidaFilterValue}>
+                          {`Cliente (id: ${salidaFilterValue.slice(0, 12)}…)`}
+                        </option>
+                      ) : null}
                     </select>
                   </div>
                   <div className="flex flex-col gap-1">
@@ -400,6 +624,16 @@ export default function IngresosSection(props: Props) {
                 <input
                   value={selectedBox?.temperature ?? ""}
                   type="number"
+                  readOnly
+                  className="w-full rounded-lg border border-pink-200 px-3 py-2 text-sm"
+                />
+                <label className="text-sm font-medium text-slate-600">Cantidad (kg)</label>
+                <input
+                  value={
+                    selectedBox && typeof selectedBox.quantityKg === "number"
+                      ? String(selectedBox.quantityKg)
+                      : ""
+                  }
                   readOnly
                   className="w-full rounded-lg border border-pink-200 px-3 py-2 text-sm"
                 />
@@ -476,7 +710,7 @@ export default function IngresosSection(props: Props) {
               <div className="flex items-center justify-between gap-3">
                 <span className="font-semibold text-slate-600">Cliente</span>
                 <span className="text-slate-900 truncate max-w-[55%]">
-                  {reviewModal.client || "—"}
+                  {clientLabel(reviewModal.client || "")}
                 </span>
               </div>
               <div className="flex items-center justify-between gap-3">
@@ -485,6 +719,12 @@ export default function IngresosSection(props: Props) {
                   {reviewModal.temperature !== undefined && reviewModal.temperature !== null
                     ? `${reviewModal.temperature} °C`
                     : "Sin dato"}
+                </span>
+              </div>
+              <div className="flex items-center justify-between gap-3">
+                <span className="font-semibold text-slate-600">Cantidad</span>
+                <span className="text-slate-900 font-semibold">
+                  {formatQuantityKg(reviewModal.quantityKg)}
                 </span>
               </div>
               {tempError ? (
@@ -599,6 +839,10 @@ export default function IngresosSection(props: Props) {
                     ? `${tempConfirmModal.box.temperature} °C`
                     : "Sin dato"}
                 </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="font-semibold text-slate-600">Cantidad:</span>
+                <span>{formatQuantityKg(tempConfirmModal.box.quantityKg)}</span>
               </div>
             </div>
 

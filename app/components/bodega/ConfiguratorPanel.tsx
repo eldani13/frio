@@ -1,16 +1,20 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   FiUsers,
   FiUserCheck,
   FiHome,
+  FiExternalLink,
   FiPlus,
   FiEdit2,
   FiArrowRight,
+  FiArrowLeft,
   FiTrash2,
   FiCheck,
   FiRefreshCw,
+  FiLayers,
+  FiClipboard,
 } from "react-icons/fi";
 import type { Dispatch, SetStateAction } from "react";
 import type { Client, ConfigUser, Role, WarehouseMeta } from "../../interfaces/bodega";
@@ -62,6 +66,8 @@ type Props = {
   handleCreateUser: () => Promise<void>;
   toggleUserDisabled: (userId: string, disabled: boolean) => Promise<void>;
   handleUpdateUser: (userId: string, payload: { name: string; role: Role; clientId: string }) => Promise<void>;
+  /** Pulso desde el botón Menú del header: vuelve a la pantalla principal (Creación / Asignación / Tareas). */
+  menuResetNonce?: number;
 };
 
 export default function ConfiguratorPanel({
@@ -106,10 +112,19 @@ export default function ConfiguratorPanel({
   handleCreateUser,
   toggleUserDisabled,
   handleUpdateUser,
+  menuResetNonce,
 }: Props) {
-  const [view, setView] = useState<"landing" | "clientes" | "usuarios" | "bodegaInterna" | "bodegaExterna">(
-    "landing",
-  );
+  type ConfiguratorView =
+    | "main"
+    | "creacion"
+    | "asignacion"
+    | "tareasPendiente"
+    | "clientes"
+    | "usuarios"
+    | "bodegaInterna"
+    | "bodegaExterna";
+
+  const [view, setView] = useState<ConfiguratorView>("main");
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showCreateUserModal, setShowCreateUserModal] = useState(false);
   const [editClient, setEditClient] = useState<Client | null>(null);
@@ -143,6 +158,7 @@ export default function ConfiguratorPanel({
     jefe: "bodega",
     cliente: "",
     custodio: "bodega",
+    operadorCuentas: "",
   };
 
   const roleLabels: Record<Role, string> = {
@@ -152,6 +168,7 @@ export default function ConfiguratorPanel({
     jefe: "jefe",
     cliente: "administrador de cuentas",
     configurador: "configurador",
+    operadorCuentas: "operador de cuentas",
   };
 
   const warehouseNameByAccountCode = useMemo(() => {
@@ -191,6 +208,24 @@ export default function ConfiguratorPanel({
       setNewUserClientId(roleClientDefaults[newUserRole] ?? "");
     }
   }, [newUserRole, showCreateUserModal, setNewUserClientId]);
+
+  const prevMenuNonce = useRef<number | null>(null);
+  useEffect(() => {
+    if (menuResetNonce === undefined) return;
+    if (prevMenuNonce.current === null) {
+      prevMenuNonce.current = menuResetNonce;
+      return;
+    }
+    if (prevMenuNonce.current === menuResetNonce) return;
+    prevMenuNonce.current = menuResetNonce;
+    setView("main");
+    setShowCreateModal(false);
+    setShowCreateUserModal(false);
+    setShowCreateWarehouseModal(false);
+    setEditClient(null);
+    setEditUser(null);
+    setEditWarehouse(null);
+  }, [menuResetNonce]);
 
   const internalWarehouses = warehouses.filter((warehouse) => warehouse.status !== "externa");
   const externalWarehouses = warehouses.filter((warehouse) => warehouse.status === "externa");
@@ -506,93 +541,186 @@ export default function ConfiguratorPanel({
         </>
       );
 
-  return (
-    <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-      <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-        <div className="flex-1 space-y-2">
-          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Configuración</p>
-          <h2 className="text-lg font-semibold text-slate-900">Panel de configurador</h2>
-          <p className="text-sm text-slate-600">Selecciona una herramienta para comenzar.</p>
-        </div>
-        {view !== "landing" ? (
-          <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={() => setView("landing")}
-              className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
-            >
-              Volver al menú
-            </button>
-          </div>
-        ) : null}
-      </div>
+  const configLandingLabel = "text-[#1A2B48]";
+  const configLandingTile =
+    "group flex min-h-[200px] flex-col items-center justify-center gap-5 rounded-[24px] px-6 py-8 text-center outline-none transition-all duration-300 hover:-translate-y-1 active:scale-[0.98] focus-visible:ring-2 focus-visible:ring-[#1A2B48]/25 focus-visible:ring-offset-2 sm:min-h-0 sm:aspect-square sm:p-8";
+  const configLandingIconWrap =
+    "flex h-[4.75rem] w-[4.75rem] shrink-0 items-center justify-center rounded-2xl bg-white/80 shadow-[0_2px_14px_rgba(26,43,72,0.08)] ring-1 ring-[#1A2B48]/[0.06] backdrop-blur-[2px] transition-transform duration-300 group-hover:scale-[1.04]";
 
-      {view === "landing" ? (
-        <div className="mt-6 space-y-3">
-          {[
-            {
-              key: "clientes" as const,
-              label: "Cuentas",
-              helper: "Clientes",
-              icon: <FiUsers className="h-6 w-6" />,
-              bg: "#a9d7b4",
-              iconBg: "#d9efdf",
-              arrowBg: "#cde7d4",
-            },
-            {
-              key: "usuarios" as const,
-              label: "Usuarios",
-              helper: "Usuarios",
-              icon: <FiUserCheck className="h-6 w-6" />,
-              bg: "#b8ceff",
-              iconBg: "#dfe9ff",
-              arrowBg: "#d1ddff",
-            },
-            {
-              key: "bodegaInterna" as const,
-              label: "Bodegas internas",
-              helper: "Gestiona bodegas internas",
-              icon: <FiHome className="h-6 w-6" />,
-              bg: "#ffeaaa",
-              iconBg: "#fff4cc",
-              arrowBg: "#fff0b8",
-            },
-            {
-              key: "bodegaExterna" as const,
-              label: "Bodegas externas",
-              helper: "Gestiona bodegas externas",
-              icon: <FiHome className="h-6 w-6" />,
-              bg: "#d6d5ff",
-              iconBg: "#ecebff",
-              arrowBg: "#e1e0ff",
-            },
-          ].map((item) => (
+  const isMainOrHubPadding =
+    view === "main" || view === "creacion" || view === "asignacion" || view === "tareasPendiente";
+  const isLeafView =
+    view === "clientes" || view === "usuarios" || view === "bodegaInterna" || view === "bodegaExterna";
+
+  const handleConfiguratorBack = () => {
+    if (view === "clientes" || view === "bodegaInterna" || view === "bodegaExterna") {
+      setView("creacion");
+      return;
+    }
+    if (view === "usuarios") {
+      setView("asignacion");
+      return;
+    }
+    setView("main");
+  };
+
+  return (
+    <section
+      className={
+        isMainOrHubPadding
+          ? "p-4 sm:p-8"
+          : "rounded-3xl border border-slate-200 bg-white p-6 shadow-sm"
+      }
+    >
+      {view !== "main" ? (
+        <div className="mb-6 space-y-3">
+          <button
+            type="button"
+            onClick={handleConfiguratorBack}
+            className="inline-flex items-center gap-2 text-sm font-semibold text-slate-600 transition hover:text-slate-900"
+          >
+            <FiArrowLeft className="h-4 w-4" aria-hidden />
+            Volver
+          </button>
+          {isLeafView ? (
+            <>
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Configuración</p>
+              <h2 className="text-lg font-semibold text-slate-900">Panel de configurador</h2>
+              <p className="text-sm text-slate-600">
+                Usá el botón Menú del encabezado para volver al inicio del configurador.
+              </p>
+            </>
+          ) : view === "creacion" ? (
+            <h2 className="text-lg font-semibold text-slate-900">Creación</h2>
+          ) : view === "asignacion" ? (
+            <h2 className="text-lg font-semibold text-slate-900">Asignación</h2>
+          ) : view === "tareasPendiente" ? (
+            <h2 className="text-lg font-semibold text-slate-900">Tareas pendiente</h2>
+          ) : null}
+        </div>
+      ) : null}
+
+      {view === "main" ? (
+        <div className="mx-auto grid max-w-6xl grid-cols-1 gap-4 sm:grid-cols-3 sm:gap-5">
+          {(
+            [
+              {
+                key: "creacion" as const,
+                label: "Creación",
+                bg: "#C2E3CD",
+                shadowClass:
+                  "shadow-[0_14px_40px_-10px_rgba(0,109,62,0.28)] hover:shadow-[0_20px_48px_-12px_rgba(0,109,62,0.32)]",
+                icon: <FiLayers size={38} className="text-[#006D3E]" aria-hidden />,
+              },
+              {
+                key: "asignacion" as const,
+                label: "Asignación",
+                bg: "#FEF6CD",
+                shadowClass:
+                  "shadow-[0_14px_40px_-10px_rgba(133,91,17,0.28)] hover:shadow-[0_20px_48px_-12px_rgba(133,91,17,0.3)]",
+                icon: <FiUserCheck size={38} className="text-[#855B11]" aria-hidden />,
+              },
+              {
+                key: "tareasPendiente" as const,
+                label: "Tareas pendiente",
+                bg: "#E2E8F0",
+                shadowClass:
+                  "shadow-[0_14px_40px_-10px_rgba(51,65,85,0.22)] hover:shadow-[0_20px_48px_-12px_rgba(51,65,85,0.28)]",
+                icon: <FiClipboard size={38} className="text-[#334155]" aria-hidden />,
+              },
+            ] as const
+          ).map((item) => (
             <button
               key={item.key}
               type="button"
               onClick={() => setView(item.key)}
               style={{ backgroundColor: item.bg }}
-              className="flex w-full items-center justify-between rounded-2xl px-5 py-4 text-left shadow-sm transition hover:-translate-y-0.5 focus:outline-none focus:ring-2 focus:ring-emerald-500/60"
+              className={`${configLandingTile} transition-shadow duration-300 ${item.shadowClass}`}
             >
-              <div className="flex items-center gap-4">
-                <span
-                  style={{ backgroundColor: item.iconBg }}
-                  className="flex h-12 w-12 items-center justify-center rounded-2xl text-slate-800"
-                >
-                  {item.icon}
-                </span>
-                <div>
-                  <p className="text-lg font-semibold text-slate-900">{item.label}</p>
-                </div>
-              </div>
+              <span className={configLandingIconWrap}>{item.icon}</span>
               <span
-                style={{ backgroundColor: item.arrowBg }}
-                className="flex h-10 w-10 items-center justify-center rounded-full text-slate-800"
+                className={`max-w-[13rem] text-lg font-bold leading-snug tracking-tight sm:text-xl ${configLandingLabel}`}
               >
-                <FiArrowRight className="h-4 w-4" />
+                {item.label}
               </span>
             </button>
           ))}
+        </div>
+      ) : null}
+
+      {view === "creacion" ? (
+        <div className="mx-auto grid max-w-6xl grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-5 lg:grid-cols-3">
+          {(
+            [
+              {
+                key: "clientes" as const,
+                label: "Cuentas",
+                bg: "#C2E3CD",
+                shadowClass:
+                  "shadow-[0_14px_40px_-10px_rgba(0,109,62,0.28)] hover:shadow-[0_20px_48px_-12px_rgba(0,109,62,0.32)]",
+                icon: <FiUsers size={38} className="text-[#006D3E]" aria-hidden />,
+              },
+              {
+                key: "bodegaInterna" as const,
+                label: "Bodega interna",
+                bg: "#D2E0FB",
+                shadowClass:
+                  "shadow-[0_14px_40px_-10px_rgba(0,71,171,0.26)] hover:shadow-[0_20px_48px_-12px_rgba(0,71,171,0.3)]",
+                icon: <FiHome size={38} className="text-[#0047AB]" aria-hidden />,
+              },
+              {
+                key: "bodegaExterna" as const,
+                label: "Bodega externa",
+                bg: "#E3D2F1",
+                shadowClass:
+                  "shadow-[0_14px_40px_-10px_rgba(106,13,173,0.26)] hover:shadow-[0_20px_48px_-12px_rgba(106,13,173,0.3)]",
+                icon: <FiExternalLink size={38} className="text-[#6A0DAD]" aria-hidden />,
+              },
+            ] as const
+          ).map((item) => (
+            <button
+              key={item.key}
+              type="button"
+              onClick={() => setView(item.key)}
+              style={{ backgroundColor: item.bg }}
+              className={`${configLandingTile} transition-shadow duration-300 ${item.shadowClass}`}
+            >
+              <span className={configLandingIconWrap}>{item.icon}</span>
+              <span
+                className={`max-w-[13rem] text-lg font-bold leading-snug tracking-tight sm:text-xl ${configLandingLabel}`}
+              >
+                {item.label}
+              </span>
+            </button>
+          ))}
+        </div>
+      ) : null}
+
+      {view === "asignacion" ? (
+        <div className="mx-auto grid max-w-6xl grid-cols-1 gap-4 sm:max-w-md">
+          <button
+            type="button"
+            onClick={() => setView("usuarios")}
+            style={{ backgroundColor: "#FEF6CD" }}
+            className={`${configLandingTile} transition-shadow duration-300 shadow-[0_14px_40px_-10px_rgba(133,91,17,0.28)] hover:shadow-[0_20px_48px_-12px_rgba(133,91,17,0.3)]`}
+          >
+            <span className={configLandingIconWrap}>
+              <FiUserCheck size={38} className="text-[#855B11]" aria-hidden />
+            </span>
+            <span
+              className={`max-w-[13rem] text-lg font-bold leading-snug tracking-tight sm:text-xl ${configLandingLabel}`}
+            >
+              Usuarios
+            </span>
+          </button>
+        </div>
+      ) : null}
+
+      {view === "tareasPendiente" ? (
+        <div className="mx-auto flex max-w-lg flex-col items-center justify-center rounded-2xl border border-slate-200 bg-white px-8 py-16 text-center shadow-sm">
+          <FiClipboard className="mb-4 h-12 w-12 text-slate-400" aria-hidden />
+          <p className="text-lg font-semibold text-slate-800">Próximamente</p>
+          <p className="mt-2 text-sm text-slate-500">Esta sección estará disponible en una próxima versión.</p>
         </div>
       ) : null}
 

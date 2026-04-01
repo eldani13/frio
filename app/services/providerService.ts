@@ -48,7 +48,11 @@ export const ProviderService = {
   },
 
   // 2. Correlativo por cliente (subcolección); codeCuenta se mantiene en el documento
-  async create(name: string, idCliente: string, codeCuenta: string) {
+  async create(
+    payload: { name: string; nombre?: string; telefono?: string; email?: string },
+    idCliente: string,
+    codeCuenta: string,
+  ) {
     try {
       if (!idCliente?.trim()) throw new Error("idCliente requerido");
       const qLast = query(getColRef(idCliente), orderBy("numericId", "desc"), limit(1));
@@ -61,7 +65,10 @@ export const ProviderService = {
       }
 
       const newProvider: Omit<Provider, 'id'> = {
-        name: name.trim(),
+        name: payload.name.trim(),
+        nombre: payload.nombre?.trim() ?? "",
+        telefono: payload.telefono?.trim() ?? "",
+        email: payload.email?.trim() ?? "",
         codeCuenta: codeCuenta, // Se guarda para que el dueño lo vea
         numericId: nextId,
         code: this.toBase36(nextId),
@@ -75,11 +82,15 @@ export const ProviderService = {
     }
   },
 
-  async update(idCliente: string, id: string, data: Partial<Provider>) {
+  async update(idCliente: string, id: string, data: Partial<Pick<Provider, "name" | "nombre" | "telefono" | "email">>) {
     try {
       if (!idCliente?.trim()) throw new Error("idCliente requerido");
-      const { name } = data;
-      return await updateDoc(getProviderDocRef(idCliente, id), { name });
+      const patch: Record<string, string> = {};
+      if (data.name !== undefined) patch.name = data.name.trim();
+      if (data.nombre !== undefined) patch.nombre = data.nombre.trim();
+      if (data.telefono !== undefined) patch.telefono = data.telefono.trim();
+      if (data.email !== undefined) patch.email = data.email.trim();
+      return await updateDoc(getProviderDocRef(idCliente, id), patch);
     } catch (error: any) {
       console.error("Error en update:", error.message);
       throw error;

@@ -54,7 +54,7 @@ export default function ListadoCargue({ items, loading, error, onRetry, lastUpda
     <div className="border border-slate-100 rounded-2xl overflow-hidden font-['Inter'] bg-white shadow-sm">
       <div className="bg-[#A8D5BA]/20 p-5 border-b border-slate-100 flex items-center justify-between">
         <div>
-          <h3 className="text-[18px] font-bold text-slate-800 tracking-tight uppercase">En Inventario BEX</h3>
+          <h3 className="text-[18px] font-bold text-slate-800 tracking-tight uppercase">En Inventario en bodega externa</h3>
           <p className="text-xs text-slate-600 mt-1">
             {items.length} registros · Página {currentPage} de {pageCount}
           </p>

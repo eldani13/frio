@@ -28,7 +28,13 @@ export default function Header({
 }: ExtendedHeaderProps) {
   const [menuOpen, setMenuOpen] = useState(false);
 
-   
+  const roleLabel =
+    role === "operadorCuentas"
+      ? "Operador de cuentas"
+      : role === "cliente"
+        ? "Administrador de cuenta"
+        : role;
+
   return (
     <header className="w-full bg-white shadow-md border-b border-slate-200">
       <div className="max-w-7xl mx-auto px-4 py-3">
@@ -83,7 +89,7 @@ export default function Header({
                 {userDisplayName}
                 </h3>
                 <span className="text-[12px] text-gray-400 font-normal">
-                {role}
+                {roleLabel}
                 </span>
               </div>
 
