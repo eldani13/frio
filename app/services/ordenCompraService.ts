@@ -2,8 +2,10 @@ import { db } from "@/lib/firebaseClient";
 import {
   addDoc,
   collection,
+  doc,
   getDocs,
   query,
+  updateDoc,
   where,
   orderBy,
   limit,
@@ -88,11 +90,43 @@ export const OrdenCompraService = {
       proveedorCode: String(payload.proveedorCode ?? "").trim(),
       proveedorNombre: payload.proveedorNombre?.trim() ?? "",
       fecha: payload.fecha ?? "",
-      estado: payload.estado ?? "En curso",
+      estado: String(payload.estado ?? "").trim() || "Iniciado",
       lineItems: payload.lineItems.map(lineItemForFirestore),
       createdAt: Date.now(),
     };
 
     return addDoc(col(idCliente), doc);
+  },
+
+  async marcarEnviada(
+    idCliente: string,
+    ordenId: string,
+    payload: {
+      destinoTipo: "interna" | "externa";
+      destinoWarehouseId: string;
+      destinoWarehouseNombre: string;
+    },
+  ): Promise<void> {
+    if (!idCliente?.trim()) throw new Error("idCliente requerido");
+    if (!ordenId?.trim()) throw new Error("orden requerida");
+    if (!payload.destinoWarehouseId?.trim()) throw new Error("Elegí una bodega de destino");
+
+    const ref = doc(db, PARENT, idCliente.trim(), SUB, ordenId.trim());
+    await updateDoc(ref, {
+      estado: "Enviada",
+      destinoTipo: payload.destinoTipo,
+      destinoWarehouseId: payload.destinoWarehouseId.trim(),
+      destinoWarehouseNombre: payload.destinoWarehouseNombre.trim(),
+      enviadaAt: Date.now(),
+    });
+  },
+
+  async actualizarEstado(idCliente: string, ordenId: string, estado: string): Promise<void> {
+    if (!idCliente?.trim()) throw new Error("idCliente requerido");
+    if (!ordenId?.trim()) throw new Error("orden requerida");
+    const next = String(estado ?? "").trim();
+    if (!next) throw new Error("Estado inválido");
+    const ref = doc(db, PARENT, idCliente.trim(), SUB, ordenId.trim());
+    await updateDoc(ref, { estado: next });
   },
 };

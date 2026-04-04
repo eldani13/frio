@@ -19,6 +19,8 @@ import {
 import type { Dispatch, SetStateAction } from "react";
 import type { Client, ConfigUser, Role, WarehouseMeta } from "../../interfaces/bodega";
 import { MdOutlineAutorenew } from "react-icons/md";
+import { TareaCuentaService } from "@/app/services/tareaCuentaService";
+import type { TareaCuenta } from "@/app/types/tareaCuenta";
 
 
 type Props = {
@@ -143,6 +145,10 @@ export default function ConfiguratorPanel({
   const [editWarehouseSaving, setEditWarehouseSaving] = useState(false);
   const [createWarehouseStatus, setCreateWarehouseStatus] = useState<"interna" | "externa">("interna");
   const [editWarehouseStatus, setEditWarehouseStatus] = useState<"interna" | "externa">("interna");
+  const [tareasPendientes, setTareasPendientes] = useState<TareaCuenta[]>([]);
+  const [tareasLoading, setTareasLoading] = useState(false);
+  const [tareasError, setTareasError] = useState<string | null>(null);
+  const [resolviendoTareaId, setResolviendoTareaId] = useState<string | null>(null);
 
   const normalizeBase36 = (value: string) => value.toUpperCase().replace(/[^0-9A-Z]/g, "");
   const ensureFiveClientCode = (value: string) => {
@@ -226,6 +232,49 @@ export default function ConfiguratorPanel({
     setEditUser(null);
     setEditWarehouse(null);
   }, [menuResetNonce]);
+
+  useEffect(() => {
+    if (view !== "tareasPendiente") return;
+    setTareasLoading(true);
+    setTareasError(null);
+    const clientIds = clients.map((c) => c.id);
+    const unsub = TareaCuentaService.subscribePendientes(
+      clientIds,
+      (items) => {
+        setTareasPendientes(items);
+        setTareasLoading(false);
+        setTareasError(null);
+      },
+      (err) => {
+        console.error(err);
+        setTareasPendientes([]);
+        setTareasError("No se pudieron cargar las tareas. Revisá permisos de Firestore en clientes/{id}/tareasParaConfigurador.");
+        setTareasLoading(false);
+      },
+    );
+    return () => unsub();
+  }, [view, clients]);
+
+  const formatTareaFecha = (t: TareaCuenta) => {
+    const ts = t.createdAt;
+    if (!ts || typeof ts.toDate !== "function") return "—";
+    try {
+      return ts.toDate().toLocaleString("es-CO", { dateStyle: "short", timeStyle: "short" });
+    } catch {
+      return "—";
+    }
+  };
+
+  const handleMarcarTareaResuelta = async (clientIdRow: string, id: string) => {
+    setResolviendoTareaId(id);
+    try {
+      await TareaCuentaService.marcarResuelta(clientIdRow, id);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setResolviendoTareaId(null);
+    }
+  };
 
   const internalWarehouses = warehouses.filter((warehouse) => warehouse.status !== "externa");
   const externalWarehouses = warehouses.filter((warehouse) => warehouse.status === "externa");
@@ -717,10 +766,78 @@ export default function ConfiguratorPanel({
       ) : null}
 
       {view === "tareasPendiente" ? (
-        <div className="mx-auto flex max-w-lg flex-col items-center justify-center rounded-2xl border border-slate-200 bg-white px-8 py-16 text-center shadow-sm">
-          <FiClipboard className="mb-4 h-12 w-12 text-slate-400" aria-hidden />
-          <p className="text-lg font-semibold text-slate-800">Próximamente</p>
-          <p className="mt-2 text-sm text-slate-500">Esta sección estará disponible en una próxima versión.</p>
+        <div className="mx-auto w-full max-w-5xl">
+          <div className="overflow-hidden rounded-xl border border-[#e5e7eb] bg-white shadow-sm">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-4 py-3">
+              <div>
+                <p className="text-sm font-semibold text-[#3b3b3b]">Tareas enviadas por cuentas</p>
+                <p className="text-xs text-[#7c7c7c]">
+                  Los administradores de cuenta envían solicitudes desde el encabezado. Marcá como hecha cuando esté resuelta.
+                </p>
+              </div>
+              <span className="text-sm font-semibold text-[#4b5563]">
+                Pendientes: {tareasError ? "—" : tareasPendientes.length}
+              </span>
+            </div>
+            {tareasError ? (
+              <p className="px-4 py-6 text-center text-sm text-red-600">{tareasError}</p>
+            ) : tareasLoading ? (
+              <p className="px-4 py-12 text-center text-sm text-slate-500">Cargando tareas…</p>
+            ) : tareasPendientes.length === 0 ? (
+              <div className="flex flex-col items-center px-6 py-14 text-center">
+                <FiClipboard className="mb-3 h-10 w-10 text-slate-300" aria-hidden />
+                <p className="text-sm font-medium text-slate-600">No hay tareas pendientes</p>
+                <p className="mt-1 max-w-sm text-xs text-slate-500">
+                  Cuando una cuenta use &quot;Crear tarea&quot; en el encabezado, aparecerá aquí en tiempo real.
+                </p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-slate-200 text-left text-sm">
+                  <thead className="bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    <tr>
+                      <th className="whitespace-nowrap px-4 py-3">Fecha</th>
+                      <th className="whitespace-nowrap px-4 py-3">Cuenta</th>
+                      <th className="min-w-[8rem] px-4 py-3">Título</th>
+                      <th className="min-w-[10rem] px-4 py-3">Detalle</th>
+                      <th className="whitespace-nowrap px-4 py-3">Solicitante</th>
+                      <th className="whitespace-nowrap px-4 py-3 text-right">Acción</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 text-slate-700">
+                    {tareasPendientes.map((row) => (
+                      <tr key={row.id} className="align-top transition hover:bg-slate-50/80">
+                        <td className="whitespace-nowrap px-4 py-3 text-xs text-slate-600">{formatTareaFecha(row)}</td>
+                        <td className="px-4 py-3 text-xs font-medium text-slate-800">
+                          {row.clientName?.trim() || row.clientId || "—"}
+                        </td>
+                        <td className="px-4 py-3 font-medium text-slate-900">{row.titulo}</td>
+                        <td className="max-w-[18rem] px-4 py-3 text-xs text-slate-600">
+                          {row.detalle?.trim() ? (
+                            <span className="line-clamp-3 whitespace-pre-wrap">{row.detalle}</span>
+                          ) : (
+                            <span className="text-slate-400">—</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-xs text-slate-600">{row.creadoPorNombre || "—"}</td>
+                        <td className="whitespace-nowrap px-4 py-3 text-right">
+                          <button
+                            type="button"
+                            disabled={resolviendoTareaId === row.id}
+                            onClick={() => void handleMarcarTareaResuelta(row.clientId, row.id)}
+                            className="inline-flex items-center gap-1 rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-800 transition hover:bg-emerald-100 disabled:opacity-50"
+                          >
+                            <FiCheck className="h-3.5 w-3.5" aria-hidden />
+                            {resolviendoTareaId === row.id ? "…" : "Hecha"}
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
         </div>
       ) : null}
 

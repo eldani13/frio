@@ -32,5 +32,10 @@ service cloud.firestore {
     match /users/{uid} {
       allow read, write: if request.auth != null && request.auth.uid == uid;
     }
+
+    // Tareas de cuenta → configurador (subcolección: entra en clientes/.../{document=**} si usás regla recursiva)
+    match /clientes/{clientId}/tareasParaConfigurador/{tareaId} {
+      allow read, write: if request.auth != null;
+    }
   }
 }

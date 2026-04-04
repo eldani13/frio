@@ -3,7 +3,6 @@
 import React, { useEffect, useState } from "react";
 import { HiOutlinePlus, HiOutlineTrash, HiOutlineXMark } from "react-icons/hi2";
 import type { Catalogo } from "@/app/types/catalogo";
-import type { Provider } from "@/app/types/provider";
 import type { SolicitudLineItem } from "@/app/types/solicitudCompra";
 import { SolicitudCompraService } from "@/app/services/solicitudCompraService";
 
@@ -15,7 +14,6 @@ interface Props {
   idCliente: string;
   codeCuenta: string;
   productos: Catalogo[];
-  proveedores: Provider[];
   onSuccess: () => void;
 }
 
@@ -25,12 +23,8 @@ export function SolicitudCompraFormModal({
   idCliente,
   codeCuenta,
   productos,
-  proveedores,
   onSuccess,
 }: Props) {
-  const [proveedorId, setProveedorId] = useState("");
-  const [fecha, setFecha] = useState("");
-  const [estado, setEstado] = useState("En curso");
   const [lines, setLines] = useState<DraftLine[]>([]);
   const [pickProductId, setPickProductId] = useState("");
   const [pickPesoKg, setPickPesoKg] = useState("");
@@ -39,9 +33,6 @@ export function SolicitudCompraFormModal({
 
   useEffect(() => {
     if (!isOpen) return;
-    setProveedorId("");
-    setFecha(new Date().toISOString().slice(0, 10));
-    setEstado("En curso");
     setLines([]);
     setPickProductId("");
     setPickPesoKg("");
@@ -84,28 +75,14 @@ export function SolicitudCompraFormModal({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
-    if (!proveedorId) {
-      setError("Seleccioná un proveedor.");
-      return;
-    }
     if (lines.length === 0) {
       setError("Agregá al menos una línea con productos del catálogo.");
-      return;
-    }
-    const prov = proveedores.find((x) => x.id === proveedorId);
-    if (!prov?.id) {
-      setError("Proveedor inválido.");
       return;
     }
 
     setSaving(true);
     try {
       await SolicitudCompraService.create(idCliente, codeCuenta, {
-        proveedorId: prov.id,
-        proveedorCode: prov.code ?? "",
-        proveedorNombre: prov.name,
-        fecha,
-        estado,
         lineItems: lines,
       });
       onSuccess();
@@ -153,65 +130,6 @@ export function SolicitudCompraFormModal({
         ) : null}
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label
-              htmlFor="sol-proveedor-id"
-              className="mb-1 block text-[11px] font-bold uppercase text-gray-500"
-            >
-              Proveedor
-            </label>
-            <select
-              id="sol-proveedor-id"
-              value={proveedorId}
-              onChange={(e) => setProveedorId(e.target.value)}
-              required
-              className="w-full rounded-[8px] border border-gray-200 px-4 py-2 text-sm focus:border-cyan-500 focus:outline-none"
-            >
-              <option value="">Seleccionar proveedor…</option>
-              {proveedores.map((pr) => (
-                <option key={pr.id} value={pr.id}>
-                  {pr.name}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label
-                htmlFor="sol-fecha"
-                className="mb-1 block text-[11px] font-bold uppercase text-gray-500"
-              >
-                Fecha
-              </label>
-              <input
-                id="sol-fecha"
-                type="date"
-                value={fecha}
-                onChange={(e) => setFecha(e.target.value)}
-                required
-                className="w-full rounded-[8px] border border-gray-200 px-4 py-2 text-sm focus:border-cyan-500 focus:outline-none"
-              />
-            </div>
-            <div>
-              <label
-                htmlFor="sol-estado"
-                className="mb-1 block text-[11px] font-bold uppercase text-gray-500"
-              >
-                Estado
-              </label>
-              <select
-                id="sol-estado"
-                value={estado}
-                onChange={(e) => setEstado(e.target.value)}
-                className="w-full rounded-[8px] border border-gray-200 px-4 py-2 text-sm focus:border-cyan-500 focus:outline-none"
-              >
-                <option value="En curso">En curso</option>
-                <option value="Terminado">Terminado</option>
-              </select>
-            </div>
-          </div>
-
           <div className="rounded-lg border border-dashed border-cyan-200 bg-cyan-50/40 p-3">
             <p className="mb-2 text-[11px] font-bold uppercase text-gray-500">Productos del catálogo</p>
             <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-end">

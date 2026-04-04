@@ -125,7 +125,7 @@ export default function ListadoCargue({ items, loading, error, onRetry, lastUpda
 
             {showEmpty ? (
               <tr>
-                <td colSpan={4} className="px-4 py-8 text-center text-sm text-slate-500">
+                <td colSpan={13} className="px-4 py-8 text-center text-sm text-slate-500">
                   No hay inventario disponible en la base externa.
                 </td>
               </tr>
@@ -171,44 +171,58 @@ export default function ListadoCargue({ items, loading, error, onRetry, lastUpda
                 ))
               : null}
           </tbody>
-          <tfoot className="bg-slate-50/50">
-            <tr>
-              <td colSpan={9} className="px-4 py-5 text-sm font-bold text-slate-900 text-right uppercase tracking-wider">
-                Total Inventario
-              </td>
-              <td className="px-4 py-5 text-[18px] font-bold text-slate-950 text-right border-l border-slate-200 bg-white tabular-nums">
-                {numberFormatter.format(totalKg)} Kg
-              </td>
-              <td colSpan={3} className="px-4 py-5 bg-white border-l border-slate-200"></td>
-            </tr>
-          </tfoot>
         </table>
       </div>
 
-      <div className="flex items-center justify-between px-5 py-3 border-t border-slate-100 bg-white">
-        <span className="text-xs text-slate-500">Mostrando {pageItems.length} de {items.length} registros</span>
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => setPage((p) => Math.max(1, p - 1))}
-            disabled={loading || currentPage === 1}
-            className="px-3 py-2 text-xs font-bold uppercase tracking-wider rounded-xl border border-slate-200 bg-white shadow-sm hover:border-slate-300 disabled:opacity-50"
-          >
-            Anterior
-          </button>
-          <span className="text-xs text-slate-600">
-            Página {currentPage} / {pageCount}
-          </span>
-          <button
-            type="button"
-            onClick={() => setPage((p) => Math.min(pageCount, p + 1))}
-            disabled={loading || currentPage === pageCount}
-            className="px-3 py-2 text-xs font-bold uppercase tracking-wider rounded-xl border border-slate-200 bg-white shadow-sm hover:border-slate-300 disabled:opacity-50"
-          >
-            Siguiente
-          </button>
+      {items.length > 0 ? (
+        <div
+          className="shrink-0 border-t-2 border-[#A8D5BA]/50 bg-linear-to-r from-slate-50 via-white to-[#A8D5BA]/25 px-5 py-4"
+          role="region"
+          aria-label="Total de inventario"
+        >
+          <div className="flex flex-col items-stretch sm:flex-row sm:items-center sm:justify-end sm:gap-4">
+            <span className="text-center text-[11px] font-bold uppercase tracking-[0.2em] text-slate-500 sm:text-right sm:pt-1">
+              Total cantidad registrada
+            </span>
+            <div className="mt-2 flex justify-center sm:mt-0 sm:justify-end">
+              <span className="inline-flex min-w-[10rem] items-center justify-center rounded-xl border border-[#A8D5BA]/60 bg-white px-5 py-2 text-right text-xl font-extrabold tracking-tight text-slate-900 shadow-sm tabular-nums sm:min-w-[12rem] sm:text-2xl">
+                {totalKg > 0
+                  ? `${totalKg.toLocaleString("es-CO", { maximumFractionDigits: 3 })} kg`
+                  : "—"}
+              </span>
+            </div>
+          </div>
         </div>
-      </div>
+      ) : null}
+
+      {items.length > 0 ? (
+        <div className="flex flex-col gap-3 border-t border-slate-100 bg-white px-5 py-3 sm:flex-row sm:items-center sm:justify-between">
+          <span className="text-xs text-slate-500 tabular-nums">
+            Mostrando {pageItems.length} de {items.length} registros
+          </span>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              disabled={loading || currentPage === 1}
+              className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold uppercase tracking-wider shadow-sm hover:border-slate-300 disabled:opacity-50"
+            >
+              Anterior
+            </button>
+            <span className="text-xs text-slate-600 tabular-nums">
+              Página {currentPage} / {pageCount}
+            </span>
+            <button
+              type="button"
+              onClick={() => setPage((p) => Math.min(pageCount, p + 1))}
+              disabled={loading || currentPage === pageCount}
+              className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold uppercase tracking-wider shadow-sm hover:border-slate-300 disabled:opacity-50"
+            >
+              Siguiente
+            </button>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

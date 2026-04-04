@@ -1,18 +1,221 @@
 "use client";
 
-import React from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { HiOutlineXMark } from "react-icons/hi2";
-import type { OrdenCompra } from "@/app/types/ordenCompra";
+import {
+  ORDEN_COMPRA_ESTADOS,
+  ordenCompraEstadoBadgeClass,
+  type OrdenCompra,
+} from "@/app/types/ordenCompra";
+import type { WarehouseMeta } from "@/app/interfaces/bodega";
+import { AsignarBodegaService } from "@/app/services/asignarbodegaService";
+import { OrdenCompraService } from "@/app/services/ordenCompraService";
+
+function mergeWarehousesForClient(
+  byCode: WarehouseMeta[],
+  fallback: WarehouseMeta[],
+  clientId: string,
+  accountCode: string,
+): WarehouseMeta[] {
+  const map = new Map<string, WarehouseMeta>();
+  const add = (w: WarehouseMeta) => {
+    if (!w?.id || w.disabled) return;
+    map.set(w.id, w);
+  };
+  byCode.forEach(add);
+  const codeTrim = accountCode.trim();
+  fallback.forEach((w) => {
+    const cc = (w.codeCuenta ?? "").trim();
+    if (!cc) return;
+    if (codeTrim && cc === codeTrim) add(w);
+    if (cc === clientId) add(w);
+  });
+  return Array.from(map.values()).sort((a, b) =>
+    (a.name ?? a.id).localeCompare(b.name ?? b.id, "es", { sensitivity: "base" }),
+  );
+}
+
+function warehouseOptionLabel(w: WarehouseMeta) {
+  const name = w.name?.trim() || w.id;
+  const st = w.status?.trim();
+  if (st === "externa" || st === "external") return `${name} · externa`;
+  if (st === "interna") return `${name} · interna`;
+  return name;
+}
+
+function isInterna(w: WarehouseMeta) {
+  const s = (w.status ?? "").toLowerCase().trim();
+  return s === "interna";
+}
+
+function isExterna(w: WarehouseMeta) {
+  const s = (w.status ?? "").toLowerCase().trim();
+  return s === "externa" || s === "external";
+}
 
 interface Props {
   orden: OrdenCompra | null;
   onClose: () => void;
+  /** Solo operador de cuenta ve envío y destino. */
+  esOperadorCuentas?: boolean;
+  idCliente?: string;
+  codeCuenta?: string;
+  /** Bodegas globales (misma fuente que el custodio) para cruzar por codeCuenta. */
+  warehousesFallback?: WarehouseMeta[];
+  onEnviada?: () => void;
+  /** Tras guardar el estado manual (p. ej. refrescar lista en Reportes). */
+  onEstadoActualizado?: () => void;
 }
 
-export function OrdenCompraDetalleModal({ orden, onClose }: Props) {
+export function OrdenCompraDetalleModal({
+  orden,
+  onClose,
+  esOperadorCuentas = false,
+  idCliente = "",
+  codeCuenta = "",
+  warehousesFallback = [],
+  onEnviada,
+  onEstadoActualizado,
+}: Props) {
+  const [linkedWarehouses, setLinkedWarehouses] = useState<WarehouseMeta[]>([]);
+  const [loadingWarehouses, setLoadingWarehouses] = useState(false);
+  const [destinoTipo, setDestinoTipo] = useState<"interna" | "externa" | null>(null);
+  const [warehouseId, setWarehouseId] = useState("");
+  const [sending, setSending] = useState(false);
+  const [sendError, setSendError] = useState<string | null>(null);
+  const [estadoLocal, setEstadoLocal] = useState(orden?.estado ?? "");
+  const [savingEstado, setSavingEstado] = useState(false);
+  const [estadoError, setEstadoError] = useState<string | null>(null);
+
+  const yaEnviada =
+    orden?.estado === "Enviada" || (typeof orden?.enviadaAt === "number" && orden.enviadaAt > 0);
+
+  const loadWarehouses = useCallback(async () => {
+    if (!idCliente.trim() || !codeCuenta.trim()) {
+      setLinkedWarehouses([]);
+      return;
+    }
+    setLoadingWarehouses(true);
+    try {
+      const byCode = await AsignarBodegaService.getWarehousesByCode(codeCuenta.trim());
+      const merged = mergeWarehousesForClient(
+        byCode,
+        warehousesFallback,
+        idCliente.trim(),
+        codeCuenta.trim(),
+      );
+      setLinkedWarehouses(merged);
+    } catch {
+      setLinkedWarehouses([]);
+    } finally {
+      setLoadingWarehouses(false);
+    }
+  }, [idCliente, codeCuenta, warehousesFallback]);
+
+  useEffect(() => {
+    if (!orden?.id || !esOperadorCuentas) return;
+    void loadWarehouses();
+  }, [orden?.id, esOperadorCuentas, loadWarehouses]);
+
+  useEffect(() => {
+    if (!orden) return;
+    setDestinoTipo(null);
+    setWarehouseId("");
+    setSendError(null);
+    if (orden.destinoTipo === "interna" || orden.destinoTipo === "externa") {
+      setDestinoTipo(orden.destinoTipo);
+    }
+    if (orden.destinoWarehouseId) {
+      setWarehouseId(orden.destinoWarehouseId);
+    }
+  }, [orden?.id]);
+
+  useEffect(() => {
+    setEstadoLocal(orden?.estado ?? "");
+    setEstadoError(null);
+  }, [orden?.id]);
+
+  const opcionesEstado = useMemo(() => {
+    const cur = (orden?.estado ?? "").trim();
+    if (cur && !ORDEN_COMPRA_ESTADOS.some((x) => x === cur)) {
+      return [cur, ...ORDEN_COMPRA_ESTADOS];
+    }
+    return [...ORDEN_COMPRA_ESTADOS];
+  }, [orden?.estado]);
+
+  const puedeEditarEstado = Boolean(idCliente.trim() && orden?.id);
+
+  const handleCambiarEstado = async (next: string) => {
+    if (!orden?.id || !idCliente.trim()) return;
+    if (next === estadoLocal) return;
+    const prev = estadoLocal;
+    setEstadoLocal(next);
+    setSavingEstado(true);
+    setEstadoError(null);
+    try {
+      await OrdenCompraService.actualizarEstado(idCliente.trim(), orden.id, next);
+      onEstadoActualizado?.();
+    } catch (e: unknown) {
+      setEstadoLocal(prev);
+      setEstadoError(e instanceof Error ? e.message : "No se pudo guardar el estado.");
+    } finally {
+      setSavingEstado(false);
+    }
+  };
+
+  const filtradasPorTipo = useMemo(() => {
+    if (!destinoTipo) return [];
+    return linkedWarehouses.filter((w) => (destinoTipo === "interna" ? isInterna(w) : isExterna(w)));
+  }, [linkedWarehouses, destinoTipo]);
+
+  useEffect(() => {
+    if (yaEnviada) return;
+    if (!filtradasPorTipo.length) {
+      if (destinoTipo) setWarehouseId("");
+      return;
+    }
+    if (!filtradasPorTipo.some((w) => w.id === warehouseId)) {
+      setWarehouseId(filtradasPorTipo[0].id);
+    }
+  }, [filtradasPorTipo, destinoTipo, warehouseId, yaEnviada]);
+
   if (!orden) return null;
 
   const lineItems = orden.lineItems ?? [];
+
+  const handleEnviar = async () => {
+    setSendError(null);
+    if (!orden.id) {
+      setSendError("No se pudo identificar la orden.");
+      return;
+    }
+    if (!destinoTipo) {
+      setSendError("Elegí si el destino es bodega interna o externa.");
+      return;
+    }
+    const w = filtradasPorTipo.find((x) => x.id === warehouseId);
+    if (!w?.id) {
+      setSendError("Elegí una bodega de la lista.");
+      return;
+    }
+    setSending(true);
+    try {
+      await OrdenCompraService.marcarEnviada(idCliente.trim(), orden.id, {
+        destinoTipo,
+        destinoWarehouseId: w.id,
+        destinoWarehouseNombre: w.name?.trim() || w.id,
+      });
+      onEnviada?.();
+      onClose();
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : "No se pudo enviar la orden.";
+      setSendError(msg);
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const mostrarBloqueOperador = esOperadorCuentas && idCliente.trim() && codeCuenta.trim();
 
   return (
     <div
@@ -52,21 +255,158 @@ export function OrdenCompraDetalleModal({ orden, onClose }: Props) {
             <dt className="font-semibold text-slate-500">Fecha</dt>
             <dd className="text-slate-900">{orden.fecha}</dd>
           </div>
-          <div className="flex flex-wrap gap-x-2 gap-y-1">
-            <dt className="font-semibold text-slate-500">Estado</dt>
-            <dd>
-              <span
-                className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold ${
-                  orden.estado === "Terminado"
-                    ? "bg-emerald-100 text-emerald-800"
-                    : "bg-sky-100 text-sky-900"
-                }`}
-              >
-                {orden.estado}
-              </span>
+          <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-2 sm:gap-y-1">
+            <dt className="shrink-0 font-semibold text-slate-500">Estado</dt>
+            <dd className="min-w-0 flex-1">
+              {puedeEditarEstado ? (
+                <div className="flex flex-col gap-1.5">
+                  <select
+                    id="orden-detalle-estado"
+                    value={estadoLocal}
+                    disabled={savingEstado}
+                    onChange={(e) => void handleCambiarEstado(e.target.value)}
+                    className="w-full max-w-xs rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-slate-900 disabled:opacity-60"
+                    aria-busy={savingEstado}
+                  >
+                    {opcionesEstado.map((opt) => (
+                      <option key={opt} value={opt}>
+                        {opt}
+                      </option>
+                    ))}
+                  </select>
+                  {savingEstado ? (
+                    <span className="text-xs text-slate-500">Guardando…</span>
+                  ) : null}
+                  {estadoError ? (
+                    <span className="text-xs text-red-600">{estadoError}</span>
+                  ) : null}
+                </div>
+              ) : (
+                <span
+                  className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold ${ordenCompraEstadoBadgeClass(orden.estado)}`}
+                >
+                  {orden.estado}
+                </span>
+              )}
             </dd>
           </div>
+          {yaEnviada && (orden.destinoWarehouseNombre || orden.destinoTipo) ? (
+            <>
+              <div className="flex flex-wrap gap-x-2 gap-y-1">
+                <dt className="font-semibold text-slate-500">Destino</dt>
+                <dd className="text-slate-900">
+                  {orden.destinoTipo === "interna"
+                    ? "Bodega interna"
+                    : orden.destinoTipo === "externa"
+                      ? "Bodega externa"
+                      : "—"}
+                  {orden.destinoWarehouseNombre ? ` · ${orden.destinoWarehouseNombre}` : ""}
+                </dd>
+              </div>
+            </>
+          ) : null}
         </dl>
+
+        {mostrarBloqueOperador ? (
+          <div className="mb-5 space-y-3 border-b border-slate-100 pb-4">
+            <p className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Destino</p>
+            <p className="text-xs text-slate-500">
+              Elegí si la mercadería va a una bodega interna o externa vinculada a tu cuenta (las mismas
+              que asigna el administrador).
+            </p>
+            {yaEnviada ? (
+              <p className="rounded-lg bg-violet-50 px-3 py-2 text-sm text-violet-900">
+                Esta orden ya fue enviada{orden.destinoWarehouseNombre ? ` a ${orden.destinoWarehouseNombre}` : ""}.
+              </p>
+            ) : (
+              <>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDestinoTipo("interna");
+                      setWarehouseId("");
+                      setSendError(null);
+                    }}
+                    className={`rounded-lg px-4 py-2 text-sm font-semibold transition ${
+                      destinoTipo === "interna"
+                        ? "bg-emerald-600 text-white shadow-sm"
+                        : "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                    }`}
+                  >
+                    Bodega interna
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDestinoTipo("externa");
+                      setWarehouseId("");
+                      setSendError(null);
+                    }}
+                    className={`rounded-lg px-4 py-2 text-sm font-semibold transition ${
+                      destinoTipo === "externa"
+                        ? "bg-emerald-600 text-white shadow-sm"
+                        : "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                    }`}
+                  >
+                    Bodega externa
+                  </button>
+                </div>
+
+                {loadingWarehouses ? (
+                  <p className="text-sm text-slate-500">Cargando bodegas de la cuenta…</p>
+                ) : destinoTipo ? (
+                  filtradasPorTipo.length === 0 ? (
+                    <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                      No hay bodegas{" "}
+                      {destinoTipo === "interna" ? "internas" : "externas"} vinculadas a esta cuenta. Pedile al
+                      administrador que las asigne en Asignación y creación.
+                    </p>
+                  ) : (
+                    <div>
+                      <label htmlFor="orden-destino-bodega" className="mb-1 block text-xs font-semibold text-slate-600">
+                        Bodega
+                      </label>
+                      <select
+                        id="orden-destino-bodega"
+                        value={warehouseId}
+                        onChange={(e) => setWarehouseId(e.target.value)}
+                        className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900"
+                      >
+                        {filtradasPorTipo.map((w) => (
+                          <option key={w.id} value={w.id}>
+                            {warehouseOptionLabel(w)}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )
+                ) : (
+                  <p className="text-sm text-slate-500">Seleccioná interna o externa para ver las bodegas.</p>
+                )}
+
+                {sendError ? (
+                  <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{sendError}</p>
+                ) : null}
+
+                <button
+                  type="button"
+                  onClick={() => void handleEnviar()}
+                  disabled={
+                    sending ||
+                    yaEnviada ||
+                    !destinoTipo ||
+                    filtradasPorTipo.length === 0 ||
+                    !warehouseId.trim()
+                  }
+                  className="w-full rounded-lg bg-violet-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-violet-700 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:hover:bg-slate-300"
+                >
+                  {sending ? "Enviando…" : "Enviar orden de compra"}
+                </button>
+              </>
+            )}
+          </div>
+        ) : null}
 
         <p className="mb-2 text-[11px] font-bold uppercase tracking-wide text-slate-500">Productos</p>
         {lineItems.length === 0 ? (

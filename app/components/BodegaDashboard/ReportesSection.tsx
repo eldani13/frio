@@ -8,7 +8,7 @@ import ReportesPage from "@/app/reportes/page";
 import AsignarBodegasPage from "@/app/asignarbodegas/page";
 import AdminBodegaReportes from "@/app/components/BodegaDashboard/AdminBodegaReportes";
 import { CuentaOperadoresSection } from "@/app/components/BodegaDashboard/CuentaOperadoresSection";
-import type { Box, Client, Slot } from "@/app/interfaces/bodega";
+import type { Box, Client, Slot, WarehouseMeta } from "@/app/interfaces/bodega";
 import { OrdenCompraFormModal } from "@/app/components/ui/ordenes/OrdenCompraFormModal";
 import { OrdenCompraDetalleModal } from "@/app/components/ui/ordenes/OrdenCompraDetalleModal";
 import { SolicitudCompraFormModal } from "@/app/components/ui/ordenes/SolicitudCompraFormModal";
@@ -19,7 +19,11 @@ import { OrdenCompraService } from "@/app/services/ordenCompraService";
 import { SolicitudCompraService } from "@/app/services/solicitudCompraService";
 import { ProviderService } from "@/app/services/providerService";
 import type { Catalogo } from "@/app/types/catalogo";
-import type { OrdenCompra } from "@/app/types/ordenCompra";
+import {
+  ORDEN_COMPRA_ESTADOS,
+  ordenCompraEstadoBadgeClass,
+  type OrdenCompra,
+} from "@/app/types/ordenCompra";
 import type { SolicitudCompra } from "@/app/types/solicitudCompra";
 import type { Provider } from "@/app/types/provider";
 
@@ -28,6 +32,7 @@ import { BiBarChartAlt2, BiCollection, BiUserCheck } from "react-icons/bi";
 import {
   HiOutlineArrowLeft,
   HiOutlineArrowRight,
+  HiOutlineChevronDown,
   HiOutlinePlus,
   HiOutlineTruck,
   HiOutlineUsers,
@@ -43,6 +48,8 @@ interface ReportesSectionProps {
   dispatchedBoxes?: Box[];
   slots?: Slot[];
   clients?: Client[];
+  /** Bodegas del sistema: operador de cuenta cruza por codeCuenta al elegir destino de OC. */
+  warehousesFallback?: WarehouseMeta[];
   sortByPosition?: <T extends { position: number }>(items: T[]) => T[];
 }
 
@@ -51,9 +58,23 @@ function nombresProductosOrden(o: OrdenCompra): string {
   return names.length ? names.join(" · ") : "—";
 }
 
+function opcionesEstadoSelect(estadoActual: string): string[] {
+  const cur = estadoActual.trim();
+  if (cur && !ORDEN_COMPRA_ESTADOS.some((x) => x === cur)) {
+    return [cur, ...ORDEN_COMPRA_ESTADOS];
+  }
+  return [...ORDEN_COMPRA_ESTADOS];
+}
+
 function nombresProductosSolicitud(s: SolicitudCompra): string {
   const names = (s.lineItems ?? []).map((li) => li.titleSnapshot).filter(Boolean);
   return names.length ? names.join(" · ") : "—";
+}
+
+function pesosProductosSolicitud(s: SolicitudCompra): string {
+  const items = s.lineItems ?? [];
+  if (!items.length) return "—";
+  return items.map((li) => `${li.pesoKg} kg`).join(" · ");
 }
 
 const ReportesSection: React.FC<ReportesSectionProps> = ({
@@ -65,6 +86,7 @@ const ReportesSection: React.FC<ReportesSectionProps> = ({
   dispatchedBoxes = [],
   slots = [],
   clients = [],
+  warehousesFallback = [],
   sortByPosition = (items) => [...items].sort((a, b) => a.position - b.position),
 }) => {
   const { session } = useAuth();
@@ -95,6 +117,7 @@ const ReportesSection: React.FC<ReportesSectionProps> = ({
   const [ordenCompraModalOpen, setOrdenCompraModalOpen] = React.useState(false);
   const [solicitudModalOpen, setSolicitudModalOpen] = React.useState(false);
   const [ordenDetalle, setOrdenDetalle] = React.useState<OrdenCompra | null>(null);
+  const [ordenEstadoSavingId, setOrdenEstadoSavingId] = React.useState<string | null>(null);
   const [solicitudesCompra, setSolicitudesCompra] = React.useState<SolicitudCompra[]>([]);
   const [solicitudDetalle, setSolicitudDetalle] = React.useState<SolicitudCompra | null>(null);
 
@@ -174,8 +197,41 @@ const ReportesSection: React.FC<ReportesSectionProps> = ({
 
   const reloadOrdenesCompra = React.useCallback(() => {
     if (!idCliente.trim()) return;
-    void OrdenCompraService.getAll(idCliente, codeCuenta).then(setOrdenesCompra);
+    void OrdenCompraService.getAll(idCliente, codeCuenta).then((list) => {
+      setOrdenesCompra(list);
+      setOrdenDetalle((prev) => {
+        if (!prev?.id) return prev;
+        return list.find((o) => o.id === prev.id) ?? prev;
+      });
+    });
   }, [idCliente, codeCuenta]);
+
+  const handleEstadoOrdenDesdeTabla = React.useCallback(
+    async (oc: OrdenCompra, next: string) => {
+      if (!oc.id || !idCliente.trim() || next === oc.estado) return;
+      setOrdenEstadoSavingId(oc.id);
+      const prev = oc.estado;
+      setOrdenesCompra((list) =>
+        list.map((o) => (o.id === oc.id ? ({ ...o, estado: next } as OrdenCompra) : o)),
+      );
+      setOrdenDetalle((d) =>
+        d?.id === oc.id ? ({ ...d, estado: next } as OrdenCompra) : d,
+      );
+      try {
+        await OrdenCompraService.actualizarEstado(idCliente.trim(), oc.id, next);
+      } catch {
+        setOrdenesCompra((list) =>
+          list.map((o) => (o.id === oc.id ? ({ ...o, estado: prev } as OrdenCompra) : o)),
+        );
+        setOrdenDetalle((d) =>
+          d?.id === oc.id ? ({ ...d, estado: prev } as OrdenCompra) : d,
+        );
+      } finally {
+        setOrdenEstadoSavingId(null);
+      }
+    },
+    [idCliente],
+  );
 
   const reloadSolicitudesCompra = React.useCallback(() => {
     if (!idCliente.trim()) return;
@@ -412,22 +468,6 @@ const ReportesSection: React.FC<ReportesSectionProps> = ({
 
                 {/* Plantas: oculto temporalmente. Para volver a mostrar: importar PlantasPage y MdFactory,
                     añadir "plantas" al union de viewMode, este botón y {viewMode === "plantas" && <PlantasPage />}. */}
-
-                {!esOperadorCuentas ? (
-                  <button
-                    type="button"
-                    onClick={() => setViewMode("ordenesCompra")}
-                    className="group w-full rounded-2xl bg-[#e3d2f1] p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md flex items-center justify-between cursor-pointer active:scale-95"
-                  >
-                    <div className="flex items-center gap-4">
-                      <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-white/50 text-violet-900 shadow-sm">
-                        <MdAssignment size={24} />
-                      </span>
-                      <p className="text-lg font-bold text-slate-900">Órdenes de compra</p>
-                    </div>
-                    <HiOutlineArrowRight size={18} className="text-slate-500 group-hover:translate-x-1 transition-transform" />
-                  </button>
-                ) : null}
               </div>
             </div>
 
@@ -513,14 +553,14 @@ const ReportesSection: React.FC<ReportesSectionProps> = ({
                   Realizar solicitud
                 </h1>
                 <p className="text-sm text-slate-500">
-                  Registrá solicitudes con peso por producto; se guardan aparte de las órdenes de compra.
+                  Registrá solicitudes con productos del catálogo y peso en kg; se guardan aparte de las órdenes de compra.
                 </p>
               </div>
             </div>
             <button
               type="button"
               onClick={() => setSolicitudModalOpen(true)}
-              disabled={!idCliente.trim() || proveedoresOrden.length === 0 || catalogosOrden.length === 0}
+              disabled={!idCliente.trim() || catalogosOrden.length === 0}
               className="inline-flex items-center justify-center gap-2 rounded-[10px] bg-cyan-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-cyan-700 active:scale-[0.98] disabled:pointer-events-none disabled:opacity-50"
             >
               <HiOutlinePlus strokeWidth={2.5} className="h-5 w-5" />
@@ -532,49 +572,43 @@ const ReportesSection: React.FC<ReportesSectionProps> = ({
             <p className="rounded-xl border border-dashed border-slate-200 p-6 text-center text-sm text-slate-500">
               No hay cuenta vinculada a tu usuario. Contactá al administrador de la cuenta.
             </p>
-          ) : proveedoresOrden.length === 0 || catalogosOrden.length === 0 ? (
+          ) : catalogosOrden.length === 0 ? (
             <p className="rounded-xl border border-amber-100 bg-amber-50/80 p-4 text-sm text-amber-900">
-              Tu administrador de cuenta debe registrar al menos un <strong>proveedor</strong> y productos en el{" "}
-              <strong>catálogo</strong> (Asignación y creación) para poder armar solicitudes.
+              Tu administrador de cuenta debe registrar productos en el <strong>catálogo</strong> (Asignación y creación)
+              para poder armar solicitudes.
             </p>
           ) : null}
 
-          {idCliente.trim() && proveedoresOrden.length > 0 && catalogosOrden.length > 0 ? (
+          {idCliente.trim() && catalogosOrden.length > 0 ? (
             <div className="overflow-hidden rounded-xl border border-cyan-100">
               <p className="border-b border-cyan-100 bg-cyan-50/60 px-4 py-2 text-xs font-semibold text-cyan-900">
                 Tus solicitudes
               </p>
               <div className="overflow-x-auto">
-                <table className="w-full min-w-[560px] border-collapse text-left text-sm">
+                <table className="w-full min-w-[420px] border-collapse text-left text-sm">
                   <thead>
                     <tr className="border-b border-slate-200 bg-slate-50">
                       <th className="whitespace-nowrap px-4 py-3 font-bold uppercase tracking-wide text-[11px] text-slate-500">
                         Solicitud
                       </th>
-                      <th className="min-w-[120px] px-4 py-3 font-bold uppercase tracking-wide text-[11px] text-slate-500">
-                        Proveedor
-                      </th>
                       <th className="px-4 py-3 font-bold uppercase tracking-wide text-[11px] text-slate-500">
                         Productos
                       </th>
-                      <th className="px-4 py-3 font-bold uppercase tracking-wide text-[11px] text-slate-500">
-                        Estado
-                      </th>
                       <th className="whitespace-nowrap px-4 py-3 font-bold uppercase tracking-wide text-[11px] text-slate-500">
-                        Fecha
+                        Peso
                       </th>
                     </tr>
                   </thead>
                   <tbody>
                     {ordenesDataLoading ? (
                       <tr>
-                        <td colSpan={5} className="px-4 py-12 text-center text-slate-500">
+                        <td colSpan={3} className="px-4 py-12 text-center text-slate-500">
                           Cargando solicitudes…
                         </td>
                       </tr>
                     ) : solicitudesCompra.length === 0 ? (
                       <tr>
-                        <td colSpan={5} className="px-4 py-12 text-center text-slate-500">
+                        <td colSpan={3} className="px-4 py-12 text-center text-slate-500">
                           No hay solicitudes. Usá &quot;Nueva solicitud&quot; para crear la primera.
                         </td>
                       </tr>
@@ -597,11 +631,6 @@ const ReportesSection: React.FC<ReportesSectionProps> = ({
                           <td className="whitespace-nowrap px-4 py-3 font-mono text-[13px] font-semibold text-cyan-900">
                             {sol.numero}
                           </td>
-                          <td className="max-w-[160px] px-4 py-3 text-slate-800">
-                            <span className="line-clamp-2 text-[13px]" title={sol.proveedorNombre}>
-                              {sol.proveedorNombre || "—"}
-                            </span>
-                          </td>
                           <td
                             className="max-w-md px-4 py-3 text-slate-800"
                             title={nombresProductosSolicitud(sol)}
@@ -610,18 +639,12 @@ const ReportesSection: React.FC<ReportesSectionProps> = ({
                               {nombresProductosSolicitud(sol)}
                             </span>
                           </td>
-                          <td className="px-4 py-3">
-                            <span
-                              className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold ${
-                                sol.estado === "Terminado"
-                                  ? "bg-emerald-100 text-emerald-800"
-                                  : "bg-cyan-100 text-cyan-900"
-                              }`}
-                            >
-                              {sol.estado}
-                            </span>
+                          <td
+                            className="whitespace-nowrap px-4 py-3 tabular-nums text-[13px] text-slate-800"
+                            title={pesosProductosSolicitud(sol)}
+                          >
+                            {pesosProductosSolicitud(sol)}
                           </td>
-                          <td className="whitespace-nowrap px-4 py-3 text-slate-600">{sol.fecha}</td>
                         </tr>
                       ))
                     )}
@@ -643,7 +666,6 @@ const ReportesSection: React.FC<ReportesSectionProps> = ({
           idCliente={idCliente}
           codeCuenta={codeCuenta}
           productos={catalogosOrden}
-          proveedores={proveedoresOrden}
           onSuccess={reloadSolicitudesCompra}
         />
       </section>
@@ -782,16 +804,34 @@ const ReportesSection: React.FC<ReportesSectionProps> = ({
                         >
                           <span className="line-clamp-2 text-[13px] font-medium">{nombresProductosOrden(oc)}</span>
                         </td>
-                        <td className="px-4 py-3">
-                          <span
-                            className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold ${
-                              oc.estado === "Terminado"
-                                ? "bg-emerald-100 text-emerald-800"
-                                : "bg-sky-100 text-sky-900"
-                            }`}
-                          >
-                            {oc.estado}
-                          </span>
+                        <td
+                          className="px-4 py-3"
+                          onClick={(e) => e.stopPropagation()}
+                          onMouseDown={(e) => e.stopPropagation()}
+                          onKeyDown={(e) => e.stopPropagation()}
+                        >
+                          <div className="relative inline-flex max-w-full align-middle">
+                            <select
+                              aria-label={`Estado de la orden ${oc.numero}`}
+                              title="Cambiar estado"
+                              disabled={!oc.id || ordenEstadoSavingId === oc.id}
+                              value={oc.estado}
+                              onChange={(e) => void handleEstadoOrdenDesdeTabla(oc, e.target.value)}
+                              className={`inline-flex max-w-[12rem] cursor-pointer truncate rounded-full border-0 py-0.5 pl-2.5 pr-7 text-left text-xs font-semibold shadow-none outline-none ring-0 focus-visible:ring-2 focus-visible:ring-violet-400/50 disabled:cursor-wait disabled:opacity-60 [appearance:none] ${ordenCompraEstadoBadgeClass(oc.estado)}`}
+                            >
+                              {opcionesEstadoSelect(oc.estado).map((opt) => (
+                                <option key={opt} value={opt}>
+                                  {opt}
+                                </option>
+                              ))}
+                            </select>
+                            <span
+                              className="pointer-events-none absolute right-1 top-1/2 -translate-y-1/2 text-current opacity-60"
+                              aria-hidden
+                            >
+                              <HiOutlineChevronDown className="h-3.5 w-3.5" strokeWidth={2.25} />
+                            </span>
+                          </div>
                         </td>
                         <td className="whitespace-nowrap px-4 py-3 text-slate-600">{oc.fecha}</td>
                       </tr>
@@ -803,7 +843,16 @@ const ReportesSection: React.FC<ReportesSectionProps> = ({
           </div>
         </div>
 
-        <OrdenCompraDetalleModal orden={ordenDetalle} onClose={() => setOrdenDetalle(null)} />
+        <OrdenCompraDetalleModal
+          orden={ordenDetalle}
+          onClose={() => setOrdenDetalle(null)}
+          esOperadorCuentas={esOperadorCuentas}
+          idCliente={idCliente}
+          codeCuenta={codeCuenta}
+          warehousesFallback={warehousesFallback}
+          onEnviada={reloadOrdenesCompra}
+          onEstadoActualizado={reloadOrdenesCompra}
+        />
 
         <OrdenCompraFormModal
           isOpen={ordenCompraModalOpen}

@@ -4,7 +4,7 @@ import React, { useEffect, useState } from "react";
 import { HiOutlinePlus, HiOutlineTrash, HiOutlineXMark } from "react-icons/hi2";
 import type { Catalogo } from "@/app/types/catalogo";
 import type { Provider } from "@/app/types/provider";
-import type { OrdenCompraLineItem } from "@/app/types/ordenCompra";
+import { ORDEN_COMPRA_ESTADOS, type OrdenCompraLineItem } from "@/app/types/ordenCompra";
 import { OrdenCompraService } from "@/app/services/ordenCompraService";
 
 type DraftLine = OrdenCompraLineItem;
@@ -30,7 +30,7 @@ export function OrdenCompraFormModal({
 }: Props) {
   const [proveedorId, setProveedorId] = useState("");
   const [fecha, setFecha] = useState("");
-  const [estado, setEstado] = useState("En curso");
+  const [estado, setEstado] = useState<string>("Iniciado");
   const [lines, setLines] = useState<DraftLine[]>([]);
   const [pickProductId, setPickProductId] = useState("");
   const [pickCantidad, setPickCantidad] = useState("1");
@@ -41,7 +41,7 @@ export function OrdenCompraFormModal({
     if (!isOpen) return;
     setProveedorId("");
     setFecha(new Date().toISOString().slice(0, 10));
-    setEstado("En curso");
+    setEstado("Iniciado");
     setLines([]);
     setPickProductId("");
     setPickCantidad("1");
@@ -206,8 +206,11 @@ export function OrdenCompraFormModal({
                 onChange={(e) => setEstado(e.target.value)}
                 className="w-full rounded-[8px] border border-gray-200 px-4 py-2 text-sm focus:border-[#A8D5BA] focus:outline-none"
               >
-                <option value="En curso">En curso</option>
-                <option value="Terminado">Terminado</option>
+                {ORDEN_COMPRA_ESTADOS.map((opt) => (
+                  <option key={opt} value={opt}>
+                    {opt}
+                  </option>
+                ))}
               </select>
             </div>
           </div>

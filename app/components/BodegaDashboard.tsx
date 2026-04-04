@@ -33,6 +33,8 @@ import { auth, db, getSecondaryAuth } from "../../lib/firebaseClient";
 import Header from "./bodega/Header";
 import MessageBanner from "./bodega/MessageBanner";
 import ConfiguratorPanel from "./bodega/ConfiguratorPanel";
+import CrearTareaCuentaModal from "./bodega/CrearTareaCuentaModal";
+import { TareaCuentaService } from "../services/tareaCuentaService";
 import type {
   AlertAssignment,
   AlertHistoryEntry,
@@ -501,6 +503,7 @@ export default function BodegaDashboard() {
   /** Pulso para que clientes en Reportes vuelvan al submenú de vistas al pulsar Menú en el header */
   const [reportesClienteMenuNonce, setReportesClienteMenuNonce] = useState(0);
   const [configuradorMenuNonce, setConfiguradorMenuNonce] = useState(0);
+  const [crearTareaOpen, setCrearTareaOpen] = useState(false);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
@@ -2671,6 +2674,25 @@ export default function BodegaDashboard() {
     }
   }, [activeTab, isJefe, tabs]);
 
+  const handleCrearTareaSubmit = useCallback(
+    async ({ titulo, detalle }: { titulo: string; detalle: string }) => {
+      if (!session?.uid) throw new Error("sin sesión");
+      const cid = effectiveClientId;
+      if (!cid) throw new Error("sin cuenta");
+      const clientName = clients.find((c) => c.id === cid)?.name?.trim() ?? "";
+      await TareaCuentaService.crear({
+        titulo,
+        detalle,
+        clientId: cid,
+        clientName,
+        creadoPorNombre: session.displayName?.trim() || session.email?.trim() || "Usuario",
+        creadoPorUid: session.uid,
+      });
+      setMessage("Tarea enviada al configurador.");
+    },
+    [session, effectiveClientId, clients],
+  );
+
   if (!isHydrated) {
     return (
       <div className="relative min-h-screen bg-slate-100 px-6 text-slate-900">
@@ -2711,7 +2733,11 @@ export default function BodegaDashboard() {
 
   return (
     <div className="min-h-screen bg-slate-50 px-6 py-10 text-slate-900">
-      <main className="mx-auto flex w-full max-w-6xl flex-col gap-8">
+      <main
+        className={`mx-auto flex w-full flex-col gap-8 ${
+          isCustodio && activeTab === "ingresos" ? "max-w-[min(100%,100rem)]" : "max-w-6xl"
+        }`}
+      >
         <Header
           occupiedCount={occupiedCount}
           totalSlots={warehouseCapacity}
@@ -2737,7 +2763,21 @@ export default function BodegaDashboard() {
             }
           }}
           role={role}
+          onCrearTarea={isCliente ? () => setCrearTareaOpen(true) : undefined}
         />
+        {isCliente ? (
+          <CrearTareaCuentaModal
+            open={crearTareaOpen}
+            onClose={() => setCrearTareaOpen(false)}
+            onSubmit={handleCrearTareaSubmit}
+            cuentaLabel={
+              (() => {
+                const name = clients.find((c) => c.id === effectiveClientId)?.name?.trim();
+                return name ? `Cuenta: ${name}` : undefined;
+              })()
+            }
+          />
+        ) : null}
         <>
             {isAdmin ? (
               <div className="flex flex-wrap items-center justify-between gap-3">
@@ -3105,6 +3145,7 @@ export default function BodegaDashboard() {
                 slots={isCuentaUsuario ? slotsClient : slots}
                 sortByPosition={sortByPosition}
                 clients={clients}
+                warehousesFallback={warehouses}
                 isCliente={isCuentaUsuario}
                 menuResetNonce={isCuentaUsuario ? reportesClienteMenuNonce : undefined}
               />

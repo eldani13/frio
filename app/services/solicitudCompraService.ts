@@ -48,12 +48,12 @@ export const SolicitudCompraService = {
     idCliente: string,
     codeCuenta: string,
     payload: {
-      proveedorId: string;
-      proveedorCode: string;
-      proveedorNombre: string;
-      fecha: string;
-      estado: string;
       lineItems: SolicitudLineItem[];
+      proveedorId?: string;
+      proveedorCode?: string;
+      proveedorNombre?: string;
+      fecha?: string;
+      estado?: string;
     },
   ) {
     if (!idCliente?.trim()) throw new Error("idCliente requerido");
@@ -67,15 +67,16 @@ export const SolicitudCompraService = {
       nextId = (Number(last.numericId) || 0) + 1;
     }
 
+    const hoy = new Date().toISOString().slice(0, 10);
     const doc = {
       codeCuenta: codeCuenta ?? "",
       numericId: nextId,
       numero: `SOL-${String(nextId).padStart(4, "0")}`,
-      proveedorId: payload.proveedorId,
+      proveedorId: String(payload.proveedorId ?? "").trim(),
       proveedorCode: String(payload.proveedorCode ?? "").trim(),
-      proveedorNombre: payload.proveedorNombre?.trim() ?? "",
-      fecha: payload.fecha ?? "",
-      estado: payload.estado ?? "En curso",
+      proveedorNombre: String(payload.proveedorNombre ?? "").trim(),
+      fecha: String(payload.fecha ?? "").trim() || hoy,
+      estado: String(payload.estado ?? "").trim() || "En curso",
       lineItems: payload.lineItems.map(lineItemForFirestore),
       createdAt: Date.now(),
     };

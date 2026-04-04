@@ -43,32 +43,7 @@ export function SolicitudDetalleModal({ solicitud, onClose }: Props) {
           </button>
         </div>
 
-        <dl className="mb-5 space-y-2 border-b border-slate-100 pb-4 text-sm">
-          <div className="flex flex-wrap gap-x-2 gap-y-1">
-            <dt className="font-semibold text-slate-500">Proveedor</dt>
-            <dd className="text-slate-900">{solicitud.proveedorNombre || "—"}</dd>
-          </div>
-          <div className="flex flex-wrap gap-x-2 gap-y-1">
-            <dt className="font-semibold text-slate-500">Fecha</dt>
-            <dd className="text-slate-900">{solicitud.fecha}</dd>
-          </div>
-          <div className="flex flex-wrap gap-x-2 gap-y-1">
-            <dt className="font-semibold text-slate-500">Estado</dt>
-            <dd>
-              <span
-                className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold ${
-                  solicitud.estado === "Terminado"
-                    ? "bg-emerald-100 text-emerald-800"
-                    : "bg-cyan-100 text-cyan-900"
-                }`}
-              >
-                {solicitud.estado}
-              </span>
-            </dd>
-          </div>
-        </dl>
-
-        <p className="mb-2 text-[11px] font-bold uppercase tracking-wide text-slate-500">Productos</p>
+        <p className="mb-2 text-[11px] font-bold uppercase tracking-wide text-slate-500">Productos y peso</p>
         {lineItems.length === 0 ? (
           <p className="text-sm text-slate-500">Esta solicitud no tiene líneas registradas.</p>
         ) : (

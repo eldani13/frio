@@ -6,6 +6,17 @@ export type Slot = {
 	client: string;
 	/** Peso en kg asociado a la caja (opcional). */
 	quantityKg?: number;
+	/** Campos opcionales alineados con inventario externo / Fridem (si existen en Firestore). */
+	rd?: string | number | null;
+	renglon?: string | number | null;
+	lote?: string | null;
+	marca?: string | null;
+	embalaje?: string | null;
+	pesoUnitario?: number | string | null;
+	piezas?: number | string | null;
+	caducidad?: string | null;
+	fechaIngreso?: string | null;
+	llaveUnica?: string | null;
 };
 
 export type Role =

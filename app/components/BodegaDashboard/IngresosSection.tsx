@@ -292,69 +292,21 @@ export default function IngresosSection(props: Props) {
 
   return (
     <>
-      <section className="flex flex-col lg:flex-row gap-6 items-stretch">
-      <div className="rounded-2xl bg-white p-8 shadow-lg border border-green-200 w-full max-w-md mx-auto lg:mx-0 lg:w-87.5 flex flex-col gap-8 h-full">
-        {/* Zona de ingresos arriba */}
-        <div className="flex flex-col justify-between min-h-55">
-          <div className="flex items-center justify-between mb-2">
-            <div className="flex items-center gap-2">
-              <span className="rounded-full bg-emerald-600 p-2 text-white">
-                <FiArchive className="w-5 h-5" />
-              </span>
-              <div>
-                <h2 className="text-lg font-semibold">Zona de ingresos</h2>
-                <p className="text-xs text-slate-500">
-                  Cajas recibidas recientemente
-                </p>
+      <section className="grid w-full min-w-0 gap-4 sm:gap-6 items-stretch [grid-template-columns:repeat(auto-fit,minmax(min(100%,17.5rem),1fr))] md:[grid-template-columns:repeat(auto-fit,minmax(min(100%,20rem),1fr))] xl:[grid-template-columns:repeat(auto-fit,minmax(min(100%,22rem),1fr))]">
+        {/* 1. Orden de ingreso */}
+        <div className="rounded-2xl bg-white p-4 sm:p-6 lg:p-8 shadow-lg border border-green-200 w-full min-w-0 flex h-full min-h-0 flex-col gap-4 sm:gap-6">
+          {canUseIngresoForm ? (
+            <>
+              <div className="flex items-center gap-3">
+                <span className="rounded-full bg-emerald-600 p-2 text-white shrink-0">
+                  <FiArchive className="w-5 h-5" />
+                </span>
+                <div className="min-w-0">
+                  <h2 className="text-lg font-semibold">Orden de ingreso</h2>
+                  <p className="text-xs text-slate-500">Registrar nueva caja</p>
+                </div>
               </div>
-            </div>
-            <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-600">
-              {inboundBoxes.length} cajas
-            </span>
-          </div>
-          <div className="flex-1 flex flex-col items-center justify-center mt-4">
-            {inboundBoxes.length === 0 ? (
-              <div className="flex flex-col items-center gap-2">
-                <FiArchive className="w-10 h-10 text-slate-300" />
-                <p className="text-sm text-slate-500">
-                  No hay cajas en ingresos
-                </p>
-              </div>
-            ) : (
-              <div className="w-full max-h-32 overflow-y-auto flex flex-col items-center">
-                {sortByPosition(inboundBoxes).map((box, idx) => (
-                  <div
-                    key={`ingreso-${box.position}-${box.autoId ?? "no-id"}-${idx}`}
-                    className="rounded-xl border border-emerald-200 bg-white p-3 text-sm text-emerald-700 w-full mb-2"
-                  >
-                    <p className="font-semibold">Ingreso {box.position}</p>
-                    <p>Id único: {box.autoId}</p>
-                    <p>Nombre: {box.name}</p>
-                    <p>Temperatura: {box.temperature} °C</p>
-                    <p>Cantidad: {formatQuantityKg(box.quantityKg)}</p>
-                    <p>Cliente: {clientLabel(box.client)}</p>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-        <hr className="my-4 border-slate-200" />
-        {/* Formulario de ingreso abajo */}
-        {canUseIngresoForm ? (
-          <div>
-            <div className="flex items-center gap-3 mb-2">
-              <span className="rounded-full bg-emerald-600 p-2 text-white">
-                <FiArchive className="w-5 h-5" />
-              </span>
-              <div>
-                <h2 className="text-lg font-semibold">Ingreso de cajas</h2>
-                <p className="text-xs text-slate-500">
-                  Registrar nueva caja
-                </p>
-              </div>
-            </div>
-            <div className="grid gap-3 mt-6">
+              <div className="grid gap-3 flex-1 min-h-0">
               <label className="text-sm font-medium text-slate-600">
                 Orden de posición
               </label>
@@ -485,48 +437,42 @@ export default function IngresosSection(props: Props) {
               >
                 <FiArchive className="w-4 h-4" /> Registrar ingreso
               </button>
-            </div>
-          </div>
-        ) : null}
-      </div>
+              </div>
+            </>
+          ) : null}
+        </div>
 
-      {/* Zona de salida e ingresos */}
-      <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div className="rounded-2xl bg-white p-8 shadow-lg border border-pink-200 w-full max-w-md mx-auto lg:mx-0 lg:w-87.5 flex flex-col gap-8 h-full">
-          {/* Zona de salida arriba (solo lectura) */}
-          <div className="flex flex-col justify-between min-h-55">
-            <div className="flex items-center justify-between mb-2">
-              <div className="flex items-center gap-2">
-                <span className="rounded-full bg-pink-600 p-2 text-white">
-                  <FiBox className="w-5 h-5" />
+        {/* 2. Zona de ingreso */}
+        <div className="rounded-2xl bg-white p-4 sm:p-6 lg:p-8 shadow-lg border border-green-200 w-full min-w-0 flex h-full min-h-0 flex-col gap-4 sm:gap-6">
+          <div className="flex flex-col flex-1 min-h-0">
+            <div className="flex items-center justify-between gap-2 mb-2 shrink-0">
+              <div className="flex items-center gap-2 min-w-0">
+                <span className="rounded-full bg-emerald-600 p-2 text-white shrink-0">
+                  <FiArchive className="w-5 h-5" />
                 </span>
-                <div>
-                  <h2 className="text-lg font-semibold">Zona de salida</h2>
-                  <p className="text-xs text-slate-500">
-                    Cajas programadas para salir
-                  </p>
+                <div className="min-w-0">
+                  <h2 className="text-lg font-semibold">Zona de ingreso</h2>
+                  <p className="text-xs text-slate-500">Cajas recibidas recientemente</p>
                 </div>
               </div>
-              <span className="rounded-full bg-pink-100 px-3 py-1 text-xs font-semibold text-pink-600">
-                {outboundFiltered.length} cajas
+              <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-600 shrink-0">
+                {inboundBoxes.length} cajas
               </span>
             </div>
-            <div className="flex-1 flex flex-col items-center justify-center mt-4">
-              {outboundFiltered.length === 0 ? (
-                <div className="flex flex-col items-center gap-2">
-                  <FiBox className="w-10 h-10 text-slate-300" />
-                  <p className="text-sm text-slate-500">
-                    No hay cajas en salida
-                  </p>
+            <div className="flex-1 flex flex-col mt-2 min-h-[8rem]">
+              {inboundBoxes.length === 0 ? (
+                <div className="flex flex-col items-center justify-center gap-2 flex-1 py-6">
+                  <FiArchive className="w-10 h-10 text-slate-300" />
+                  <p className="text-sm text-slate-500 text-center">No hay cajas en ingresos</p>
                 </div>
               ) : (
-                <div className="w-full max-h-32 overflow-y-auto flex flex-col items-center">
-                  {sortByPosition(outboundFiltered).map((box, idx) => (
+                <div className="w-full max-h-[min(22rem,55vh)] overflow-y-auto overflow-x-hidden flex flex-col">
+                  {sortByPosition(inboundBoxes).map((box, idx) => (
                     <div
-                      key={`salida-scroll-${box.position}-${box.autoId ?? "no-id"}-${idx}`}
-                      className="rounded-xl border border-pink-200 bg-white p-3 text-sm text-pink-700 w-full mb-2"
+                      key={`ingreso-${box.position}-${box.autoId ?? "no-id"}-${idx}`}
+                      className="rounded-xl border border-emerald-200 bg-white p-3 text-sm text-emerald-700 w-full mb-2"
                     >
-                      <p className="font-semibold">Salida {box.position}</p>
+                      <p className="font-semibold">Ingreso {box.position}</p>
                       <p>Id único: {box.autoId}</p>
                       <p>Nombre: {box.name}</p>
                       <p>Temperatura: {box.temperature} °C</p>
@@ -538,22 +484,22 @@ export default function IngresosSection(props: Props) {
               )}
             </div>
           </div>
-          <hr className="my-4 border-pink-200" />
-          {/* Formulario de envío abajo */}
+        </div>
+
+        {/* 3. Orden de salida */}
+        <div className="rounded-2xl bg-white p-4 sm:p-6 lg:p-8 shadow-lg border border-pink-200 w-full min-w-0 flex h-full min-h-0 flex-col gap-4 sm:gap-6">
           {outboundFiltered.length > 0 ? (
-            <div className="flex flex-col h-full">
-              <div className="flex items-center gap-3 mb-2">
-                <span className="rounded-full bg-pink-600 p-2 text-white">
+            <>
+              <div className="flex items-center gap-3 shrink-0">
+                <span className="rounded-full bg-pink-600 p-2 text-white shrink-0">
                   <FiBox className="w-5 h-5" />
                 </span>
-                <div>
-                  <h2 className="text-lg font-semibold">Enviar caja</h2>
-                  <p className="text-xs text-slate-500">
-                    Registrar salida de caja
-                  </p>
+                <div className="min-w-0">
+                  <h2 className="text-lg font-semibold">Orden de salida</h2>
+                  <p className="text-xs text-slate-500">Registrar salida de caja</p>
                 </div>
               </div>
-              <div className="grid gap-3 mt-6 flex-1">
+              <div className="grid gap-3 flex-1 min-h-0">
                 <label className="text-sm font-medium text-slate-600">
                   Orden de posición
                 </label>
@@ -649,11 +595,69 @@ export default function IngresosSection(props: Props) {
                   <FiBox className="w-4 h-4" /> Enviar caja
                 </button>
               </div>
+            </>
+          ) : (
+            <div className="flex w-full min-w-0 flex-1 flex-col items-stretch justify-start gap-4">
+              <div className="flex items-start gap-3">
+                <span className="rounded-full bg-pink-600 p-2 text-white shrink-0">
+                  <FiBox className="w-5 h-5" />
+                </span>
+                <div className="min-w-0 pt-0.5">
+                  <h2 className="text-lg font-semibold leading-tight">Orden de salida</h2>
+                  <p className="text-xs text-slate-500">Registrar salida de caja</p>
+                </div>
+              </div>
+              <p className="text-sm leading-relaxed text-slate-500">
+                Cuando haya cajas en zona de salida, podrás completar el envío desde aquí.
+              </p>
             </div>
-          ) : null}
+          )}
         </div>
-      </div>
-    </section>
+
+        {/* 4. Zona de salida */}
+        <div className="rounded-2xl bg-white p-4 sm:p-6 lg:p-8 shadow-lg border border-pink-200 w-full min-w-0 flex h-full min-h-0 flex-col gap-4 sm:gap-6">
+          <div className="flex flex-col flex-1 min-h-0">
+            <div className="flex items-center justify-between gap-2 mb-2 shrink-0">
+              <div className="flex items-center gap-2 min-w-0">
+                <span className="rounded-full bg-pink-600 p-2 text-white shrink-0">
+                  <FiBox className="w-5 h-5" />
+                </span>
+                <div className="min-w-0">
+                  <h2 className="text-lg font-semibold">Zona de salida</h2>
+                  <p className="text-xs text-slate-500">Cajas programadas para salir</p>
+                </div>
+              </div>
+              <span className="rounded-full bg-pink-100 px-3 py-1 text-xs font-semibold text-pink-600 shrink-0">
+                {outboundFiltered.length} cajas
+              </span>
+            </div>
+            <div className="flex-1 flex flex-col mt-2 min-h-[8rem]">
+              {outboundFiltered.length === 0 ? (
+                <div className="flex flex-col items-center justify-center gap-2 flex-1 py-6">
+                  <FiBox className="w-10 h-10 text-slate-300" />
+                  <p className="text-sm text-slate-500 text-center">No hay cajas en salida</p>
+                </div>
+              ) : (
+                <div className="w-full max-h-[min(22rem,55vh)] overflow-y-auto overflow-x-hidden flex flex-col">
+                  {sortByPosition(outboundFiltered).map((box, idx) => (
+                    <div
+                      key={`salida-scroll-${box.position}-${box.autoId ?? "no-id"}-${idx}`}
+                      className="rounded-xl border border-pink-200 bg-white p-3 text-sm text-pink-700 w-full mb-2"
+                    >
+                      <p className="font-semibold">Salida {box.position}</p>
+                      <p>Id único: {box.autoId}</p>
+                      <p>Nombre: {box.name}</p>
+                      <p>Temperatura: {box.temperature} °C</p>
+                      <p>Cantidad: {formatQuantityKg(box.quantityKg)}</p>
+                      <p>Cliente: {clientLabel(box.client)}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </section>
 
     {reviewModal && (
       <div
