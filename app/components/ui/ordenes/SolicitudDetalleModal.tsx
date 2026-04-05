@@ -3,6 +3,7 @@
 import React from "react";
 import { HiOutlineXMark } from "react-icons/hi2";
 import type { SolicitudCompra } from "@/app/types/solicitudCompra";
+import { formatKgEs } from "@/app/lib/decimalEs";
 
 interface Props {
   solicitud: SolicitudCompra | null;
@@ -57,7 +58,9 @@ export function SolicitudDetalleModal({ solicitud, onClose }: Props) {
                 <div className="mt-1 flex flex-wrap items-baseline gap-x-3 gap-y-1 text-sm text-slate-600">
                   <span>
                     <span className="text-slate-500">Peso:</span>{" "}
-                    <span className="tabular-nums font-semibold text-slate-900">{li.pesoKg} kg</span>
+                    <span className="tabular-nums font-semibold text-slate-900">
+                      {formatKgEs(Number(li.pesoKg))} kg
+                    </span>
                   </span>
                   {li.skuSnapshot ? (
                     <span className="text-xs text-slate-500">SKU {li.skuSnapshot}</span>

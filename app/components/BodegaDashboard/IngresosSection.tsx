@@ -1,10 +1,11 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { FiArchive, FiBox, FiAlertCircle } from "react-icons/fi";
 import { IoCloseOutline } from "react-icons/io5";
-import type { Box, Client, Slot, BodegaOrder, WarehouseMeta } from "../../interfaces/bodega";
-import { CatalogoService } from "@/app/services/catalogoService";
-import { AsignarBodegaService } from "@/app/services/asignarbodegaService";
-import type { Catalogo } from "@/app/types/catalogo";
+import type { Box, Client, Slot, BodegaOrder } from "../../interfaces/bodega";
+import {
+  OcOrdenIngresoPanel,
+  type IngresoDesdeOrdenCompraPayload,
+} from "@/app/components/BodegaDashboard/OcOrdenIngresoPanel";
 
 const HIGH_TEMP_THRESHOLD = 5;
 
@@ -20,66 +21,19 @@ function boxMatchesSalidaFilter(
   return false;
 }
 
-function catalogLabel(p: { title?: string; sku?: string }) {
-  const t = p.title?.trim() || "Sin título";
-  const s = p.sku?.trim();
-  return s ? `${t} (${s})` : t;
-}
-
 function formatQuantityKg(kg: number | undefined) {
   if (kg === undefined || kg === null || Number.isNaN(kg)) return "—";
   return `${kg} kg`;
 }
 
-function mergeWarehousesForClient(
-  byCode: WarehouseMeta[],
-  fallback: WarehouseMeta[],
-  clientId: string,
-  accountCode: string,
-): WarehouseMeta[] {
-  const map = new Map<string, WarehouseMeta>();
-  const add = (w: WarehouseMeta) => {
-    if (!w?.id || w.disabled) return;
-    map.set(w.id, w);
-  };
-  byCode.forEach(add);
-  const codeTrim = accountCode.trim();
-  fallback.forEach((w) => {
-    const cc = (w.codeCuenta ?? "").trim();
-    if (!cc) return;
-    if (codeTrim && cc === codeTrim) add(w);
-    if (cc === clientId) add(w);
-  });
-  return Array.from(map.values()).sort((a, b) =>
-    (a.name ?? a.id).localeCompare(b.name ?? b.id, "es", { sensitivity: "base" }),
-  );
-}
-
-function warehouseOptionLabel(w: WarehouseMeta) {
-  const name = w.name?.trim() || w.id;
-  const st = w.status?.trim();
-  if (st === "externa" || st === "external") return `${name} · externa`;
-  if (st === "interna") return `${name} · interna`;
-  return name;
-}
-
 type Props = {
   isCustodio: boolean;
-  canUseIngresoForm: boolean;
   slots: Slot[];
   orders: BodegaOrder[];
   inboundBoxes: Box[];
   outboundBoxes: Box[];
-  ingresoPosition: number;
-  ingresoName: string;
-  ingresoTemp: string;
-  ingresoQuantityKg: string;
   ingresoClientId: string;
   setIngresoClientId: (v: string) => void;
-  setIngresoName: (v: string) => void;
-  setIngresoTemp: (v: string) => void;
-  setIngresoQuantityKg: (v: string) => void;
-  handleIngreso: () => void;
   createReturnOrder: (box: Box, targetPosition: number) => string | null;
   sortByPosition: <T extends { position: number }>(items: T[]) => T[];
   handleDispatchBox: (position: number) => void;
@@ -89,28 +43,19 @@ type Props = {
   onClientChange?: (id: string) => void;
   clientsForCatalog: Client[];
   warehouseId: string;
-  onWarehouseSelect: (id: string) => void;
-  warehousesFallback: WarehouseMeta[];
+  isBodegaInterna: boolean;
+  onIngresoDesdeOrdenCompra: (payload: IngresoDesdeOrdenCompraPayload) => Promise<void>;
 };
 
 export default function IngresosSection(props: Props) {
   const {
     isCustodio,
-    canUseIngresoForm,
     slots,
     orders,
     inboundBoxes,
     outboundBoxes,
-    ingresoPosition,
-    ingresoName,
-    ingresoTemp,
-    ingresoQuantityKg,
     ingresoClientId,
     setIngresoClientId,
-    setIngresoName,
-    setIngresoTemp,
-    setIngresoQuantityKg,
-    handleIngreso,
     createReturnOrder,
     sortByPosition,
     handleDispatchBox,
@@ -120,77 +65,9 @@ export default function IngresosSection(props: Props) {
     onClientChange,
     clientsForCatalog,
     warehouseId,
-    onWarehouseSelect,
-    warehousesFallback,
+    isBodegaInterna,
+    onIngresoDesdeOrdenCompra,
   } = props;
-
-  const [linkedWarehouses, setLinkedWarehouses] = useState<WarehouseMeta[]>([]);
-  const [linkedWarehousesLoading, setLinkedWarehousesLoading] = useState(false);
-
-  const [catalogProducts, setCatalogProducts] = useState<Catalogo[]>([]);
-  const [catalogLoading, setCatalogLoading] = useState(false);
-  const [selectedCatalogProductId, setSelectedCatalogProductId] = useState("");
-
-  const selectedClientRow = useMemo(
-    () => clientsForCatalog.find((c) => c.id === ingresoClientId),
-    [clientsForCatalog, ingresoClientId],
-  );
-
-  const catalogCodeCuenta = selectedClientRow?.code?.trim() ?? "";
-
-  const loadCatalog = useCallback(async () => {
-    if (!ingresoClientId.trim() || !catalogCodeCuenta) {
-      setCatalogProducts([]);
-      return;
-    }
-    setCatalogLoading(true);
-    try {
-      const data = await CatalogoService.getAll(ingresoClientId.trim(), catalogCodeCuenta);
-      const sorted = [...data].sort((a, b) =>
-        (a.title || "").localeCompare(b.title || "", "es", { sensitivity: "base" }),
-      );
-      setCatalogProducts(sorted);
-    } finally {
-      setCatalogLoading(false);
-    }
-  }, [ingresoClientId, catalogCodeCuenta]);
-
-  useEffect(() => {
-    void loadCatalog();
-  }, [loadCatalog]);
-
-  const loadLinkedWarehouses = useCallback(async () => {
-    if (!ingresoClientId.trim()) {
-      setLinkedWarehouses([]);
-      return;
-    }
-    setLinkedWarehousesLoading(true);
-    try {
-      let byCode: WarehouseMeta[] = [];
-      if (catalogCodeCuenta) {
-        byCode = await AsignarBodegaService.getWarehousesByCode(catalogCodeCuenta);
-      }
-      const merged = mergeWarehousesForClient(
-        byCode,
-        warehousesFallback,
-        ingresoClientId.trim(),
-        catalogCodeCuenta,
-      );
-      setLinkedWarehouses(merged);
-    } finally {
-      setLinkedWarehousesLoading(false);
-    }
-  }, [ingresoClientId, catalogCodeCuenta, warehousesFallback]);
-
-  useEffect(() => {
-    void loadLinkedWarehouses();
-  }, [loadLinkedWarehouses]);
-
-  useEffect(() => {
-    setSelectedCatalogProductId("");
-    setIngresoName("");
-    setIngresoQuantityKg("");
-  }, [ingresoClientId, setIngresoName, setIngresoQuantityKg]);
 
   const clientLabel = useCallback(
     (clientField: string) => {
@@ -211,15 +88,6 @@ export default function IngresosSection(props: Props) {
       ),
     [outboundBoxes, salidaFilterValue, clientsForCatalog],
   );
-
-  useEffect(() => {
-    if (!linkedWarehouses.length) return;
-    if (linkedWarehouses.some((w) => w.id === warehouseId)) return;
-    onWarehouseSelect(linkedWarehouses[0].id);
-  }, [linkedWarehouses, warehouseId, onWarehouseSelect]);
-
-  const ingresoAllowedByWarehouse =
-    !linkedWarehousesLoading && linkedWarehouses.length > 0;
 
   const [selectedBoxId, setSelectedBoxId] = useState<string>("");
 
@@ -264,19 +132,8 @@ export default function IngresosSection(props: Props) {
     onClientChange?.(value);
     if (value) {
       setIngresoClientId(value);
-      setSelectedCatalogProductId("");
-      setIngresoName("");
-      setIngresoQuantityKg("");
     }
     setSelectedBoxId("");
-  };
-
-  const handleIngresoClienteChange = (value: string) => {
-    setIngresoClientId(value);
-    onClientChange?.(value);
-    setSelectedCatalogProductId("");
-    setIngresoName("");
-    setIngresoQuantityKg("");
   };
 
   const boxOptions = outboundFiltered.map((box) => ({
@@ -293,156 +150,16 @@ export default function IngresosSection(props: Props) {
   return (
     <>
       <section className="grid w-full min-w-0 gap-4 sm:gap-6 items-stretch [grid-template-columns:repeat(auto-fit,minmax(min(100%,17.5rem),1fr))] md:[grid-template-columns:repeat(auto-fit,minmax(min(100%,20rem),1fr))] xl:[grid-template-columns:repeat(auto-fit,minmax(min(100%,22rem),1fr))]">
-        {/* 1. Orden de ingreso */}
-        <div className="rounded-2xl bg-white p-4 sm:p-6 lg:p-8 shadow-lg border border-green-200 w-full min-w-0 flex h-full min-h-0 flex-col gap-4 sm:gap-6">
-          {canUseIngresoForm ? (
-            <>
-              <div className="flex items-center gap-3">
-                <span className="rounded-full bg-emerald-600 p-2 text-white shrink-0">
-                  <FiArchive className="w-5 h-5" />
-                </span>
-                <div className="min-w-0">
-                  <h2 className="text-lg font-semibold">Orden de ingreso</h2>
-                  <p className="text-xs text-slate-500">Registrar nueva caja</p>
-                </div>
-              </div>
-              <div className="grid gap-3 flex-1 min-h-0">
-              <label className="text-sm font-medium text-slate-600">
-                Orden de posición
-              </label>
-              <input
-                value={ingresoPosition}
-                type="number"
-                readOnly
-                className="w-full rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-700"
-              />
-              <label className="text-sm font-medium text-slate-600">
-                Cliente
-              </label>
-              <select
-                value={ingresoClientId}
-                onChange={(event) => handleIngresoClienteChange(event.target.value)}
-                className="w-full rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-700 mb-2"
-              >
-                {clientsForCatalog.length === 0 ? (
-                  <option value="">Sin clientes configurados</option>
-                ) : (
-                  clientsForCatalog.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name}
-                    </option>
-                  ))
-                )}
-              </select>
-              <label className="text-sm font-medium text-slate-600">
-                Bodega de la cuenta
-              </label>
-              {linkedWarehousesLoading && ingresoClientId.trim() ? (
-                <p className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
-                  Cargando bodegas…
-                </p>
-              ) : null}
-              {!linkedWarehousesLoading &&
-              linkedWarehouses.length === 0 &&
-              ingresoClientId.trim() ? (
-                <p
-                  role="status"
-                  className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900"
-                >
-                  Esta cuenta no tiene bodegas vinculadas.
-                </p>
-              ) : null}
-              {!linkedWarehousesLoading && linkedWarehouses.length > 0 ? (
-                <select
-                  value={
-                    linkedWarehouses.some((w) => w.id === warehouseId)
-                      ? warehouseId
-                      : linkedWarehouses[0]?.id ?? ""
-                  }
-                  onChange={(event) => onWarehouseSelect(event.target.value)}
-                  className="w-full rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-700"
-                >
-                  {linkedWarehouses.map((w) => (
-                    <option key={w.id} value={w.id}>
-                      {warehouseOptionLabel(w)}
-                    </option>
-                  ))}
-                </select>
-              ) : null}
-              {!catalogCodeCuenta && ingresoClientId && linkedWarehouses.length > 0 ? (
-                <p className="text-xs text-amber-700">
-                  Este cliente no tiene código de cuenta; no se puede cargar el catálogo. Completalo en
-                  configuración.
-                </p>
-              ) : null}
-              <label className="text-sm font-medium text-slate-600">
-                Producto (catálogo)
-              </label>
-              <select
-                value={selectedCatalogProductId}
-                onChange={(event) => {
-                  const id = event.target.value;
-                  setSelectedCatalogProductId(id);
-                  const p = catalogProducts.find((x) => x.id === id);
-                  setIngresoName(p ? catalogLabel(p) : "");
-                }}
-                disabled={
-                  catalogLoading ||
-                  !catalogCodeCuenta ||
-                  catalogProducts.length === 0 ||
-                  !ingresoAllowedByWarehouse
-                }
-                className="w-full rounded-lg border border-emerald-200 px-3 py-2 text-sm text-emerald-800 disabled:bg-slate-100 disabled:text-slate-500"
-              >
-                <option value="">
-                  {catalogLoading
-                    ? "Cargando catálogo…"
-                    : catalogProducts.length === 0
-                      ? "Sin productos (revisa el catálogo del cliente)"
-                      : "Selecciona un producto"}
-                </option>
-                {catalogProducts.map((p) => (
-                  <option key={p.id} value={p.id ?? ""}>
-                    {catalogLabel(p)}
-                  </option>
-                ))}
-              </select>
-              <label className="text-sm font-medium text-slate-600">
-                Temperatura (°C)
-              </label>
-              <input
-                value={ingresoTemp}
-                onChange={(event) => setIngresoTemp(event.target.value)}
-                type="number"
-                disabled={!ingresoAllowedByWarehouse}
-                className="w-full rounded-lg border border-emerald-200 px-3 py-2 text-sm text-emerald-800 disabled:bg-slate-100 disabled:text-slate-500"
-                placeholder="Ej: -8"
-              />
-              <label className="text-sm font-medium text-slate-600">Cantidad (kg)</label>
-              <input
-                value={ingresoQuantityKg}
-                onChange={(event) => setIngresoQuantityKg(event.target.value)}
-                type="number"
-                min={0}
-                step="any"
-                disabled={!ingresoAllowedByWarehouse}
-                className="w-full rounded-lg border border-emerald-200 px-3 py-2 text-sm text-emerald-800 disabled:bg-slate-100 disabled:text-slate-500"
-                placeholder="Ej: 250.5"
-              />
-              <button
-                type="button"
-                onClick={handleIngreso}
-                disabled={!ingresoAllowedByWarehouse}
-                className="mt-2 flex w-full items-center justify-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:bg-slate-400 disabled:hover:bg-slate-400"
-              >
-                <FiArchive className="w-4 h-4" /> Registrar ingreso
-              </button>
-              </div>
-            </>
-          ) : null}
+        {/* 1. Orden de ingreso (OC en transporte → checklist → cajas en zona) */}
+        <div className="w-full min-w-0 flex h-full min-h-0">
+          <OcOrdenIngresoPanel
+            warehouseId={warehouseId}
+            isBodegaInterna={isBodegaInterna}
+            onRegistrar={onIngresoDesdeOrdenCompra}
+          />
         </div>
 
-        {/* 2. Zona de ingreso */}
+        {/* 2. Zona de ingreso (solo cola de cajas) */}
         <div className="rounded-2xl bg-white p-4 sm:p-6 lg:p-8 shadow-lg border border-green-200 w-full min-w-0 flex h-full min-h-0 flex-col gap-4 sm:gap-6">
           <div className="flex flex-col flex-1 min-h-0">
             <div className="flex items-center justify-between gap-2 mb-2 shrink-0">
@@ -452,7 +169,10 @@ export default function IngresosSection(props: Props) {
                 </span>
                 <div className="min-w-0">
                   <h2 className="text-lg font-semibold">Zona de ingreso</h2>
-                  <p className="text-xs text-slate-500">Cajas recibidas recientemente</p>
+                  <p className="text-xs text-slate-500">
+                    Cola de cajas ya registradas con <strong>Orden de ingreso</strong>. El jefe crea órdenes hacia
+                    bodega o salida.
+                  </p>
                 </div>
               </div>
               <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-600 shrink-0">
@@ -497,6 +217,12 @@ export default function IngresosSection(props: Props) {
                 <div className="min-w-0">
                   <h2 className="text-lg font-semibold">Orden de salida</h2>
                   <p className="text-xs text-slate-500">Registrar salida de caja</p>
+                  <p className="mt-1 text-[11px] leading-relaxed text-slate-500">
+                    Complementa <strong>orden de compra</strong> y <strong>orden de ingreso</strong> (primera
+                    columna): cuando el <strong>operario</strong> ejecuta la tarea «A salida», la caja entra en
+                    esta cola y en <strong>Zona de salida</strong>; acá la elegís para confirmar el envío al
+                    cliente.
+                  </p>
                 </div>
               </div>
               <div className="grid gap-3 flex-1 min-h-0">
@@ -608,7 +334,9 @@ export default function IngresosSection(props: Props) {
                 </div>
               </div>
               <p className="text-sm leading-relaxed text-slate-500">
-                Cuando haya cajas en zona de salida, podrás completar el envío desde aquí.
+                Cuando el <strong>operario</strong> ejecute una tarea «A salida», la caja aparecerá en esta
+                columna y en <strong>Zona de salida</strong>. Si no ves cajas, revisá el filtro de{" "}
+                <strong>Cliente</strong> (dejá «Todos» para ver toda la cola).
               </p>
             </div>
           )}
@@ -625,6 +353,9 @@ export default function IngresosSection(props: Props) {
                 <div className="min-w-0">
                   <h2 className="text-lg font-semibold">Zona de salida</h2>
                   <p className="text-xs text-slate-500">Cajas programadas para salir</p>
+                  <p className="mt-1 text-[11px] leading-relaxed text-slate-500">
+                    Vista de la cola de salida; el envío se confirma desde <strong>Orden de salida</strong>.
+                  </p>
                 </div>
               </div>
               <span className="rounded-full bg-pink-100 px-3 py-1 text-xs font-semibold text-pink-600 shrink-0">

@@ -1,11 +1,14 @@
 "use client";
 
 import React from "react";
-import { HiOutlineXMark } from "react-icons/hi2";
+import { doc, getDoc } from "firebase/firestore";
+import { db } from "@/lib/firebaseClient";
 import { useAuth } from "@/app/context/AuthContext";
 import {
   createOperadorCuenta,
   listOperadoresCuenta,
+  normalizeOperadorCodeInput,
+  suggestOperadorCodeFromName,
   type OperadorCuentaRow,
 } from "@/app/services/operadorCuentaService";
 
@@ -35,10 +38,28 @@ export function CuentaOperadoresSection() {
   const [loading, setLoading] = React.useState(true);
   const [modalOpen, setModalOpen] = React.useState(false);
   const [nombre, setNombre] = React.useState("");
+  const [codigo, setCodigo] = React.useState("");
   const [correo, setCorreo] = React.useState("");
   const [clave, setClave] = React.useState("");
   const [saving, setSaving] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
+  const [nombreCuentaAsignada, setNombreCuentaAsignada] = React.useState("");
+
+  React.useEffect(() => {
+    if (!idCliente.trim()) {
+      setNombreCuentaAsignada("");
+      return;
+    }
+    let cancelled = false;
+    void getDoc(doc(db, "clientes", idCliente.trim())).then((snap) => {
+      if (cancelled) return;
+      const n = snap.data()?.name?.toString().trim();
+      setNombreCuentaAsignada(n || idCliente.trim());
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [idCliente]);
 
   const reload = React.useCallback(async () => {
     if (!idCliente.trim()) {
@@ -68,6 +89,12 @@ export function CuentaOperadoresSection() {
       return;
     }
     setSaving(true);
+    const codeNorm = normalizeOperadorCodeInput(codigo);
+    if (codeNorm.length !== 5) {
+      setError("El código debe tener 5 caracteres (base 36).");
+      setSaving(false);
+      return;
+    }
     try {
       await createOperadorCuenta({
         name: nombre,
@@ -76,8 +103,10 @@ export function CuentaOperadoresSection() {
         clientId: idCliente,
         createdByUid: uid,
         createdByRole: role,
+        code: codeNorm,
       });
       setNombre("");
+      setCodigo("");
       setCorreo("");
       setClave("");
       setModalOpen(false);
@@ -106,6 +135,10 @@ export function CuentaOperadoresSection() {
             type="button"
             onClick={() => {
               setError(null);
+              setNombre("");
+              setCodigo("");
+              setCorreo("");
+              setClave("");
               setModalOpen(true);
             }}
             disabled={!idCliente.trim()}
@@ -172,76 +205,147 @@ export function CuentaOperadoresSection() {
       )}
 
       {modalOpen ? (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/25 p-4 backdrop-blur-sm">
-          <div className="relative w-full max-w-md rounded-xl border border-slate-200 bg-white p-6 shadow-xl">
-            <button
-              type="button"
-              onClick={() => !saving && setModalOpen(false)}
-              className="absolute right-4 top-4 text-slate-400 hover:text-slate-600"
-              aria-label="Cerrar"
-            >
-              <HiOutlineXMark size={22} />
-            </button>
-            <h3 className="text-lg font-semibold text-slate-900">Nuevo operador de cuentas</h3>
-            <p className="mt-1 text-sm text-slate-500">Nombre, correo y contraseña para iniciar sesión.</p>
+        <div
+          className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-900/40 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="modal-operador-cuenta-titulo"
+          onClick={() => !saving && setModalOpen(false)}
+        >
+          <div
+            className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.25em] text-slate-400">
+                  Nuevo operador de cuenta
+                </p>
+                <h3 id="modal-operador-cuenta-titulo" className="mt-1 text-xl font-semibold text-slate-900">
+                  Crear operador de cuenta
+                </h3>
+                <p className="mt-1 text-sm text-slate-600">ID se genera al guardar.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => !saving && setModalOpen(false)}
+                className="shrink-0 rounded-full border border-slate-200 px-3 py-1 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
+              >
+                Cerrar
+              </button>
+            </div>
+
             <form onSubmit={handleSubmit} className="mt-6 space-y-4">
               <div>
-                <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500">
-                  Nombre
-                </label>
+                <label className="text-sm font-semibold text-slate-700">ID único</label>
                 <input
-                  value={nombre}
-                  onChange={(e) => setNombre(e.target.value)}
-                  className="mt-1.5 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm focus:border-cyan-500 focus:outline-none"
-                  placeholder="Nombre completo"
-                  required
-                  autoFocus
-                  disabled={saving}
+                  value="Se genera al guardar"
+                  readOnly
+                  tabIndex={-1}
+                  className="mt-2 w-full cursor-not-allowed rounded-lg border border-slate-200 bg-slate-100 px-3 py-2 text-sm text-slate-500"
                 />
               </div>
               <div>
-                <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500">
-                  Correo
-                </label>
+                <label className="text-sm font-semibold text-slate-700">Código</label>
+                <input
+                  type="text"
+                  value={codigo}
+                  onChange={(e) => setCodigo(normalizeOperadorCodeInput(e.target.value))}
+                  className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-cyan-500 focus:outline-none"
+                  placeholder="Código base 36 (5 caracteres)"
+                  disabled={saving}
+                  autoComplete="off"
+                />
+                <p className="mt-1 text-xs text-slate-500">
+                  Se genera igual que las cuentas (base 36, 5 caracteres). Al salir del nombre sin código, se
+                  sugiere uno.
+                </p>
+              </div>
+              <div>
+                <label className="text-sm font-semibold text-slate-700">Nombre</label>
+                <input
+                  type="text"
+                  value={nombre}
+                  onChange={(e) => setNombre(e.target.value)}
+                  onBlur={() => {
+                    if (!normalizeOperadorCodeInput(codigo) && nombre.trim()) {
+                      setCodigo(suggestOperadorCodeFromName(nombre));
+                    }
+                  }}
+                  className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-cyan-500 focus:outline-none"
+                  placeholder="Nombre del usuario"
+                  required
+                  disabled={saving}
+                  autoFocus
+                />
+              </div>
+              <div>
+                <label className="text-sm font-semibold text-slate-700">Rol</label>
+                <select
+                  value="operadorCuentas"
+                  disabled
+                  className="mt-2 w-full cursor-not-allowed rounded-lg border border-slate-200 bg-slate-100 px-3 py-2 text-sm text-slate-700"
+                  aria-label="Rol fijo: operador de cuentas"
+                >
+                  <option value="operadorCuentas">operador de cuentas</option>
+                </select>
+              </div>
+              <div>
+                <label className="text-sm font-semibold text-slate-700">Asignado</label>
+                <input
+                  type="text"
+                  value={nombreCuentaAsignada || "—"}
+                  readOnly
+                  className="mt-2 w-full rounded-lg border border-slate-200 bg-slate-100 px-3 py-2 text-sm text-slate-700"
+                  placeholder="Cuenta"
+                />
+              </div>
+              <div>
+                <label className="text-sm font-semibold text-slate-700">Correo</label>
                 <input
                   type="email"
                   value={correo}
                   onChange={(e) => setCorreo(e.target.value)}
-                  className="mt-1.5 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm focus:border-cyan-500 focus:outline-none"
-                  placeholder="correo@empresa.com"
+                  className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-cyan-500 focus:outline-none"
+                  placeholder="correo@ejemplo.com"
                   required
                   disabled={saving}
                 />
               </div>
               <div>
-                <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500">
-                  Contraseña
-                </label>
+                <label className="text-sm font-semibold text-slate-700">Clave</label>
                 <input
                   type="password"
                   value={clave}
                   onChange={(e) => setClave(e.target.value)}
-                  className="mt-1.5 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm focus:border-cyan-500 focus:outline-none"
-                  placeholder="Mínimo 6 caracteres"
+                  className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-cyan-500 focus:outline-none"
+                  placeholder="********"
                   required
                   minLength={6}
                   disabled={saving}
                 />
               </div>
-              {error ? <p className="text-sm text-red-600">{error}</p> : null}
-              <div className="flex gap-2 pt-2">
+
+              {error ? <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p> : null}
+
+              <div className="flex justify-end gap-2 pt-2">
                 <button
                   type="button"
-                  onClick={() => setModalOpen(false)}
-                  disabled={saving}
-                  className="flex-1 rounded-lg border border-slate-200 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                  onClick={() => !saving && setModalOpen(false)}
+                  className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
-                  disabled={saving}
-                  className="flex-1 rounded-lg bg-cyan-600 py-2.5 text-sm font-semibold text-white hover:bg-cyan-700 disabled:opacity-50"
+                  disabled={
+                    saving ||
+                    !nombre.trim() ||
+                    !correo.trim() ||
+                    !clave.trim() ||
+                    normalizeOperadorCodeInput(codigo).length !== 5
+                  }
+                  className="rounded-lg bg-cyan-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-cyan-700 disabled:cursor-not-allowed disabled:bg-slate-300"
                 >
                   {saving ? "Creando…" : "Crear"}
                 </button>

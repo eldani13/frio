@@ -5,6 +5,7 @@ import { HiOutlinePlus, HiOutlineTrash, HiOutlineXMark } from "react-icons/hi2";
 import type { Catalogo } from "@/app/types/catalogo";
 import type { SolicitudLineItem } from "@/app/types/solicitudCompra";
 import { SolicitudCompraService } from "@/app/services/solicitudCompraService";
+import { formatKgEs, parseDecimalEs } from "@/app/lib/decimalEs";
 
 type DraftLine = SolicitudLineItem;
 
@@ -48,10 +49,9 @@ export function SolicitudCompraFormModal({
       setError("Seleccioná un producto del catálogo.");
       return;
     }
-    const pesoRaw = String(pickPesoKg).replace(",", ".").trim();
-    const pesoNum = Number(pesoRaw);
-    if (!Number.isFinite(pesoNum) || pesoNum <= 0) {
-      setError("Ingresá un peso en kg mayor a 0.");
+    const pesoNum = parseDecimalEs(pickPesoKg);
+    if (pesoNum == null || pesoNum <= 0) {
+      setError("Ingresá un peso en kg mayor a 0 (podés usar coma: 15,6).");
       return;
     }
     const line: DraftLine = {
@@ -122,7 +122,8 @@ export function SolicitudCompraFormModal({
         </div>
 
         <p className="mb-4 text-xs text-[#6B7280]">
-          Indicá el <strong>peso en kg</strong> por cada producto del <strong>catálogo</strong>.
+          Indicá el <strong>peso en kg</strong> por cada producto del <strong>catálogo</strong> (coma o punto:{" "}
+          <span className="whitespace-nowrap">15,6</span>).
         </p>
 
         {error ? (
@@ -165,7 +166,7 @@ export function SolicitudCompraFormModal({
                   inputMode="decimal"
                   value={pickPesoKg}
                   onChange={(e) => setPickPesoKg(e.target.value)}
-                  placeholder="Peso (kg)"
+                  placeholder="Ej. 15,6"
                   className="w-full rounded-[8px] border border-gray-200 bg-white px-3 py-2 text-sm focus:border-cyan-500 focus:outline-none"
                 />
               </div>
@@ -194,7 +195,7 @@ export function SolicitudCompraFormModal({
                       <p className="truncate font-medium text-gray-900">{ln.titleSnapshot}</p>
                       <p className="text-xs text-gray-500">
                         {ln.skuSnapshot ? `SKU ${ln.skuSnapshot} · ` : null}
-                        {ln.pesoKg != null ? `${ln.pesoKg} kg` : ""}
+                        {ln.pesoKg != null ? `${formatKgEs(ln.pesoKg)} kg` : ""}
                       </p>
                     </div>
                     <button

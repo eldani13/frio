@@ -18,14 +18,35 @@ export function ordenCompraEstadoBadgeClass(estado: string): string {
   if (e === "Iniciado") return "bg-slate-100 text-slate-800";
   if (e === "En curso") return "bg-sky-100 text-sky-900";
   if (e === "Enviada") return "bg-violet-100 text-violet-800";
+  if (e === "Recibida(ok)") return "bg-emerald-100 text-emerald-900";
+  if (e === "Recibida(con diferencias)") return "bg-amber-100 text-amber-950";
   return "bg-slate-100 text-slate-700";
+}
+
+/** Línea de recepción guardada al cerrar (custodio / bodega). */
+export interface OrdenCompraRecepcionLinea {
+  catalogoProductId: string;
+  cantidadRecibida: number;
+  pesoKgRecibido?: number;
+}
+
+/** Registro de recepción física frente a la OC. */
+export interface OrdenCompraRecepcion {
+  lineas: OrdenCompraRecepcionLinea[];
+  notas?: string;
+  cerradaAt: number;
+  cerradaPorUid: string;
+  cerradaPorNombre?: string;
+  /** true si cantidad recibida = cantidad pedida en todas las líneas. */
+  sinDiferencias: boolean;
 }
 
 /** Línea de orden vinculada a un documento del catálogo (productos). */
 export interface OrdenCompraLineItem {
   catalogoProductId: string;
+  /** Unidades; en líneas pedidas solo por peso suele ser 0 y el pedido va en {@link pesoKg}. */
   cantidad: number;
-  /** Kilogramos totales de esta línea (opcional en documentos antiguos). */
+  /** Kilogramos pedidos en la línea (formulario nuevo); documentos antiguos pueden tener solo cantidad. */
   pesoKg?: number;
   /** Copia al crear la orden para listados aunque el catálogo cambie. */
   titleSnapshot: string;
@@ -53,4 +74,7 @@ export interface OrdenCompra {
   destinoWarehouseId?: string;
   destinoWarehouseNombre?: string;
   enviadaAt?: number;
+  /** Fecha acordada de llegada a bodega (operador, antes de poner en transporte). */
+  fechaLlegadaEstipulada?: string;
+  recepcion?: OrdenCompraRecepcion;
 }

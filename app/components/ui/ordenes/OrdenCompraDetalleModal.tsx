@@ -10,6 +10,7 @@ import {
 import type { WarehouseMeta } from "@/app/interfaces/bodega";
 import { AsignarBodegaService } from "@/app/services/asignarbodegaService";
 import { OrdenCompraService } from "@/app/services/ordenCompraService";
+import { formatKgEs } from "@/app/lib/decimalEs";
 
 function mergeWarehousesForClient(
   byCode: WarehouseMeta[],
@@ -86,9 +87,12 @@ export function OrdenCompraDetalleModal({
   const [estadoLocal, setEstadoLocal] = useState(orden?.estado ?? "");
   const [savingEstado, setSavingEstado] = useState(false);
   const [estadoError, setEstadoError] = useState<string | null>(null);
+  const [fechaLlegadaEstipulada, setFechaLlegadaEstipulada] = useState("");
 
   const yaEnviada =
-    orden?.estado === "Enviada" || (typeof orden?.enviadaAt === "number" && orden.enviadaAt > 0);
+    orden?.estado === "Transporte" ||
+    orden?.estado === "Enviada" ||
+    (typeof orden?.enviadaAt === "number" && orden.enviadaAt > 0);
 
   const loadWarehouses = useCallback(async () => {
     if (!idCliente.trim() || !codeCuenta.trim()) {
@@ -133,7 +137,12 @@ export function OrdenCompraDetalleModal({
   useEffect(() => {
     setEstadoLocal(orden?.estado ?? "");
     setEstadoError(null);
-  }, [orden?.id]);
+  }, [orden?.id, orden?.estado]);
+
+  useEffect(() => {
+    const raw = orden?.fechaLlegadaEstipulada?.trim() ?? "";
+    setFechaLlegadaEstipulada(raw.length >= 10 ? raw.slice(0, 10) : raw);
+  }, [orden?.id, orden?.fechaLlegadaEstipulada]);
 
   const opcionesEstado = useMemo(() => {
     const cur = (orden?.estado ?? "").trim();
@@ -198,12 +207,18 @@ export function OrdenCompraDetalleModal({
       setSendError("Elegí una bodega de la lista.");
       return;
     }
+    const fecha = fechaLlegadaEstipulada.trim();
+    if (!fecha) {
+      setSendError("Indicá la fecha de llegada estipulada antes de enviar.");
+      return;
+    }
     setSending(true);
     try {
       await OrdenCompraService.marcarEnviada(idCliente.trim(), orden.id, {
         destinoTipo,
         destinoWarehouseId: w.id,
         destinoWarehouseNombre: w.name?.trim() || w.id,
+        fechaLlegadaEstipulada: fecha,
       });
       onEnviada?.();
       onClose();
@@ -290,6 +305,12 @@ export function OrdenCompraDetalleModal({
               )}
             </dd>
           </div>
+          {orden.fechaLlegadaEstipulada?.trim() ? (
+            <div className="flex flex-wrap gap-x-2 gap-y-1">
+              <dt className="font-semibold text-slate-500">Llegada estipulada</dt>
+              <dd className="text-slate-900">{orden.fechaLlegadaEstipulada.trim()}</dd>
+            </div>
+          ) : null}
           {yaEnviada && (orden.destinoWarehouseNombre || orden.destinoTipo) ? (
             <>
               <div className="flex flex-wrap gap-x-2 gap-y-1">
@@ -316,10 +337,29 @@ export function OrdenCompraDetalleModal({
             </p>
             {yaEnviada ? (
               <p className="rounded-lg bg-violet-50 px-3 py-2 text-sm text-violet-900">
-                Esta orden ya fue enviada{orden.destinoWarehouseNombre ? ` a ${orden.destinoWarehouseNombre}` : ""}.
+                Esta orden ya está en camino o fue enviada
+                {orden.destinoWarehouseNombre ? ` (${orden.destinoWarehouseNombre})` : ""}.
               </p>
             ) : (
               <>
+                <div>
+                  <label
+                    htmlFor="orden-fecha-llegada"
+                    className="mb-1 block text-xs font-semibold text-slate-600"
+                  >
+                    Fecha de llegada estipulada
+                  </label>
+                  <input
+                    id="orden-fecha-llegada"
+                    type="date"
+                    value={fechaLlegadaEstipulada}
+                    onChange={(e) => setFechaLlegadaEstipulada(e.target.value)}
+                    className="w-full max-w-xs rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900"
+                  />
+                  <p className="mt-1 text-[11px] text-slate-500">
+                    Obligatoria antes de enviar. El custodio la verá al recibir en bodega.
+                  </p>
+                </div>
                 <div className="flex flex-wrap gap-2">
                   <button
                     type="button"
@@ -397,11 +437,12 @@ export function OrdenCompraDetalleModal({
                     yaEnviada ||
                     !destinoTipo ||
                     filtradasPorTipo.length === 0 ||
-                    !warehouseId.trim()
+                    !warehouseId.trim() ||
+                    !fechaLlegadaEstipulada.trim()
                   }
                   className="w-full rounded-lg bg-violet-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-violet-700 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:hover:bg-slate-300"
                 >
-                  {sending ? "Enviando…" : "Enviar orden de compra"}
+                  {sending ? "Enviando…" : "Enviar orden de compra (pasa a transporte)"}
                 </button>
               </>
             )}
@@ -425,7 +466,9 @@ export function OrdenCompraDetalleModal({
                   Number(li.pesoKg) > 0 ? (
                     <span>
                       <span className="text-slate-500">Peso:</span>{" "}
-                      <span className="tabular-nums font-semibold text-slate-900">{li.pesoKg} kg</span>
+                      <span className="tabular-nums font-semibold text-slate-900">
+                        {formatKgEs(Number(li.pesoKg))} kg
+                      </span>
                     </span>
                   ) : (
                     <span>

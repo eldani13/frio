@@ -48,6 +48,26 @@ export const defaultWarehouseState: CloudWarehouseState = {
   llamadasJefe: [],
 };
 
+/** Firestore rechaza `undefined`; los slots/cajas suelen traer campos opcionales explícitos undefined y el guardado fallaba sin aviso. */
+function stripUndefinedDeep(value: unknown): unknown {
+  if (value === undefined) return undefined;
+  if (value === null) return null;
+  if (typeof value !== "object") return value;
+  if (Array.isArray(value)) {
+    return value.map((item) => stripUndefinedDeep(item));
+  }
+  const proto = Object.getPrototypeOf(value);
+  if (proto !== Object.prototype && proto !== null) {
+    return value;
+  }
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+    if (v === undefined) continue;
+    out[k] = stripUndefinedDeep(v);
+  }
+  return out;
+}
+
 const stateDocRef = (warehouseId: string) =>
   doc(db, "warehouses", warehouseId, "state", "main");
 
@@ -99,9 +119,10 @@ export async function saveWarehouseState(
   warehouseId: string,
   state: Partial<CloudWarehouseState>,
 ) {
+  const cleaned = stripUndefinedDeep(state) as Partial<CloudWarehouseState>;
   await setDoc(
     stateDocRef(warehouseId),
-    { ...state, updatedAt: serverTimestamp() },
+    { ...cleaned, updatedAt: serverTimestamp() },
     { merge: true },
   );
 }
@@ -134,9 +155,10 @@ export async function saveHistoryState(
   warehouseId: string,
   state: Partial<HistoryState>,
 ) {
+  const cleaned = stripUndefinedDeep(state) as Partial<HistoryState>;
   await setDoc(
     historyDocRef(warehouseId),
-    { ...state, updatedAt: serverTimestamp() },
+    { ...cleaned, updatedAt: serverTimestamp() },
     { merge: true },
   );
 }

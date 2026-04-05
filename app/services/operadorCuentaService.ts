@@ -33,6 +33,18 @@ function generateUserCode(name: string): string {
   return codeNumber.toString(36).toUpperCase().padStart(5, "0");
 }
 
+/** Misma lógica que el código de usuario/cuenta en configurador (base 36, 5 caracteres). */
+export function normalizeOperadorCodeInput(value: string): string {
+  const normalized = value.toUpperCase().replace(/[^0-9A-Z]/g, "");
+  if (!normalized) return "";
+  return normalized.padEnd(5, "0").slice(0, 5);
+}
+
+/** Sugerencia al escribir el nombre (como cuentas / usuarios del configurador). */
+export function suggestOperadorCodeFromName(name: string): string {
+  return generateUserCode(name.trim() || "USER");
+}
+
 export async function listOperadoresCuenta(clientId: string): Promise<OperadorCuentaRow[]> {
   if (!clientId.trim()) return [];
   const q = query(collection(db, "usuarios"), where("clientId", "==", clientId.trim()));
@@ -75,6 +87,8 @@ export async function createOperadorCuenta(params: {
   clientId: string;
   createdByUid: string;
   createdByRole: string;
+  /** Opcional; si viene vacío se genera desde el nombre. Debe ser 5 caracteres base 36. */
+  code?: string;
 }): Promise<void> {
   const name = params.name.trim();
   const email = params.email.trim();
@@ -84,10 +98,13 @@ export async function createOperadorCuenta(params: {
   if (!password) throw new Error("La contraseña es obligatoria.");
   if (!params.clientId.trim()) throw new Error("Falta la cuenta (cliente).");
 
+  const codeInput = normalizeOperadorCodeInput((params.code ?? "").trim());
+  const code = codeInput.length === 5 ? codeInput : generateUserCode(name);
+  if (code.length !== 5) throw new Error("El código debe tener 5 caracteres (base 36).");
+
   const secondaryAuth = getSecondaryAuth();
   try {
     const credentials = await createUserWithEmailAndPassword(secondaryAuth, email, password);
-    const code = generateUserCode(name);
     await setDoc(doc(db, "usuarios", credentials.user.uid), {
       name,
       code,

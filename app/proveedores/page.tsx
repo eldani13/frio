@@ -9,6 +9,7 @@ import {
   type ProveedorOrdenCompraRow,
 } from "@/app/components/ui/providers/ProviderOrdenesModal";
 import { OrdenCompraService } from "@/app/services/ordenCompraService";
+import { formatKgEs } from "@/app/lib/decimalEs";
 import { HiOutlinePlus, HiOutlineSquares2X2 } from "react-icons/hi2";
 import { useAuth } from "@/app/context/AuthContext";
 
@@ -52,7 +53,13 @@ export default function ProvidersPage() {
             ordenCompra: o.numero,
             estado: o.estado,
             resumenProductos: (o.lineItems ?? [])
-              .map((li) => `${li.titleSnapshot} ×${li.cantidad}`)
+              .map((li) => {
+                const medida =
+                  li.pesoKg != null && Number(li.pesoKg) > 0
+                    ? `${formatKgEs(Number(li.pesoKg))} kg`
+                    : `${li.cantidad} u.`;
+                return `${li.titleSnapshot} · ${medida}`;
+              })
               .join(" · "),
           })),
         );

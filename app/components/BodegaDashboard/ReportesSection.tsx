@@ -25,7 +25,13 @@ import {
   type OrdenCompra,
 } from "@/app/types/ordenCompra";
 import type { SolicitudCompra } from "@/app/types/solicitudCompra";
+import { formatKgEs } from "@/app/lib/decimalEs";
 import type { Provider } from "@/app/types/provider";
+import {
+  etiquetasTipoIntegracionRow,
+  type SolicitudIntegracion,
+} from "@/app/types/solicitudIntegracion";
+import { SolicitudIntegracionService } from "@/app/services/solicitudIntegracionService";
 
 import { MdAssignment, MdBusiness, MdShoppingCart } from "react-icons/md";
 import { BiBarChartAlt2, BiCollection, BiUserCheck } from "react-icons/bi";
@@ -37,6 +43,7 @@ import {
   HiOutlineTruck,
   HiOutlineUsers,
 } from "react-icons/hi2";
+import { FiExternalLink } from "react-icons/fi";
 
 interface ReportesSectionProps {
   isCliente?: boolean;
@@ -74,7 +81,7 @@ function nombresProductosSolicitud(s: SolicitudCompra): string {
 function pesosProductosSolicitud(s: SolicitudCompra): string {
   const items = s.lineItems ?? [];
   if (!items.length) return "—";
-  return items.map((li) => `${li.pesoKg} kg`).join(" · ");
+  return items.map((li) => `${formatKgEs(Number(li.pesoKg))} kg`).join(" · ");
 }
 
 const ReportesSection: React.FC<ReportesSectionProps> = ({
@@ -101,6 +108,8 @@ const ReportesSection: React.FC<ReportesSectionProps> = ({
     | "usuarios"
     | "ordenesCompra"
     | "proveedorHubOperador"
+    | "bodegaExternaOperadorHub"
+    | "integracionOperador"
     | "realizarSolicitudOperador"
     | "proveedores"
     | "compradores"
@@ -120,6 +129,50 @@ const ReportesSection: React.FC<ReportesSectionProps> = ({
   const [ordenEstadoSavingId, setOrdenEstadoSavingId] = React.useState<string | null>(null);
   const [solicitudesCompra, setSolicitudesCompra] = React.useState<SolicitudCompra[]>([]);
   const [solicitudDetalle, setSolicitudDetalle] = React.useState<SolicitudCompra | null>(null);
+
+  const [solicitudesIntegracion, setSolicitudesIntegracion] = React.useState<SolicitudIntegracion[]>([]);
+  const [solicitudesIntegracionLoading, setSolicitudesIntegracionLoading] = React.useState(false);
+  const [solicitudesIntegracionError, setSolicitudesIntegracionError] = React.useState<string | null>(null);
+  const [modalIntegracionOpen, setModalIntegracionOpen] = React.useState(false);
+  const [intBodegaId, setIntBodegaId] = React.useState("");
+  const [intScraping, setIntScraping] = React.useState(false);
+  const [intApi, setIntApi] = React.useState(false);
+  const [intCsvPlano, setIntCsvPlano] = React.useState(false);
+  const [intFormError, setIntFormError] = React.useState<string | null>(null);
+  const [intEnviando, setIntEnviando] = React.useState(false);
+
+  const bodegasExternasCuenta = React.useMemo(
+    () =>
+      warehousesFallback.filter(
+        (w) => w.status === "externa" || w.status === "external",
+      ),
+    [warehousesFallback],
+  );
+
+  React.useEffect(() => {
+    if (!isCliente || !esOperadorCuentas || !idCliente.trim() || viewMode !== "integracionOperador") {
+      return;
+    }
+    setSolicitudesIntegracionLoading(true);
+    setSolicitudesIntegracionError(null);
+    const unsub = SolicitudIntegracionService.subscribePorCliente(
+      idCliente,
+      (items) => {
+        setSolicitudesIntegracion(items);
+        setSolicitudesIntegracionLoading(false);
+        setSolicitudesIntegracionError(null);
+      },
+      (err) => {
+        console.error(err);
+        setSolicitudesIntegracion([]);
+        setSolicitudesIntegracionError(
+          "No se pudieron cargar las solicitudes. Revisá permisos en clientes/{id}/solicitudesIntegracion.",
+        );
+        setSolicitudesIntegracionLoading(false);
+      },
+    );
+    return () => unsub();
+  }, [isCliente, esOperadorCuentas, idCliente, viewMode]);
 
   // Resetear vista cuando cambia el rol de cliente
   React.useEffect(() => {
@@ -143,6 +196,8 @@ const ReportesSection: React.FC<ReportesSectionProps> = ({
     setSolicitudModalOpen(false);
     setOrdenDetalle(null);
     setSolicitudDetalle(null);
+    setModalIntegracionOpen(false);
+    setIntFormError(null);
   }, [isCliente, menuResetNonce, setReportDetailModal]);
 
   React.useEffect(() => {
@@ -249,7 +304,7 @@ const ReportesSection: React.FC<ReportesSectionProps> = ({
     if (esOperadorCuentas) {
       return (
         <section className="p-4 sm:p-8">
-          <div className="mx-auto grid max-w-6xl grid-cols-1 justify-items-center gap-4">
+          <div className="mx-auto grid max-w-6xl grid-cols-1 justify-items-stretch gap-4 sm:grid-cols-2 sm:justify-items-center sm:gap-5">
             <button
               type="button"
               onClick={() => setViewMode("proveedorHubOperador")}
@@ -264,6 +319,22 @@ const ReportesSection: React.FC<ReportesSectionProps> = ({
               </span>
               <h3 className={`max-w-[13rem] text-lg font-bold leading-snug tracking-tight sm:text-xl ${cuentaMenuText}`}>
                 Proveedor
+              </h3>
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode("bodegaExternaOperadorHub")}
+              style={{
+                backgroundColor: "#E3D2F1",
+                boxShadow: "0 14px 40px -10px rgba(106, 13, 173, 0.26)",
+              }}
+              className={`${cuentaMenuTile} w-full max-w-sm hover:shadow-[0_20px_48px_-12px_rgba(106,13,173,0.3)]`}
+            >
+              <span className={cuentaMenuIconWrap}>
+                <FiExternalLink size={36} className="text-[#6A0DAD]" aria-hidden />
+              </span>
+              <h3 className={`max-w-[13rem] text-lg font-bold leading-snug tracking-tight sm:text-xl ${cuentaMenuText}`}>
+                Bodega externa
               </h3>
             </button>
           </div>
@@ -381,6 +452,323 @@ const ReportesSection: React.FC<ReportesSectionProps> = ({
             </div>
           </div>
         </div>
+      </section>
+    );
+  }
+
+  // Operador: hub Bodega externa → Integración
+  if (isCliente && esOperadorCuentas && viewMode === "bodegaExternaOperadorHub") {
+    return (
+      <section className="rounded-2xl bg-white p-8 shadow-sm border border-slate-200">
+        <div className="flex flex-col w-full max-w-4xl mx-auto px-4 gap-4">
+          <button
+            type="button"
+            onClick={() => setViewMode(null)}
+            className="self-start flex items-center gap-2 text-sm font-semibold text-slate-600 hover:text-slate-900 transition-colors"
+          >
+            <HiOutlineArrowLeft size={18} />
+            Volver
+          </button>
+
+          <div className="flex flex-col gap-3">
+            <h2 className="text-xs font-bold uppercase tracking-widest text-slate-500 pl-1">
+              Bodega externa
+            </h2>
+            <p className="pl-1 text-sm text-slate-600">
+              Integraciones con bodegas externas del sistema (solicitudes compartidas con el configurador).
+            </p>
+            <div className="flex flex-col gap-3">
+              <button
+                type="button"
+                onClick={() => setViewMode("integracionOperador")}
+                className="group w-full rounded-2xl bg-[#e8dff5] p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md flex items-center justify-between cursor-pointer active:scale-95 border border-violet-100/80"
+              >
+                <div className="flex items-center gap-4">
+                  <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-white/70 text-violet-900 shadow-sm">
+                    <MdAssignment size={24} />
+                  </span>
+                  <p className="text-lg font-bold text-slate-900">Integración</p>
+                </div>
+                <HiOutlineArrowRight size={18} className="text-slate-500 group-hover:translate-x-1 transition-transform" />
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+    );
+  }
+
+  // Operador: tabla de solicitudes de integración
+  if (isCliente && esOperadorCuentas && viewMode === "integracionOperador") {
+    const abrirModalIntegracion = () => {
+      setIntFormError(null);
+      setIntBodegaId(bodegasExternasCuenta[0]?.id ?? "");
+      setIntScraping(false);
+      setIntApi(false);
+      setIntCsvPlano(false);
+      setModalIntegracionOpen(true);
+    };
+
+    const enviarSolicitudIntegracion = async (e: React.FormEvent) => {
+      e.preventDefault();
+      setIntFormError(null);
+      const wid = intBodegaId.trim();
+      if (!wid) {
+        setIntFormError("Elegí una bodega externa.");
+        return;
+      }
+      if (!intScraping && !intApi && !intCsvPlano) {
+        setIntFormError("Marcá al menos un tipo de integración.");
+        return;
+      }
+      if (!session?.uid) {
+        setIntFormError("No hay sesión.");
+        return;
+      }
+      const cid = idCliente.trim();
+      if (!cid) {
+        setIntFormError("No hay cuenta asignada.");
+        return;
+      }
+      const w = bodegasExternasCuenta.find((x) => x.id === wid);
+      const clientName = clients.find((c) => c.id === cid)?.name?.trim() ?? "";
+      setIntEnviando(true);
+      try {
+        await SolicitudIntegracionService.crear({
+          bodegaExternaId: wid,
+          bodegaExternaNombre: w?.name?.trim() || w?.id || wid,
+          scraping: intScraping,
+          api: intApi,
+          csvPlano: intCsvPlano,
+          clientId: cid,
+          clientName,
+          codeCuenta: codeCuenta.trim(),
+          creadoPorNombre: session.displayName?.trim() || session.email?.trim() || "Usuario",
+          creadoPorUid: session.uid,
+        });
+        setModalIntegracionOpen(false);
+      } catch (err) {
+        console.error(err);
+        setIntFormError("No se pudo enviar la solicitud. Reintentá.");
+      } finally {
+        setIntEnviando(false);
+      }
+    };
+
+    const formatIntFecha = (s: SolicitudIntegracion) => {
+      const ts = s.createdAt;
+      if (!ts || typeof ts.toDate !== "function") return "—";
+      try {
+        return ts.toDate().toLocaleString("es-CO", { dateStyle: "short", timeStyle: "short" });
+      } catch {
+        return "—";
+      }
+    };
+
+    return (
+      <section className="rounded-2xl bg-white p-6 sm:p-8 shadow-sm border border-slate-200">
+        <div className="mx-auto flex w-full max-w-5xl flex-col gap-6">
+          <button
+            type="button"
+            onClick={() => {
+              setModalIntegracionOpen(false);
+              setViewMode("bodegaExternaOperadorHub");
+            }}
+            className="self-start flex items-center gap-2 text-sm font-semibold text-slate-600 hover:text-slate-900 transition-colors"
+          >
+            <HiOutlineArrowLeft size={18} />
+            Volver
+          </button>
+
+          <header className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-4">
+              <div className="rounded-2xl bg-violet-100 p-3 text-violet-900">
+                <MdAssignment size={28} />
+              </div>
+              <div>
+                <h1 className="text-2xl font-extrabold tracking-tight text-slate-900">Integración</h1>
+                <p className="text-sm text-slate-500">
+                  <strong>Activo</strong> al enviar la solicitud; <strong>Finalizado</strong> cuando el configurador
+                  ejecuta la tarea en su panel (se actualiza solo en esta tabla).
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={abrirModalIntegracion}
+              disabled={bodegasExternasCuenta.length === 0}
+              className="inline-flex items-center justify-center gap-2 rounded-[10px] bg-violet-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-violet-700 active:scale-[0.98] disabled:pointer-events-none disabled:opacity-50"
+            >
+              <HiOutlinePlus strokeWidth={2.5} className="h-5 w-5" />
+              Solicitar integración
+            </button>
+          </header>
+
+          {bodegasExternasCuenta.length === 0 ? (
+            <p className="rounded-xl border border-amber-100 bg-amber-50/80 p-4 text-sm text-amber-900">
+              No hay <strong>bodegas externas</strong> cargadas en el sistema. El configurador debe crearlas para poder
+              armar solicitudes.
+            </p>
+          ) : null}
+
+          {solicitudesIntegracionError ? (
+            <p className="rounded-xl border border-red-100 bg-red-50/80 p-4 text-sm text-red-700">
+              {solicitudesIntegracionError}
+            </p>
+          ) : null}
+
+          <div className="overflow-hidden rounded-xl border border-slate-200">
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[640px] border-collapse text-left text-sm">
+                <thead>
+                  <tr className="border-b border-slate-200 bg-slate-50">
+                    <th className="px-4 py-3 font-bold uppercase tracking-wide text-[11px] text-slate-500">
+                      Bodega externa
+                    </th>
+                    <th className="px-4 py-3 font-bold uppercase tracking-wide text-[11px] text-slate-500">
+                      Tipo de integración
+                    </th>
+                    <th className="whitespace-nowrap px-4 py-3 font-bold uppercase tracking-wide text-[11px] text-slate-500">
+                      Fecha
+                    </th>
+                    <th className="whitespace-nowrap px-4 py-3 font-bold uppercase tracking-wide text-[11px] text-slate-500">
+                      Estado
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {solicitudesIntegracionLoading ? (
+                    <tr>
+                      <td colSpan={4} className="px-4 py-12 text-center text-slate-500">
+                        Cargando solicitudes…
+                      </td>
+                    </tr>
+                  ) : solicitudesIntegracion.length === 0 ? (
+                    <tr>
+                      <td colSpan={4} className="px-4 py-12 text-center text-slate-500">
+                        No hay solicitudes. Usá <strong>Solicitar integración</strong> para agregar la primera.
+                      </td>
+                    </tr>
+                  ) : (
+                    solicitudesIntegracion.map((row) => (
+                      <tr key={row.id} className="border-b border-slate-100">
+                        <td className="px-4 py-3 font-medium text-slate-900">{row.bodegaExternaNombre}</td>
+                        <td className="px-4 py-3 text-slate-700">{etiquetasTipoIntegracionRow(row)}</td>
+                        <td className="whitespace-nowrap px-4 py-3 text-slate-600">{formatIntFecha(row)}</td>
+                        <td className="whitespace-nowrap px-4 py-3">
+                          {row.estado === "finalizado" ? (
+                            <span className="inline-flex rounded-full border border-slate-200 bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-700">
+                              Finalizado
+                            </span>
+                          ) : (
+                            <span className="inline-flex rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-xs font-semibold text-emerald-800">
+                              Activo
+                            </span>
+                          )}
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        {modalIntegracionOpen ? (
+          <div
+            className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-900/45 p-4"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="modal-integracion-titulo"
+            onClick={() => setModalIntegracionOpen(false)}
+          >
+            <div
+              className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl"
+              onClick={(ev) => ev.stopPropagation()}
+            >
+              <div className="flex items-start justify-between gap-3">
+                <h2 id="modal-integracion-titulo" className="text-lg font-semibold text-slate-900">
+                  Solicitar integración
+                </h2>
+                <button
+                  type="button"
+                  onClick={() => setModalIntegracionOpen(false)}
+                  className="rounded-full p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
+                  aria-label="Cerrar"
+                >
+                  ×
+                </button>
+              </div>
+              <form className="mt-4 grid gap-4" onSubmit={enviarSolicitudIntegracion}>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700">Bodega externa</label>
+                  <select
+                    value={intBodegaId}
+                    onChange={(ev) => setIntBodegaId(ev.target.value)}
+                    className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                    required
+                  >
+                    {bodegasExternasCuenta.map((w) => (
+                      <option key={w.id} value={w.id}>
+                        {w.name?.trim() || w.id}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <fieldset>
+                  <legend className="text-sm font-medium text-slate-700">Tipo de integración</legend>
+                  <div className="mt-2 flex flex-col gap-2">
+                    <label className="flex cursor-pointer items-center gap-2 text-sm text-slate-800">
+                      <input
+                        type="checkbox"
+                        checked={intScraping}
+                        onChange={(ev) => setIntScraping(ev.target.checked)}
+                        className="h-4 w-4 rounded border-slate-300"
+                      />
+                      Scraping
+                    </label>
+                    <label className="flex cursor-pointer items-center gap-2 text-sm text-slate-800">
+                      <input
+                        type="checkbox"
+                        checked={intApi}
+                        onChange={(ev) => setIntApi(ev.target.checked)}
+                        className="h-4 w-4 rounded border-slate-300"
+                      />
+                      API
+                    </label>
+                    <label className="flex cursor-pointer items-center gap-2 text-sm text-slate-800">
+                      <input
+                        type="checkbox"
+                        checked={intCsvPlano}
+                        onChange={(ev) => setIntCsvPlano(ev.target.checked)}
+                        className="h-4 w-4 rounded border-slate-300"
+                      />
+                      CSV plano
+                    </label>
+                  </div>
+                </fieldset>
+                {intFormError ? <p className="text-sm text-red-600">{intFormError}</p> : null}
+                <div className="flex flex-wrap justify-end gap-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setModalIntegracionOpen(false)}
+                    className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={intEnviando}
+                    className="rounded-lg bg-violet-600 px-4 py-2 text-sm font-semibold text-white hover:bg-violet-700 disabled:opacity-60"
+                  >
+                    {intEnviando ? "Enviando…" : "Enviar solicitud"}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        ) : null}
       </section>
     );
   }

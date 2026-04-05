@@ -25,3 +25,9 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* Solicitudes operario / Integración configurador: pulso al ejecutar */
+.zoom-out {
+  transform: scale(0.97);
+  transition: transform 0.18s ease-out;
+}

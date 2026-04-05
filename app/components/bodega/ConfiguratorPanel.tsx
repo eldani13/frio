@@ -14,13 +14,23 @@ import {
   FiCheck,
   FiRefreshCw,
   FiLayers,
+  FiMapPin,
   FiClipboard,
+  FiAlertCircle,
+  FiBox,
+  FiCalendar,
+  FiPackage,
+  FiPhoneCall,
+  FiUser,
 } from "react-icons/fi";
-import type { Dispatch, SetStateAction } from "react";
+import type { Dispatch, MouseEvent, SetStateAction } from "react";
 import type { Client, ConfigUser, Role, WarehouseMeta } from "../../interfaces/bodega";
 import { MdOutlineAutorenew } from "react-icons/md";
-import { TareaCuentaService } from "@/app/services/tareaCuentaService";
-import type { TareaCuenta } from "@/app/types/tareaCuenta";
+import { SolicitudIntegracionService } from "@/app/services/solicitudIntegracionService";
+import {
+  etiquetasTipoIntegracionRow,
+  type SolicitudIntegracion,
+} from "@/app/types/solicitudIntegracion";
 
 
 type Props = {
@@ -68,7 +78,7 @@ type Props = {
   handleCreateUser: () => Promise<void>;
   toggleUserDisabled: (userId: string, disabled: boolean) => Promise<void>;
   handleUpdateUser: (userId: string, payload: { name: string; role: Role; clientId: string }) => Promise<void>;
-  /** Pulso desde el botón Menú del header: vuelve a la pantalla principal (Creación / Asignación / Tareas). */
+  /** Pulso desde el botón Menú del header: vuelve a la pantalla principal (Creación / Creación y asignación / Integración). */
   menuResetNonce?: number;
 };
 
@@ -145,10 +155,10 @@ export default function ConfiguratorPanel({
   const [editWarehouseSaving, setEditWarehouseSaving] = useState(false);
   const [createWarehouseStatus, setCreateWarehouseStatus] = useState<"interna" | "externa">("interna");
   const [editWarehouseStatus, setEditWarehouseStatus] = useState<"interna" | "externa">("interna");
-  const [tareasPendientes, setTareasPendientes] = useState<TareaCuenta[]>([]);
-  const [tareasLoading, setTareasLoading] = useState(false);
-  const [tareasError, setTareasError] = useState<string | null>(null);
-  const [resolviendoTareaId, setResolviendoTareaId] = useState<string | null>(null);
+  const [solicitudesIntegracionCola, setSolicitudesIntegracionCola] = useState<SolicitudIntegracion[]>([]);
+  const [integracionLoading, setIntegracionLoading] = useState(false);
+  const [integracionError, setIntegracionError] = useState<string | null>(null);
+  const [integracionEjecutandoId, setIntegracionEjecutandoId] = useState<string | null>(null);
 
   const normalizeBase36 = (value: string) => value.toUpperCase().replace(/[^0-9A-Z]/g, "");
   const ensureFiveClientCode = (value: string) => {
@@ -235,28 +245,30 @@ export default function ConfiguratorPanel({
 
   useEffect(() => {
     if (view !== "tareasPendiente") return;
-    setTareasLoading(true);
-    setTareasError(null);
+    setIntegracionLoading(true);
+    setIntegracionError(null);
     const clientIds = clients.map((c) => c.id);
-    const unsub = TareaCuentaService.subscribePendientes(
+    const unsub = SolicitudIntegracionService.subscribePendientesConfigurador(
       clientIds,
       (items) => {
-        setTareasPendientes(items);
-        setTareasLoading(false);
-        setTareasError(null);
+        setSolicitudesIntegracionCola(items);
+        setIntegracionLoading(false);
+        setIntegracionError(null);
       },
       (err) => {
         console.error(err);
-        setTareasPendientes([]);
-        setTareasError("No se pudieron cargar las tareas. Revisá permisos de Firestore en clientes/{id}/tareasParaConfigurador.");
-        setTareasLoading(false);
+        setSolicitudesIntegracionCola([]);
+        setIntegracionError(
+          "No se pudieron cargar las solicitudes. Revisá permisos en clientes/{id}/solicitudesIntegracion.",
+        );
+        setIntegracionLoading(false);
       },
     );
     return () => unsub();
   }, [view, clients]);
 
-  const formatTareaFecha = (t: TareaCuenta) => {
-    const ts = t.createdAt;
+  const formatIntegracionFecha = (s: SolicitudIntegracion) => {
+    const ts = s.createdAt;
     if (!ts || typeof ts.toDate !== "function") return "—";
     try {
       return ts.toDate().toLocaleString("es-CO", { dateStyle: "short", timeStyle: "short" });
@@ -265,15 +277,36 @@ export default function ConfiguratorPanel({
     }
   };
 
-  const handleMarcarTareaResuelta = async (clientIdRow: string, id: string) => {
-    setResolviendoTareaId(id);
-    try {
-      await TareaCuentaService.marcarResuelta(clientIdRow, id);
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setResolviendoTareaId(null);
-    }
+  const solicitudesIntegracionOrdenadas = useMemo(() => {
+    return [...solicitudesIntegracionCola].sort((a, b) => {
+      const ma =
+        a.createdAt && typeof a.createdAt.toMillis === "function" ? a.createdAt.toMillis() : 0;
+      const mb =
+        b.createdAt && typeof b.createdAt.toMillis === "function" ? b.createdAt.toMillis() : 0;
+      return ma - mb;
+    });
+  }, [solicitudesIntegracionCola]);
+
+  const proximaSolicitudIntegracion = solicitudesIntegracionOrdenadas[0];
+
+  const handleIntegracionExecute = (event: MouseEvent<HTMLButtonElement>) => {
+    const s = proximaSolicitudIntegracion;
+    if (!s || integracionEjecutandoId) return;
+    setIntegracionError(null);
+    const btn = event.currentTarget;
+    btn.classList.add("zoom-out");
+    window.setTimeout(() => {
+      btn.classList.remove("zoom-out");
+      setIntegracionEjecutandoId(s.id);
+      void SolicitudIntegracionService.ejecutarSolicitudConfigurador(s.clientId, s.id)
+        .catch((err) => {
+          console.error(err);
+          setIntegracionError("No se pudo completar la solicitud. Reintentá.");
+        })
+        .finally(() => {
+          setIntegracionEjecutandoId(null);
+        });
+    }, 180);
   };
 
   const internalWarehouses = warehouses.filter((warehouse) => warehouse.status !== "externa");
@@ -642,9 +675,9 @@ export default function ConfiguratorPanel({
           ) : view === "creacion" ? (
             <h2 className="text-lg font-semibold text-slate-900">Creación</h2>
           ) : view === "asignacion" ? (
-            <h2 className="text-lg font-semibold text-slate-900">Asignación</h2>
+            <h2 className="text-lg font-semibold text-slate-900">Creación y asignación</h2>
           ) : view === "tareasPendiente" ? (
-            <h2 className="text-lg font-semibold text-slate-900">Tareas pendiente</h2>
+            <h2 className="text-lg font-semibold text-slate-900">Integración</h2>
           ) : null}
         </div>
       ) : null}
@@ -663,7 +696,7 @@ export default function ConfiguratorPanel({
               },
               {
                 key: "asignacion" as const,
-                label: "Asignación",
+                label: "Creación y asignación",
                 bg: "#FEF6CD",
                 shadowClass:
                   "shadow-[0_14px_40px_-10px_rgba(133,91,17,0.28)] hover:shadow-[0_20px_48px_-12px_rgba(133,91,17,0.3)]",
@@ -671,7 +704,7 @@ export default function ConfiguratorPanel({
               },
               {
                 key: "tareasPendiente" as const,
-                label: "Tareas pendiente",
+                label: "Integración",
                 bg: "#E2E8F0",
                 shadowClass:
                   "shadow-[0_14px_40px_-10px_rgba(51,65,85,0.22)] hover:shadow-[0_20px_48px_-12px_rgba(51,65,85,0.28)]",
@@ -767,76 +800,127 @@ export default function ConfiguratorPanel({
 
       {view === "tareasPendiente" ? (
         <div className="mx-auto w-full max-w-5xl">
-          <div className="overflow-hidden rounded-xl border border-[#e5e7eb] bg-white shadow-sm">
-            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-4 py-3">
-              <div>
-                <p className="text-sm font-semibold text-[#3b3b3b]">Tareas enviadas por cuentas</p>
-                <p className="text-xs text-[#7c7c7c]">
-                  Los administradores de cuenta envían solicitudes desde el encabezado. Marcá como hecha cuando esté resuelta.
-                </p>
+          <p className="mb-4 text-center text-xs text-slate-500 sm:text-left">
+            Las <strong>solicitudes de integración</strong> que envía el operador desde Reportes → Bodega externa →
+            Integración aparecen aquí mientras están <strong>Activas</strong>. Al tocá la tarjeta y ejecutar la tarea, el
+            estado pasa a <strong>Finalizado</strong> en Firestore y la tabla del operador se actualiza sola.
+          </p>
+          {integracionError ? (
+            <p className="rounded-2xl border border-red-100 bg-red-50 px-4 py-6 text-center text-sm text-red-600">
+              {integracionError}
+            </p>
+          ) : integracionLoading ? (
+            <p className="rounded-2xl border border-slate-200 bg-white px-4 py-12 text-center text-sm text-slate-500 shadow-sm">
+              Cargando solicitudes…
+            </p>
+          ) : (
+            <button
+              type="button"
+              disabled={!proximaSolicitudIntegracion || !!integracionEjecutandoId}
+              onClick={handleIntegracionExecute}
+              className="rounded-2xl bg-white p-6 sm:p-8 shadow-sm w-full border border-emerald-200 transition-transform duration-150 hover:shadow-lg focus:shadow-lg active:shadow-lg hover:scale-[0.98] active:scale-[0.95] text-left disabled:hover:scale-100 disabled:active:scale-100 disabled:hover:shadow-sm disabled:cursor-not-allowed disabled:opacity-95"
+              style={{ outline: "none" }}
+            >
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6 pointer-events-none">
+                <span className="px-6 py-2 rounded-xl bg-emerald-600 text-white font-semibold text-lg flex items-center gap-2 w-full sm:w-auto justify-center sm:justify-start">
+                  <FiBox className="w-5 h-5" aria-hidden />
+                  Integración
+                </span>
+                <div className="flex flex-wrap items-center gap-2 sm:gap-3 w-full sm:w-auto justify-start sm:justify-end">
+                  <span className="px-4 py-1 rounded-xl border border-yellow-300 bg-yellow-50 text-yellow-700 font-semibold text-base flex items-center gap-2 w-full sm:w-auto justify-center sm:justify-start">
+                    <FiAlertCircle className="w-5 h-5" aria-hidden />
+                    {integracionEjecutandoId ? "Guardando…" : "Pendiente"}
+                  </span>
+                  <span className="px-3 py-1 rounded-full bg-emerald-100 text-emerald-700 font-bold text-base border border-emerald-200 w-full sm:w-auto text-center">
+                    {solicitudesIntegracionOrdenadas.length} solicitudes
+                  </span>
+                </div>
               </div>
-              <span className="text-sm font-semibold text-[#4b5563]">
-                Pendientes: {tareasError ? "—" : tareasPendientes.length}
-              </span>
-            </div>
-            {tareasError ? (
-              <p className="px-4 py-6 text-center text-sm text-red-600">{tareasError}</p>
-            ) : tareasLoading ? (
-              <p className="px-4 py-12 text-center text-sm text-slate-500">Cargando tareas…</p>
-            ) : tareasPendientes.length === 0 ? (
-              <div className="flex flex-col items-center px-6 py-14 text-center">
-                <FiClipboard className="mb-3 h-10 w-10 text-slate-300" aria-hidden />
-                <p className="text-sm font-medium text-slate-600">No hay tareas pendientes</p>
-                <p className="mt-1 max-w-sm text-xs text-slate-500">
-                  Cuando una cuenta use &quot;Crear tarea&quot; en el encabezado, aparecerá aquí en tiempo real.
-                </p>
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-slate-200 text-left text-sm">
-                  <thead className="bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    <tr>
-                      <th className="whitespace-nowrap px-4 py-3">Fecha</th>
-                      <th className="whitespace-nowrap px-4 py-3">Cuenta</th>
-                      <th className="min-w-[8rem] px-4 py-3">Título</th>
-                      <th className="min-w-[10rem] px-4 py-3">Detalle</th>
-                      <th className="whitespace-nowrap px-4 py-3">Solicitante</th>
-                      <th className="whitespace-nowrap px-4 py-3 text-right">Acción</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 text-slate-700">
-                    {tareasPendientes.map((row) => (
-                      <tr key={row.id} className="align-top transition hover:bg-slate-50/80">
-                        <td className="whitespace-nowrap px-4 py-3 text-xs text-slate-600">{formatTareaFecha(row)}</td>
-                        <td className="px-4 py-3 text-xs font-medium text-slate-800">
-                          {row.clientName?.trim() || row.clientId || "—"}
-                        </td>
-                        <td className="px-4 py-3 font-medium text-slate-900">{row.titulo}</td>
-                        <td className="max-w-[18rem] px-4 py-3 text-xs text-slate-600">
-                          {row.detalle?.trim() ? (
-                            <span className="line-clamp-3 whitespace-pre-wrap">{row.detalle}</span>
-                          ) : (
-                            <span className="text-slate-400">—</span>
-                          )}
-                        </td>
-                        <td className="px-4 py-3 text-xs text-slate-600">{row.creadoPorNombre || "—"}</td>
-                        <td className="whitespace-nowrap px-4 py-3 text-right">
-                          <button
-                            type="button"
-                            disabled={resolviendoTareaId === row.id}
-                            onClick={() => void handleMarcarTareaResuelta(row.clientId, row.id)}
-                            className="inline-flex items-center gap-1 rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-800 transition hover:bg-emerald-100 disabled:opacity-50"
-                          >
-                            <FiCheck className="h-3.5 w-3.5" aria-hidden />
-                            {resolviendoTareaId === row.id ? "…" : "Hecha"}
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
+              {!proximaSolicitudIntegracion ? (
+                <div className="flex min-h-88 items-center justify-center rounded-3xl border border-slate-200 bg-slate-50 px-6 py-10 text-center pointer-events-none">
+                  <p className="text-2xl font-semibold text-slate-700">No hay solicitudes pendientes.</p>
+                </div>
+              ) : (
+                <div className="rounded-2xl p-4 sm:p-8 pointer-events-none">
+                  <div className="flex flex-col items-center">
+                    <span className="text-slate-500 font-semibold text-lg mb-4">
+                      Solicitud de integración · tocá para ejecutar y cerrar (queda Finalizado en la cuenta)
+                    </span>
+                    <div className="flex flex-col sm:flex-row items-center justify-center gap-4 sm:gap-6 w-full">
+                      <div className="flex flex-col items-center rounded-2xl px-6 sm:px-8 py-5 sm:py-6 w-full sm:w-64 max-w-md border bg-blue-50 border-blue-200">
+                        <FiMapPin className="w-8 h-8 mb-2 text-blue-500" aria-hidden />
+                        <span className="text-xs mb-1 text-blue-500">CUENTA</span>
+                        <span className="text-2xl font-bold text-blue-700 text-center leading-tight break-words max-w-full">
+                          {proximaSolicitudIntegracion.clientName?.trim() ||
+                            proximaSolicitudIntegracion.clientId ||
+                            "—"}
+                        </span>
+                      </div>
+                      <FiArrowRight className="w-8 h-8 sm:w-10 sm:h-10 text-slate-300 shrink-0" aria-hidden />
+                      <div className="flex flex-col items-center rounded-2xl px-6 sm:px-8 py-5 sm:py-6 w-full sm:w-64 max-w-md border bg-yellow-50 border-yellow-200">
+                        <FiClipboard className="w-8 h-8 mb-2 text-yellow-600" aria-hidden />
+                        <span className="text-xs mb-1 text-yellow-600">BODEGA EXTERNA</span>
+                        <span className="text-xl font-bold text-yellow-800 text-center leading-snug break-words max-w-full">
+                          {proximaSolicitudIntegracion.bodegaExternaNombre?.trim() || "—"}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="mt-6 w-full max-w-2xl rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-left text-sm text-slate-700">
+                      <span className="font-semibold text-slate-600">Tipo: </span>
+                      {etiquetasTipoIntegracionRow(proximaSolicitudIntegracion)}
+                    </div>
+                    <hr className="my-8 border-slate-200 w-full" />
+                    <div className="flex flex-wrap justify-center gap-4 sm:gap-8 w-full mb-2">
+                      <div className="flex items-center gap-1 sm:gap-2 text-center sm:text-left">
+                        <FiUser className="w-5 h-5 text-slate-400 shrink-0" aria-hidden />
+                        <span className="text-xs text-slate-500">Solicitado por</span>
+                        <span className="font-semibold text-slate-700">
+                          {proximaSolicitudIntegracion.creadoPorNombre || "—"}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-1 sm:gap-2 text-center sm:text-left">
+                        <FiCalendar className="w-5 h-5 text-slate-400 shrink-0" aria-hidden />
+                        <span className="text-xs text-slate-500">Fecha y hora</span>
+                        <span className="font-semibold text-slate-700">
+                          {formatIntegracionFecha(proximaSolicitudIntegracion)}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-1 sm:gap-2 text-center sm:text-left max-w-full">
+                        <FiPackage className="w-5 h-5 text-slate-400 shrink-0" aria-hidden />
+                        <span className="text-xs text-slate-500">ID de solicitud</span>
+                        <span className="font-semibold text-slate-700 break-all text-left">
+                          {proximaSolicitudIntegracion.id}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </button>
+          )}
+          <div className="mt-8 flex flex-col sm:flex-row gap-4 w-full">
+            <button
+              type="button"
+              disabled
+              aria-disabled="true"
+              className="flex-1 flex items-center justify-center gap-2 rounded-2xl font-bold text-lg py-4 shadow transition-all border-2 border-slate-200 bg-slate-100 text-slate-400 cursor-not-allowed opacity-80 focus:outline-none focus:ring-2 focus:ring-slate-300"
+              style={{ minWidth: 0 }}
+              title="No disponible en integración"
+            >
+              <FiAlertCircle className="w-6 h-6 shrink-0" aria-hidden />
+              Alertas
+            </button>
+            <button
+              type="button"
+              disabled
+              aria-disabled="true"
+              className="flex-1 flex items-center justify-center gap-2 rounded-2xl bg-yellow-100 text-yellow-600 font-bold text-lg py-4 shadow transition-all border-2 border-yellow-200 cursor-not-allowed opacity-70 focus:outline-none focus:ring-2 focus:ring-yellow-200"
+              style={{ minWidth: 0 }}
+              title="No disponible en integración"
+            >
+              <FiPhoneCall className="w-6 h-6 shrink-0" aria-hidden />
+              Llamar
+            </button>
           </div>
         </div>
       ) : null}

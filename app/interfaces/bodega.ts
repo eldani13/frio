@@ -17,6 +17,9 @@ export type Slot = {
 	caducidad?: string | null;
 	fechaIngreso?: string | null;
 	llaveUnica?: string | null;
+	/** Misma caja que en ingreso/salida: trazabilidad hasta despacho. */
+	ordenCompraId?: string;
+	ordenCompraClienteId?: string;
 };
 
 export type Role =
@@ -64,6 +67,9 @@ export type Box = {
 	client: string;
 	/** Cantidad en kilogramos. */
 	quantityKg?: number;
+	/** Ingreso desde OC: al ubicar la última caja en bodega se cierra la orden. */
+	ordenCompraId?: string;
+	ordenCompraClienteId?: string;
 };
 
 export type OrderType = "a_bodega" | "a_salida" | "revisar";

@@ -6,6 +6,7 @@ import type { Catalogo } from "@/app/types/catalogo";
 import type { Provider } from "@/app/types/provider";
 import { ORDEN_COMPRA_ESTADOS, type OrdenCompraLineItem } from "@/app/types/ordenCompra";
 import { OrdenCompraService } from "@/app/services/ordenCompraService";
+import { formatKgEs, parseDecimalEs } from "@/app/lib/decimalEs";
 
 type DraftLine = OrdenCompraLineItem;
 
@@ -33,7 +34,7 @@ export function OrdenCompraFormModal({
   const [estado, setEstado] = useState<string>("Iniciado");
   const [lines, setLines] = useState<DraftLine[]>([]);
   const [pickProductId, setPickProductId] = useState("");
-  const [pickCantidad, setPickCantidad] = useState("1");
+  const [pickPesoKg, setPickPesoKg] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -44,7 +45,7 @@ export function OrdenCompraFormModal({
     setEstado("Iniciado");
     setLines([]);
     setPickProductId("");
-    setPickCantidad("1");
+    setPickPesoKg("");
     setError(null);
   }, [isOpen]);
 
@@ -57,14 +58,15 @@ export function OrdenCompraFormModal({
       setError("Seleccioná un producto del catálogo.");
       return;
     }
-    const q = Math.max(1, Math.floor(Number(pickCantidad) || 0));
-    if (q < 1) {
-      setError("La cantidad debe ser al menos 1.");
+    const pesoNum = parseDecimalEs(pickPesoKg);
+    if (pesoNum == null || pesoNum <= 0) {
+      setError("Ingresá un peso en kg mayor a 0 (podés usar coma: 15,6).");
       return;
     }
     const line: DraftLine = {
       catalogoProductId: p.id,
-      cantidad: q,
+      cantidad: 0,
+      pesoKg: pesoNum,
       titleSnapshot: p.title || "Sin título",
       ...(p.sku != null && String(p.sku).trim() !== "" ? { skuSnapshot: String(p.sku) } : {}),
       ...(p.code != null && String(p.code).trim() !== ""
@@ -73,7 +75,7 @@ export function OrdenCompraFormModal({
     };
     setLines((prev) => [...prev, line]);
     setPickProductId("");
-    setPickCantidad("1");
+    setPickPesoKg("");
   };
 
   const removeLine = (index: number) => {
@@ -145,7 +147,8 @@ export function OrdenCompraFormModal({
 
         <p className="mb-4 text-xs text-[#6B7280]">
           Cada línea debe ser un producto de tu <strong>catálogo</strong> (mismo SKU y datos que en
-          Catálogo). Solo se registra la <strong>cantidad</strong>.
+          Catálogo). Indicá el <strong>peso en kg</strong> por línea (coma o punto:{" "}
+          <span className="whitespace-nowrap">15,6</span>).
         </p>
 
         {error ? (
@@ -237,21 +240,20 @@ export function OrdenCompraFormModal({
                   ))}
                 </select>
               </div>
-              <div className="w-full sm:w-24">
+              <div className="w-full sm:w-32">
                 <label
                   className="mb-0.5 block text-[10px] font-bold uppercase text-gray-500 sm:sr-only"
-                  htmlFor="oc-cantidad-line"
+                  htmlFor="oc-peso-kg-line"
                 >
-                  Cantidad
+                  Peso (kg)
                 </label>
                 <input
-                  id="oc-cantidad-line"
-                  type="number"
-                  min={1}
-                  step={1}
-                  value={pickCantidad}
-                  onChange={(e) => setPickCantidad(e.target.value)}
-                  placeholder="Cantidad"
+                  id="oc-peso-kg-line"
+                  type="text"
+                  inputMode="decimal"
+                  value={pickPesoKg}
+                  onChange={(e) => setPickPesoKg(e.target.value)}
+                  placeholder="Ej. 15,6"
                   className="w-full rounded-[8px] border border-gray-200 bg-white px-3 py-2 text-sm focus:border-[#A8D5BA] focus:outline-none"
                 />
               </div>
@@ -278,7 +280,11 @@ export function OrdenCompraFormModal({
                       <p className="truncate font-medium text-gray-900">{ln.titleSnapshot}</p>
                       <p className="text-xs text-gray-500">
                         {ln.skuSnapshot ? `SKU ${ln.skuSnapshot} · ` : null}
-                        Cant. {ln.cantidad}
+                        {ln.pesoKg != null && ln.pesoKg > 0
+                          ? `${formatKgEs(ln.pesoKg)} kg`
+                          : ln.cantidad > 0
+                            ? `${ln.cantidad} u.`
+                            : "—"}
                       </p>
                     </div>
                     <button
