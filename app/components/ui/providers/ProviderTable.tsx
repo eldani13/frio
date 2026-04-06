@@ -11,59 +11,80 @@ interface Props {
 
 export const ProviderTable = ({ providers, onEdit, onDelete, onSelectProvider }: Props) => {
   return (
-    <div className="bg-white rounded-[12px] border border-gray-100 overflow-hidden shadow-sm">
-      <table className="w-full text-left border-collapse">
-        <thead className="bg-[#A8D5BA]/10">
-          <tr>
-            <th className="p-4 text-[12px] font-medium text-gray-500 uppercase">ID</th>
-            <th className="p-4 text-[12px] font-medium text-gray-500 uppercase">Código</th>
-            <th className="p-4 text-[12px] font-medium text-gray-500 uppercase">Proveedor</th>
-            <th className="p-4 text-[12px] font-medium text-gray-500 uppercase">Nombre</th>
-            <th className="p-4 text-[12px] font-medium text-gray-500 uppercase">Teléfono</th>
-            <th className="p-4 text-[12px] font-medium text-gray-500 uppercase">Email</th>
-            <th className="p-4 text-[12px] font-medium text-gray-500 uppercase text-right">Acciones</th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-gray-50">
-          {providers.map((p) => (
-            <tr
-              key={p.id}
-              className={`transition-colors hover:bg-gray-50 ${onSelectProvider ? "cursor-pointer" : ""}`}
-              onClick={() => onSelectProvider?.(p)}
-            >
-              <td className="p-4 text-[14px] text-gray-700 whitespace-nowrap">{p.numericId}</td>
-              <td className="p-4 text-[14px] font-mono font-bold text-[#2D5A3F] whitespace-nowrap">{p.code}</td>
-              <td className="p-4 text-[14px] text-gray-900 font-medium">{p.name}</td>
-              <td className="p-4 text-[14px] text-gray-700">{p.nombre?.trim() || "—"}</td>
-              <td className="p-4 text-[14px] text-gray-700">{p.telefono?.trim() || "—"}</td>
-              <td className="p-4 text-[14px] text-gray-700 break-all max-w-[200px]">{p.email?.trim() || "—"}</td>
-              <td className="p-4 text-right" onClick={(e) => e.stopPropagation()}>
-                <div className="flex justify-end gap-1">
-                  {/* Botón Editar - Azul Suave */}
-                  <button 
-                    onClick={() => onEdit(p)}
-                    className="p-2 text-[#AFCBFF] hover:text-[#2D5A3F] transition-colors hover:bg-[#AFCBFF]/10 rounded-lg"
-                    title="Editar"
-                  >
-                    <HiOutlinePencilSquare size={18} />
-                  </button>
-                  
-                  {/* Botón Eliminar - Rosa Suave */}
-                  <button 
-                    onClick={() => p.id && onDelete(p.id)}
-                    className="p-2 text-[#FFB3C1] hover:text-red-500 transition-colors hover:bg-[#FFB3C1]/10 rounded-lg"
-                    title="Eliminar"
-                  >
-                    <HiOutlineTrash size={18} />
-                  </button>
-                </div>
-              </td>
+    <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[800px] border-collapse text-left text-sm">
+          <thead>
+            <tr className="border-b border-slate-200 bg-slate-50">
+              <th className="whitespace-nowrap px-4 py-3 text-left text-[11px] font-bold uppercase tracking-wide text-slate-500">
+                ID
+              </th>
+              <th className="whitespace-nowrap px-4 py-3 text-left text-[11px] font-bold uppercase tracking-wide text-slate-500">
+                Código
+              </th>
+              <th className="px-4 py-3 text-left text-[11px] font-bold uppercase tracking-wide text-slate-500">
+                Proveedor
+              </th>
+              <th className="px-4 py-3 text-left text-[11px] font-bold uppercase tracking-wide text-slate-500">
+                Nombre
+              </th>
+              <th className="px-4 py-3 text-left text-[11px] font-bold uppercase tracking-wide text-slate-500">
+                Teléfono
+              </th>
+              <th className="px-4 py-3 text-left text-[11px] font-bold uppercase tracking-wide text-slate-500">
+                Email
+              </th>
+              <th className="px-4 py-3 text-right text-[11px] font-bold uppercase tracking-wide text-slate-500">
+                Acciones
+              </th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {providers.map((p) => (
+              <tr
+                key={p.id}
+                className={`border-b border-slate-100 transition-colors hover:bg-violet-50/80 ${onSelectProvider ? "cursor-pointer" : ""}`}
+                onClick={() => onSelectProvider?.(p)}
+              >
+                <td className="whitespace-nowrap px-4 py-3 text-[13px] tabular-nums text-slate-600">
+                  {p.numericId}
+                </td>
+                <td className="whitespace-nowrap px-4 py-3 font-mono text-[13px] font-semibold text-slate-900">
+                  {p.code}
+                </td>
+                <td className="px-4 py-3 text-[13px] font-medium text-slate-800">{p.name}</td>
+                <td className="px-4 py-3 text-[13px] text-slate-700">{p.nombre?.trim() || "—"}</td>
+                <td className="px-4 py-3 text-[13px] text-slate-700">{p.telefono?.trim() || "—"}</td>
+                <td className="max-w-[200px] break-all px-4 py-3 text-[13px] text-slate-700">
+                  {p.email?.trim() || "—"}
+                </td>
+                <td className="px-4 py-3 text-right" onClick={(e) => e.stopPropagation()}>
+                  <div className="flex justify-end gap-1">
+                    <button
+                      type="button"
+                      onClick={() => onEdit(p)}
+                      className="rounded-lg p-2 text-sky-600 transition-colors hover:bg-sky-50 hover:text-sky-800"
+                      title="Editar"
+                    >
+                      <HiOutlinePencilSquare size={18} />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => p.id && onDelete(p.id)}
+                      className="rounded-lg p-2 text-rose-400 transition-colors hover:bg-rose-50 hover:text-rose-600"
+                      title="Eliminar"
+                    >
+                      <HiOutlineTrash size={18} />
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
       {providers.length === 0 && (
-        <div className="p-8 text-center text-gray-400 text-[14px]">
+        <div className="border-t border-slate-100 px-4 py-12 text-center text-sm text-slate-500">
           No hay proveedores registrados.
         </div>
       )}

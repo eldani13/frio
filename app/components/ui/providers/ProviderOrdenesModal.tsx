@@ -2,6 +2,7 @@
 
 import { HiOutlineXMark } from "react-icons/hi2";
 import type { Provider } from "@/app/types/provider";
+import { ordenCompraEstadoBadgeClass } from "@/app/types/ordenCompra";
 
 export type ProveedorOrdenCompraRow = {
   id: string;
@@ -58,31 +59,28 @@ export function ProviderOrdenesModal({
         </div>
 
         <div className="overflow-hidden p-5">
-          <div className="overflow-x-auto overflow-y-auto rounded-[12px] border border-[#e5e7eb]">
-            <table className="w-full border-collapse text-left text-sm">
+          <div className="overflow-x-auto overflow-y-auto rounded-xl border border-slate-200">
+            <table className="w-full min-w-[400px] border-collapse text-left text-sm">
               <thead>
-                <tr className="border-b border-[#eef1f4] bg-[#F8FAFB]">
-                  <th className="px-5 py-3.5 text-left text-[12px] font-semibold uppercase tracking-wide text-[#6B7280]">
+                <tr className="border-b border-slate-200 bg-slate-50">
+                  <th className="px-4 py-3 text-left text-[11px] font-bold uppercase tracking-wide text-slate-500">
                     Orden de compra
                   </th>
-                  {/* <th className="px-5 py-3.5 text-left text-[12px] font-semibold uppercase tracking-wide text-[#6B7280]">
-                    Productos (catálogo)
-                  </th> */}
-                  <th className="px-5 py-3.5 text-left text-[12px] font-semibold uppercase tracking-wide text-[#6B7280]">
+                  <th className="px-4 py-3 text-left text-[11px] font-bold uppercase tracking-wide text-slate-500">
                     Estado
                   </th>
                 </tr>
               </thead>
-              <tbody className="bg-white">
+              <tbody>
                 {loading ? (
                   <tr>
-                    <td colSpan={3} className="px-5 py-10 text-center text-sm text-[#6B7280]">
+                    <td colSpan={2} className="border-b border-slate-100 px-4 py-12 text-center text-sm text-slate-500">
                       Cargando órdenes…
                     </td>
                   </tr>
                 ) : ordenes.length === 0 ? (
                   <tr>
-                    <td colSpan={3} className="px-5 py-10 text-center text-sm text-[#6B7280]">
+                    <td colSpan={2} className="border-b border-slate-100 px-4 py-12 text-center text-sm text-slate-500">
                       No hay órdenes de compra registradas para este proveedor.
                     </td>
                   </tr>
@@ -90,18 +88,15 @@ export function ProviderOrdenesModal({
                   ordenes.map((row) => (
                     <tr
                       key={row.id}
-                      className="border-t border-[#f3f4f6] transition-colors hover:bg-[#F8FAFB]"
+                      className="border-b border-slate-100 transition-colors hover:bg-violet-50/80"
                     >
-                      <td className="px-5 py-3.5 align-middle font-mono text-[14px] font-bold text-[#0D3B43] whitespace-nowrap">
+                      <td className="whitespace-nowrap px-4 py-3 align-middle font-mono text-[13px] font-semibold text-slate-900">
                         {row.ordenCompra}
                       </td>
-                      {/* <td className="max-w-md px-5 py-3.5 align-middle text-[13px] text-[#374151]">
-                        <span className="line-clamp-2" title={row.resumenProductos}>
-                          {row.resumenProductos || "—"}
-                        </span>
-                      </td> */}
-                      <td className="px-5 py-3.5 align-middle whitespace-nowrap">
-                        <span className="inline-flex rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-800">
+                      <td className="whitespace-nowrap px-4 py-3 align-middle">
+                        <span
+                          className={`inline-flex rounded-full border-0 px-2.5 py-0.5 text-xs font-semibold ${ordenCompraEstadoBadgeClass(row.estado)}`}
+                        >
                           {row.estado}
                         </span>
                       </td>

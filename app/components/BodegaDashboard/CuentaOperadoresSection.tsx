@@ -173,16 +173,16 @@ export function CuentaOperadoresSection() {
                   </th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100">
+              <tbody>
                 {loading ? (
                   <tr>
-                    <td colSpan={4} className="px-4 py-8 text-center text-slate-500">
+                    <td colSpan={4} className="border-b border-slate-100 px-4 py-12 text-center text-slate-500">
                       Cargando…
                     </td>
                   </tr>
                 ) : rows.length === 0 ? (
                   <tr>
-                    <td colSpan={4} className="px-4 py-8 text-center text-slate-500">
+                    <td colSpan={4} className="border-b border-slate-100 px-4 py-12 text-center text-slate-500">
                       {puedeCrear
                         ? "No hay operadores. Creá uno con el botón superior."
                         : "No hay operadores registrados para esta cuenta."}
@@ -190,11 +190,18 @@ export function CuentaOperadoresSection() {
                   </tr>
                 ) : (
                   rows.map((r) => (
-                    <tr key={r.id} className="hover:bg-slate-50/80">
-                      <td className="px-4 py-3 font-medium text-slate-900">{r.name}</td>
-                      <td className="px-4 py-3 text-slate-700">{r.email || "—"}</td>
-                      <td className="px-4 py-3 font-mono text-xs text-slate-600">{r.code || "—"}</td>
-                      <td className="px-4 py-3 text-slate-600">{r.createdAt ?? "—"}</td>
+                    <tr
+                      key={r.id}
+                      className="border-b border-slate-100 transition-colors hover:bg-violet-50/80"
+                    >
+                      <td className="px-4 py-3 text-[13px] font-medium text-slate-800">{r.name}</td>
+                      <td className="px-4 py-3 text-[13px] text-slate-700">{r.email || "—"}</td>
+                      <td className="px-4 py-3 font-mono text-[13px] font-semibold text-slate-900">
+                        {r.code || "—"}
+                      </td>
+                      <td className="whitespace-nowrap px-4 py-3 text-[13px] text-slate-600">
+                        {r.createdAt ?? "—"}
+                      </td>
                     </tr>
                   ))
                 )}

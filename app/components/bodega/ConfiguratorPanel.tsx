@@ -314,26 +314,26 @@ export default function ConfiguratorPanel({
 
   const renderClientes = () => (
     <>
-      <div className="overflow-hidden rounded-xl border border-[#e5e7eb] bg-white shadow-sm">
-        <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+      <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-4 py-3">
           <div>
-            <p className="text-sm font-semibold text-[#3b3b3b]">Cuentas</p>
-            <p className="text-xs text-[#7c7c7c]">Código, nombre y acciones.</p>
+            <p className="text-sm font-semibold text-slate-900">Cuentas</p>
+            <p className="text-xs text-slate-500">Código, nombre y acciones.</p>
           </div>
           <div className="flex items-center gap-2">
-            <span className="text-sm font-semibold text-[#4b5563]">Total: {clients.length}</span>
+            <span className="text-sm font-semibold text-slate-600">Total: {clients.length}</span>
             <button
               type="button"
               onClick={fetchClients}
               disabled={clientsLoading || clientSaving}
-              className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-[#d1d5db] bg-white text-[#6b7280] transition hover:bg-[#f8fafc] disabled:opacity-60"
+              className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 transition hover:bg-slate-50 disabled:opacity-60"
             >
               <FiRefreshCw className={`h-4 w-4 ${clientsLoading ? "animate-spin" : ""}`} />
             </button>
             <button
               type="button"
               onClick={() => setShowCreateModal(true)}
-              className="inline-flex items-center gap-2 rounded-lg bg-[#24a46d] px-3 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-[#1f8f60]"
+              className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-3 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700"
             >
               <FiPlus className="h-4 w-4" />
               Agregar
@@ -341,67 +341,100 @@ export default function ConfiguratorPanel({
           </div>
         </div>
 
-        <div className="grid grid-cols-[1.6fr_2.2fr_1.7fr_1.5fr_2fr] border-y border-[#edf1f5] bg-white px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-[#7c8087]">
-          <span>Código</span>
-          <span>Nombre</span>
-          <span>Bodega asignada</span>
-          <span>Credenciales</span>
-          <span>Acciones</span>
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[920px] border-collapse text-left text-sm">
+            <thead>
+              <tr className="border-b border-slate-200 bg-slate-50">
+                <th className="whitespace-nowrap px-4 py-3 font-bold uppercase tracking-wide text-[11px] text-slate-500">
+                  Código
+                </th>
+                <th className="min-w-[10rem] px-4 py-3 font-bold uppercase tracking-wide text-[11px] text-slate-500">
+                  Nombre
+                </th>
+                <th className="min-w-[10rem] px-4 py-3 font-bold uppercase tracking-wide text-[11px] text-slate-500">
+                  Bodega asignada
+                </th>
+                <th className="whitespace-nowrap px-4 py-3 font-bold uppercase tracking-wide text-[11px] text-slate-500">
+                  Credenciales
+                </th>
+                <th className="min-w-[8rem] px-4 py-3 font-bold uppercase tracking-wide text-[11px] text-slate-500">
+                  Acciones
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {clientsLoading && !clients.length ? (
+                <>
+                  {[1, 2, 3].map((item) => (
+                    <tr key={item} className="border-b border-slate-100">
+                      <td colSpan={5} className="px-4 py-3">
+                        <div className="h-10 animate-pulse rounded-md bg-slate-100" />
+                      </td>
+                    </tr>
+                  ))}
+                </>
+              ) : clients.length ? (
+                clients.map((client) => {
+                  const hasCreds = users.some((user) => user.clientId === client.id && user.email?.trim());
+                  return (
+                    <tr
+                      key={client.id}
+                      className="border-b border-slate-100 transition-colors hover:bg-violet-50/80"
+                    >
+                      <td className="whitespace-nowrap px-4 py-3 font-mono text-[13px] font-semibold text-slate-900">
+                        {client.code}
+                      </td>
+                      <td className="max-w-[14rem] px-4 py-3 text-[13px] font-medium text-slate-800">
+                        <span className={client.disabled ? "text-slate-400" : ""}>{client.name}</span>
+                      </td>
+                      <td
+                        className="max-w-[12rem] px-4 py-3 text-[13px] text-slate-800"
+                        title={
+                          warehouseNameByAccountCode.get(ensureFiveClientCode(client.code ?? "")) ??
+                          undefined
+                        }
+                      >
+                        <span className="line-clamp-2">
+                          {warehouseNameByAccountCode.get(ensureFiveClientCode(client.code ?? "")) ??
+                            "Sin asignar"}
+                        </span>
+                      </td>
+                      <td className="whitespace-nowrap px-4 py-3">
+                        <span
+                          className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold ${
+                            hasCreds ? "bg-emerald-100 text-emerald-800" : "bg-slate-100 text-slate-500"
+                          }`}
+                        >
+                          {hasCreds ? "Sí" : "No"}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditClient(client);
+                            setEditName(client.name);
+                            setEditCode(client.code);
+                          }}
+                          className="inline-flex items-center gap-2 rounded-full bg-sky-50 px-3 py-1.5 text-xs font-semibold text-sky-800 ring-1 ring-sky-200/80 transition hover:bg-sky-100"
+                        >
+                          <FiEdit2 className="h-4 w-4" />
+                          Editar
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })
+              ) : (
+                <tr>
+                  <td colSpan={5} className="px-4 py-12 text-center text-slate-500">
+                    Aún no hay clientes creados.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
         </div>
-        {clientsLoading && !clients.length ? (
-          <div className="grid gap-0">
-            {[1, 2, 3].map((item) => (
-              <div key={item} className="h-12 animate-pulse border-t border-[#edf1f5] bg-white" />
-            ))}
-          </div>
-        ) : clients.length ? (
-          clients.map((client) => {
-            const shortId = client.id.length > 14 ? `${client.id.slice(0, 8)}...${client.id.slice(-4)}` : client.id;
-            return (
-              <div
-                key={client.id}
-                className="grid grid-cols-[1.6fr_2.2fr_1.7fr_1.5fr_2fr] items-center gap-3 border-t border-[#edf1f5] bg-white px-4 py-3 text-sm text-[#3f3f3f]"
-              >
-                <span className="font-mono text-xs text-[#6b7280]">{client.code}</span>
-                <span className={`font-semibold ${client.disabled ? "text-[#9ca3af]" : "text-[#2d2d2d]"}`}>
-                  {client.name}
-                </span>
-                <span className="text-sm text-[#4b5563]">
-                  {warehouseNameByAccountCode.get(ensureFiveClientCode(client.code ?? "")) ?? "Sin asignar"}
-                </span>
-                <span className={`text-sm font-semibold ${users.some((user) => user.clientId === client.id && user.email?.trim()) ? "text-[#15803d]" : "text-[#9ca3af]"}`}>
-                  {users.some((user) => user.clientId === client.id && user.email?.trim()) ? "Sí" : "No"}
-                </span>
-                <div className="flex flex-wrap items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setEditClient(client);
-                      setEditName(client.name);
-                      setEditCode(client.code);
-                    }}
-                    className="inline-flex items-center gap-2 rounded-full bg-[#e8f1ff] px-3 py-1.5 text-xs font-semibold text-[#2b4ea3] transition hover:bg-[#dce7ff]"
-                  >
-                    <FiEdit2 className="h-4 w-4" />
-                    Editar
-                  </button>
-                  {/* Botón de habilitar/deshabilitar temporalmente oculto */}
-                  {/* <button
-                    type="button"
-                    onClick={() => toggleClientDisabled(client.id, !client.disabled)}
-                    title={client.disabled ? "Habilitar" : "Deshabilitar"}
-                    className={`inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-semibold transition ${client.disabled ? "bg-[#e5f3e8] text-[#1d8a45] hover:bg-[#d8ecde]" : "bg-[#f8e7e7] text-[#b64545] hover:bg-[#f3dcdc]"}`}
-                  >
-                    {client.disabled ? <FiCheck className="h-4 w-4" /> : <FiTrash2 className="h-4 w-4" />}
-                    {client.disabled ? "Habilitar" : "Deshabilitar"}
-                  </button> */}
-                </div>
-              </div>
-            );
-          })
-        ) : (
-          <div className="border-t border-[#edf1f5] px-4 py-4 text-sm text-[#6b7280]">Aún no hay clientes creados.</div>
-        )}
       </div>
     </>
   );
@@ -413,19 +446,19 @@ export default function ConfiguratorPanel({
     statusKey: "interna" | "externa",
   ) => (
     <>
-      <div className="overflow-hidden rounded-xl border border-[#e5e7eb] bg-white shadow-sm">
-        <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+      <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-4 py-3">
           <div>
-            <p className="text-sm font-semibold text-[#3b3b3b]">{title}</p>
-            <p className="text-xs text-[#7c7c7c]">{subtitle}</p>
+            <p className="text-sm font-semibold text-slate-900">{title}</p>
+            <p className="text-xs text-slate-500">{subtitle}</p>
           </div>
           <div className="flex items-center gap-2">
-            <span className="text-sm font-semibold text-[#4b5563]">Total: {list.length}</span>
+            <span className="text-sm font-semibold text-slate-600">Total: {list.length}</span>
             <button
               type="button"
               onClick={fetchWarehouses}
               disabled={warehousesLoading || warehouseSaving}
-              className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-[#d1d5db] bg-white text-[#6b7280] transition hover:bg-[#f8fafc] disabled:opacity-60"
+              className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 transition hover:bg-slate-50 disabled:opacity-60"
             >
               <FiRefreshCw className={`h-4 w-4 ${warehousesLoading ? "animate-spin" : ""}`} />
             </button>
@@ -435,7 +468,7 @@ export default function ConfiguratorPanel({
                 setCreateWarehouseStatus(statusKey);
                 setShowCreateWarehouseModal(true);
               }}
-              className="inline-flex items-center gap-2 rounded-lg bg-[#24a46d] px-3 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-[#1f8f60]"
+              className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-3 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700"
             >
               <FiPlus className="h-4 w-4" />
               Agregar
@@ -443,109 +476,136 @@ export default function ConfiguratorPanel({
           </div>
         </div>
 
-        <div className="grid grid-cols-[2fr_1.5fr_1.7fr_2fr] border-y border-[#edf1f5] bg-white px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-[#7c8087]">
-          <span>Nombre</span>
-          <span>Capacidad</span>
-          <span>Bodega asignada</span>
-          <span>Acciones</span>
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[860px] border-collapse text-left text-sm">
+            <thead>
+              <tr className="border-b border-slate-200 bg-slate-50">
+                <th className="min-w-[12rem] px-4 py-3 font-bold uppercase tracking-wide text-[11px] text-slate-500">
+                  Nombre
+                </th>
+                <th className="whitespace-nowrap px-4 py-3 font-bold uppercase tracking-wide text-[11px] text-slate-500">
+                  Capacidad
+                </th>
+                <th className="min-w-[11rem] px-4 py-3 font-bold uppercase tracking-wide text-[11px] text-slate-500">
+                  Bodega asignada
+                </th>
+                <th className="min-w-[8rem] px-4 py-3 font-bold uppercase tracking-wide text-[11px] text-slate-500">
+                  Acciones
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {warehousesLoading && !list.length ? (
+                <>
+                  {[1, 2, 3].map((item) => (
+                    <tr key={item} className="border-b border-slate-100">
+                      <td colSpan={4} className="px-4 py-3">
+                        <div className="h-10 animate-pulse rounded-md bg-slate-100" />
+                      </td>
+                    </tr>
+                  ))}
+                </>
+              ) : list.length ? (
+                list.map((warehouse) => {
+                  const shortId =
+                    warehouse.id.length > 12
+                      ? `${warehouse.id.slice(0, 6)}...${warehouse.id.slice(-3)}`
+                      : warehouse.id;
+                  const capacityLabel =
+                    typeof warehouse.capacity === "number" && Number.isFinite(warehouse.capacity)
+                      ? warehouse.capacity
+                      : "—";
+                  const effectiveStatus = warehouse.status === "externa" ? "externa" : "interna";
+                  const normalizedCode = ensureFiveClientCode(warehouse.codeCuenta ?? "");
+                  const assignedLabel = normalizedCode ? clientNameByCode.get(normalizedCode) : undefined;
+                  const assignedDisplay = assignedLabel ?? (normalizedCode || "Sin asignar");
+                  return (
+                    <tr
+                      key={warehouse.id}
+                      className="border-b border-slate-100 transition-colors hover:bg-violet-50/80"
+                    >
+                      <td className="max-w-[16rem] px-4 py-3">
+                        <div className="flex flex-col gap-0.5">
+                          <span
+                            className={`text-[13px] font-semibold text-slate-900 ${warehouse.disabled ? "text-slate-400" : ""}`}
+                          >
+                            {warehouse.name || "Sin nombre"}
+                          </span>
+                          <span className="font-mono text-[11px] text-slate-500">{shortId}</span>
+                          <span className="inline-flex w-fit rounded-full border border-slate-200 bg-slate-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-700">
+                            {effectiveStatus === "externa" ? "Externa" : "Interna"}
+                          </span>
+                        </div>
+                      </td>
+                      <td className="whitespace-nowrap px-4 py-3 text-[13px] font-semibold tabular-nums text-slate-800">
+                        {capacityLabel}
+                      </td>
+                      <td className="max-w-[14rem] px-4 py-3 text-[13px] text-slate-800" title={assignedDisplay}>
+                        <div className="flex flex-col gap-0.5">
+                          <span className="line-clamp-2">{assignedDisplay}</span>
+                          <span className="font-mono text-[11px] text-slate-500">
+                            {normalizedCode || "Sin código"}
+                          </span>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditWarehouse(warehouse);
+                            setEditWarehouseName(warehouse.name ?? "");
+                            setEditWarehouseCapacity(
+                              typeof warehouse.capacity === "number" && Number.isFinite(warehouse.capacity)
+                                ? warehouse.capacity.toString()
+                                : "",
+                            );
+                            setEditWarehouseStatus(effectiveStatus);
+                          }}
+                          className="inline-flex items-center gap-2 rounded-full bg-sky-50 px-3 py-1.5 text-xs font-semibold text-sky-800 ring-1 ring-sky-200/80 transition hover:bg-sky-100"
+                        >
+                          <FiEdit2 className="h-4 w-4" />
+                          Editar
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })
+              ) : (
+                <tr>
+                  <td colSpan={4} className="px-4 py-12 text-center text-slate-500">
+                    Aún no hay bodegas.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
         </div>
-        {warehousesLoading && !list.length ? (
-          <div className="grid gap-0">
-            {[1, 2, 3].map((item) => (
-              <div key={item} className="h-12 animate-pulse border-t border-[#edf1f5] bg-white" />
-            ))}
-          </div>
-        ) : list.length ? (
-          list.map((warehouse) => {
-            const shortId = warehouse.id.length > 12 ? `${warehouse.id.slice(0, 6)}...${warehouse.id.slice(-3)}` : warehouse.id;
-            const capacityLabel =
-              typeof warehouse.capacity === "number" && Number.isFinite(warehouse.capacity)
-                ? warehouse.capacity
-                : "-";
-            const effectiveStatus = warehouse.status === "externa" ? "externa" : "interna";
-            const normalizedCode = ensureFiveClientCode(warehouse.codeCuenta ?? "");
-            const assignedLabel = normalizedCode ? clientNameByCode.get(normalizedCode) : undefined;
-            const assignedDisplay = assignedLabel ?? (normalizedCode || "Sin asignar");
-            return (
-              <div
-                key={warehouse.id}
-                className="grid grid-cols-[2fr_1.5fr_1.7fr_2fr] items-center gap-3 border-t border-[#edf1f5] bg-white px-4 py-3 text-sm text-[#3f3f3f]"
-              >
-                <div className="flex flex-col">
-                  <span className={`font-semibold ${warehouse.disabled ? "text-[#9ca3af]" : "text-[#2d2d2d]"}`}>
-                    {warehouse.name || "Sin nombre"}
-                  </span>
-                  <span className="font-mono text-[11px] text-[#6b7280]">{shortId}</span>
-                  <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#6b7280]">
-                    {effectiveStatus === "externa" ? "Externa" : "Interna"}
-                  </span>
-                </div>
-                <span className="text-sm font-semibold text-[#3f3f3f]">{capacityLabel}</span>
-                <div className="flex flex-col text-sm text-[#3f3f3f]">
-                  <span>{assignedDisplay}</span>
-                  <span className="font-mono text-[11px] text-[#6b7280]">{normalizedCode || "Sin código"}</span>
-                </div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setEditWarehouse(warehouse);
-                      setEditWarehouseName(warehouse.name ?? "");
-                      setEditWarehouseCapacity(
-                        typeof warehouse.capacity === "number" && Number.isFinite(warehouse.capacity)
-                          ? warehouse.capacity.toString()
-                          : "",
-                      );
-                      setEditWarehouseStatus(effectiveStatus);
-                    }}
-                    className="inline-flex items-center gap-2 rounded-full bg-[#e8f1ff] px-3 py-1.5 text-xs font-semibold text-[#2b4ea3] transition hover:bg-[#dce7ff]"
-                  >
-                    <FiEdit2 className="h-4 w-4" />
-                    Editar
-                  </button>
-                  {/* Botón de habilitar/deshabilitar temporalmente oculto */}
-                  {/* <button
-                    type="button"
-                    onClick={() => toggleWarehouseDisabled(warehouse.id, !warehouse.disabled)}
-                    title={warehouse.disabled ? "Habilitar" : "Deshabilitar"}
-                    className={`inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-semibold transition ${warehouse.disabled ? "bg-[#e5f3e8] text-[#1d8a45] hover:bg-[#d8ecde]" : "bg-[#f8e7e7] text-[#b64545] hover:bg-[#f3dcdc]"}`}
-                  >
-                    {warehouse.disabled ? <FiCheck className="h-4 w-4" /> : <FiTrash2 className="h-4 w-4" />}
-                    {warehouse.disabled ? "Habilitar" : "Deshabilitar"}
-                  </button> */}
-                </div>
-              </div>
-            );
-          })
-        ) : (
-          <div className="border-t border-[#edf1f5] px-4 py-4 text-sm text-[#6b7280]">Aún no hay bodegas.</div>
-        )}
       </div>
     </>
   );
 
       const renderUsuarios = () => (
         <>
-          <div className="overflow-hidden rounded-xl border border-[#e5e7eb] bg-white shadow-sm">
-            <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+          <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-4 py-3">
               <div>
-                <p className="text-sm font-semibold text-[#3b3b3b]">Usuarios</p>
-                <p className="text-xs text-[#7c7c7c]">ID, rol, nombre, cliente y acciones.</p>
+                <p className="text-sm font-semibold text-slate-900">Usuarios</p>
+                <p className="text-xs text-slate-500">ID, rol, nombre, cliente y acciones.</p>
               </div>
               <div className="flex items-center gap-2">
-                <span className="text-sm font-semibold text-[#4b5563]">Total: {users.length}</span>
+                <span className="text-sm font-semibold text-slate-600">Total: {users.length}</span>
                 <button
                   type="button"
                   onClick={fetchUsers}
                   disabled={usersLoading || userSaving}
-                  className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-[#d1d5db] bg-white text-[#6b7280] transition hover:bg-[#f8fafc] disabled:opacity-60"
+                  className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 transition hover:bg-slate-50 disabled:opacity-60"
                 >
                   <FiRefreshCw className={`h-4 w-4 ${usersLoading ? "animate-spin" : ""}`} />
                 </button>
                 <button
                   type="button"
                   onClick={() => setShowCreateUserModal(true)}
-                  className="inline-flex items-center gap-2 rounded-lg bg-[#24a46d] px-3 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-[#1f8f60]"
+                  className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-3 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700"
                 >
                   <FiPlus className="h-4 w-4" />
                   Agregar
@@ -553,72 +613,116 @@ export default function ConfiguratorPanel({
               </div>
             </div>
 
-            <div className="grid grid-cols-[1.5fr_1.4fr_1.9fr_1.7fr_1.2fr_2fr] border-y border-[#edf1f5] bg-white px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-[#7c8087]">
-              <span>Código</span>
-              <span>Rol</span>
-              <span>Nombre</span>
-              <span>Cuenta</span>
-              <span>Credenciales</span>
-              <span>Acciones</span>
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[960px] border-collapse text-left text-sm">
+                <thead>
+                  <tr className="border-b border-slate-200 bg-slate-50">
+                    <th className="whitespace-nowrap px-4 py-3 font-bold uppercase tracking-wide text-[11px] text-slate-500">
+                      Código
+                    </th>
+                    <th className="min-w-[8rem] px-4 py-3 font-bold uppercase tracking-wide text-[11px] text-slate-500">
+                      Rol
+                    </th>
+                    <th className="min-w-[10rem] px-4 py-3 font-bold uppercase tracking-wide text-[11px] text-slate-500">
+                      Nombre
+                    </th>
+                    <th className="min-w-[10rem] px-4 py-3 font-bold uppercase tracking-wide text-[11px] text-slate-500">
+                      Cuenta
+                    </th>
+                    <th className="whitespace-nowrap px-4 py-3 font-bold uppercase tracking-wide text-[11px] text-slate-500">
+                      Credenciales
+                    </th>
+                    <th className="min-w-[8rem] px-4 py-3 font-bold uppercase tracking-wide text-[11px] text-slate-500">
+                      Acciones
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {usersLoading && !users.length ? (
+                    <>
+                      {[1, 2, 3].map((item) => (
+                        <tr key={item} className="border-b border-slate-100">
+                          <td colSpan={6} className="px-4 py-3">
+                            <div className="h-10 animate-pulse rounded-md bg-slate-100" />
+                          </td>
+                        </tr>
+                      ))}
+                    </>
+                  ) : users.length ? (
+                    users.map((user) => {
+                      const hasCredentials = Boolean(user.email?.trim());
+                      const shortId =
+                        user.id.length > 12 ? `${user.id.slice(0, 6)}...${user.id.slice(-3)}` : user.id;
+                      const code = ensureFiveClientCode(user.code ?? shortId);
+                      return (
+                        <tr
+                          key={user.id}
+                          className="border-b border-slate-100 transition-colors hover:bg-violet-50/80"
+                        >
+                          <td className="whitespace-nowrap px-4 py-3 font-mono text-[13px] font-semibold text-slate-900">
+                            {code}
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className="inline-flex max-w-full truncate rounded-full border border-slate-200 bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-800">
+                              {roleLabels[user.role] ?? user.role}
+                            </span>
+                          </td>
+                          <td className="max-w-[14rem] px-4 py-3 text-[13px] font-medium text-slate-800">
+                            <span className={user.disabled ? "text-slate-400" : ""}>{user.name}</span>
+                          </td>
+                          <td
+                            className="max-w-[12rem] px-4 py-3 text-[13px] text-slate-800"
+                            title={
+                              user.clientId
+                                ? (clientNameById.get(user.clientId) ?? user.clientId)
+                                : undefined
+                            }
+                          >
+                            <span className="line-clamp-2">
+                              {user.clientId ? clientNameById.get(user.clientId) ?? user.clientId : "—"}
+                            </span>
+                          </td>
+                          <td className="whitespace-nowrap px-4 py-3">
+                            <span
+                              className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold ${
+                                hasCredentials
+                                  ? "bg-emerald-100 text-emerald-800"
+                                  : "bg-slate-100 text-slate-500"
+                              }`}
+                            >
+                              {hasCredentials ? "Sí" : "No"}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setEditUser(user);
+                                  setEditUserName(user.name);
+                                  setEditUserRole(user.role);
+                                  setEditUserClientId(user.clientId ?? "");
+                                }}
+                                className="inline-flex items-center gap-2 rounded-full bg-sky-50 px-3 py-1.5 text-xs font-semibold text-sky-800 ring-1 ring-sky-200/80 transition hover:bg-sky-100"
+                              >
+                                <FiEdit2 className="h-4 w-4" />
+                                Editar
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  ) : (
+                    <tr>
+                      <td colSpan={6} className="px-4 py-12 text-center text-slate-500">
+                        Aún no hay usuarios.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
             </div>
-            {usersLoading && !users.length ? (
-              <div className="grid gap-0">
-                {[1, 2, 3].map((item) => (
-                  <div key={item} className="h-12 animate-pulse border-t border-[#edf1f5] bg-white" />
-                ))}
-              </div>
-            ) : users.length ? (
-              users.map((user) => {
-                const hasCredentials = Boolean(user.email?.trim());
-                const shortId = user.id.length > 12 ? `${user.id.slice(0, 6)}...${user.id.slice(-3)}` : user.id;
-                const code = ensureFiveClientCode(user.code ?? shortId);
-                return (
-                  <div
-                    key={user.id}
-                    className="grid grid-cols-[1.5fr_1.4fr_1.9fr_1.7fr_1.2fr_2fr] items-center gap-3 border-t border-[#edf1f5] bg-white px-4 py-3 text-sm text-[#3f3f3f]"
-                  >
-                    <span className="font-mono text-xs text-[#6b7280]">{code}</span>
-                    <span className="text-sm font-semibold text-[#3f3f3f]">{roleLabels[user.role] ?? user.role}</span>
-                    <span className={`font-semibold ${user.disabled ? "text-[#9ca3af]" : "text-[#2d2d2d]"}`}>
-                      {user.name}
-                    </span>
-                    <span className="text-sm text-[#4b5563]">
-                      {user.clientId ? clientNameById.get(user.clientId) ?? user.clientId : "-"}
-                    </span>
-                    <span className={`text-sm font-semibold ${hasCredentials ? "text-[#15803d]" : "text-[#9ca3af]"}`}>
-                      {hasCredentials ? "Sí" : "No"}
-                    </span>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setEditUser(user);
-                          setEditUserName(user.name);
-                          setEditUserRole(user.role);
-                          setEditUserClientId(user.clientId ?? "");
-                        }}
-                        className="inline-flex items-center gap-2 rounded-full bg-[#e8f1ff] px-3 py-1.5 text-xs font-semibold text-[#2b4ea3] transition hover:bg-[#dce7ff]"
-                      >
-                        <FiEdit2 className="h-4 w-4" />
-                        Editar
-                      </button>
-                      {/* Botón de habilitar/deshabilitar temporalmente oculto */}
-                      {/* <button
-                        type="button"
-                        onClick={() => toggleUserDisabled(user.id, !user.disabled)}
-                        title={user.disabled ? "Habilitar" : "Deshabilitar"}
-                        className={`inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-semibold transition ${user.disabled ? "bg-[#e5f3e8] text-[#1d8a45] hover:bg-[#d8ecde]" : "bg-[#f8e7e7] text-[#b64545] hover:bg-[#f3dcdc]"}`}
-                      >
-                        {user.disabled ? <FiCheck className="h-4 w-4" /> : <FiTrash2 className="h-4 w-4" />}
-                        {user.disabled ? "Habilitar" : "Deshabilitar"}
-                      </button> */}
-                    </div>
-                  </div>
-                );
-              })
-            ) : (
-              <div className="border-t border-[#edf1f5] px-4 py-4 text-sm text-[#6b7280]">Aún no hay usuarios.</div>
-            )}
           </div>
         </>
       );
