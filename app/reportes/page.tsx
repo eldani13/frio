@@ -9,6 +9,7 @@ import type { WarehouseMeta } from "@/app/interfaces/bodega";
 import { fetchFridemInventoryRows } from "@/lib/fridemInventory";
 import { fetchWarehouseStateOnce } from "@/lib/bodegaCloudState";
 import { totalKgInternoDesdeSlots } from "@/lib/bodegaInternalInventoryRows";
+import { kilosPedidoLineItem } from "@/app/lib/ordenCompraLineKgPedido";
 import { OrdenCompraService } from "@/app/services/ordenCompraService";
 import type { OrdenCompra } from "@/app/types/ordenCompra";
 
@@ -42,14 +43,11 @@ function ordenCuentaParaTarjetaProveedor(o: OrdenCompra): boolean {
   return ESTADOS_OC_TARJETA_PROVEEDOR.has((o.estado ?? "").trim().toLowerCase());
 }
 
-/** Suma kg pedidos en líneas (igual que el pie del listado proveedores). */
+/** Suma kg pedidos en líneas (misma regla que el listado «En inventario proveedores»). */
 function totalKgDesdeOrdenesProveedor(ordenes: OrdenCompra[]): number {
   return ordenes.filter(ordenCuentaParaTarjetaProveedor).reduce((acc, o) => {
     for (const li of o.lineItems ?? []) {
-      const pk = li.pesoKg;
-      if (pk != null && Number.isFinite(Number(pk)) && Number(pk) > 0) {
-        acc += Number(pk);
-      }
+      acc += kilosPedidoLineItem(li);
     }
     return acc;
   }, 0);

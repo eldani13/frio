@@ -7,6 +7,7 @@ import { CatalogoService } from "@/app/services/catalogoService";
 import type { OrdenCompra, OrdenCompraLineItem } from "@/app/types/ordenCompra";
 import type { Catalogo } from "@/app/types/catalogo";
 import { ordenCompraEstadoBadgeClass } from "@/app/types/ordenCompra";
+import { kilosPedidoLineItem } from "@/app/lib/ordenCompraLineKgPedido";
 
 const PAGE_SIZE = 10;
 
@@ -26,12 +27,18 @@ function ordenEnEstadoProveedor(o: OrdenCompra): boolean {
   return ESTADOS_OC_PROVEEDOR.has(normalizeEstado(o.estado ?? ""));
 }
 
+/** Firestore / datos viejos pueden traer códigos como número u otro tipo. */
+function strTrim(v: unknown): string {
+  if (v == null) return "";
+  return String(v).trim();
+}
+
 function shortLoteFromLine(li: OrdenCompraLineItem): string {
-  const code = (li.codeSnapshot ?? "").trim();
+  const code = strTrim(li.codeSnapshot);
   if (code) return `L-${code}`;
-  const sku = (li.skuSnapshot ?? "").trim();
+  const sku = strTrim(li.skuSnapshot);
   if (sku) return `L-${sku}`;
-  const id = (li.catalogoProductId ?? "").trim();
+  const id = strTrim(li.catalogoProductId);
   if (id.length >= 4) return `L-${id.slice(0, 4).toUpperCase()}`;
   return id ? `L-${id}` : "—";
 }
@@ -54,7 +61,7 @@ export type FilaProveedorInventario = {
   marca: string;
   embalaje: string;
   pesoUnitario: number | null;
-  piezas: number | null;
+  /** Peso pedido en kg (desde la línea o piezas × peso unitario del catálogo). */
   kilosActual: number;
   caducidad: string;
   fechaIngreso: string;
@@ -71,44 +78,39 @@ function filasFromOrdenes(
     const oid = o.id ?? "";
     const items = o.lineItems ?? [];
     items.forEach((li, idx) => {
-      const cat = catalogById.get(li.catalogoProductId);
-      const pedidoKg =
-        li.pesoKg != null && Number.isFinite(Number(li.pesoKg)) && Number(li.pesoKg) > 0
-          ? Number(li.pesoKg)
-          : 0;
-      const cant = Number(li.cantidad);
-      const piezas = Number.isFinite(cant) && cant > 0 ? Math.floor(cant) : null;
+      const pid = strTrim(li.catalogoProductId);
+      const cat = pid ? catalogById.get(pid) : undefined;
+      const kilosActual = kilosPedidoLineItem(li);
+      const cantRaw = Number(li.cantidad);
+      const hasCantidad = Number.isFinite(cantRaw) && cantRaw > 0;
+
       let pesoUnit: number | null = null;
-      if (piezas != null && piezas > 0 && pedidoKg > 0) {
-        pesoUnit = pedidoKg / piezas;
+      if (hasCantidad && kilosActual > 0) {
+        pesoUnit = kilosActual / cantRaw;
       } else if (cat?.weightValue != null && Number.isFinite(Number(cat.weightValue))) {
-        pesoUnit = Number(cat.weightValue);
+        const w = Number(cat.weightValue);
+        if (w > 0) pesoUnit = w;
       }
 
-      const marca =
-        (cat?.tags && String(cat.tags).trim()) ||
-        (cat?.provider && String(cat.provider).trim()) ||
-        (cat?.category && String(cat.category).trim()) ||
-        "";
+      const marca = strTrim(o.proveedorNombre) || "—";
       const embalaje =
         (cat?.logisticService && String(cat.logisticService).trim()) ||
         (cat?.inventoryTracker && String(cat.inventoryTracker).trim()) ||
         "";
 
       out.push({
-        id: `${oid}-${li.catalogoProductId}-${idx}`,
+        id: `${oid}-${pid || "sin-id"}-${idx}`,
         rd: o.numero || "—",
         renglon: idx + 1,
         lote: shortLoteFromLine(li),
-        descripcion: (li.titleSnapshot ?? "").trim() || "—",
+        descripcion: strTrim(li.titleSnapshot) || "—",
         marca,
         embalaje,
         pesoUnitario: pesoUnit,
-        piezas,
-        kilosActual: pedidoKg,
+        kilosActual,
         caducidad: "",
         fechaIngreso: fechaIngresoLabel(o),
-        llaveUnica: `${oid}::${li.catalogoProductId}::${idx}`,
+        llaveUnica: `${oid}::${pid || "sin-id"}::${idx}`,
         estado: (o.estado ?? "").trim() || "—",
       });
     });
@@ -172,10 +174,14 @@ export default function ListadoCargue() {
     [filas, currentPage],
   );
 
-  const totalKg = useMemo(
-    () => filas.reduce((acc, r) => acc + (Number.isFinite(r.kilosActual) ? r.kilosActual : 0), 0),
-    [filas],
-  );
+  const totalKgPedido = useMemo(() => {
+    let kg = 0;
+    for (const r of filas) {
+      const n = Number.isFinite(r.kilosActual) ? r.kilosActual : 0;
+      kg += n;
+    }
+    return kg;
+  }, [filas]);
 
   const showEmpty = !loading && !error && filas.length === 0;
 
@@ -229,16 +235,13 @@ export default function ListadoCargue() {
                 Descripción
               </th>
               <th className="whitespace-nowrap px-4 py-3 text-xs font-bold text-slate-400 uppercase tracking-widest border-b border-slate-200">
-                Marca
+                Proveedor
               </th>
               <th className="whitespace-nowrap px-4 py-3 text-xs font-bold text-slate-400 uppercase tracking-widest border-b border-slate-200">
                 Embalaje
               </th>
               <th className="whitespace-nowrap px-4 py-3 text-xs font-bold text-slate-400 uppercase tracking-widest border-b border-slate-200 text-right">
                 Peso Unit.
-              </th>
-              <th className="whitespace-nowrap px-4 py-3 text-xs font-bold text-slate-400 uppercase tracking-widest border-b border-slate-200 text-right">
-                Piezas
               </th>
               <th className="whitespace-nowrap px-4 py-3 text-xs font-bold text-slate-400 uppercase tracking-widest border-b border-slate-200 text-right">
                 Kilos actual
@@ -261,7 +264,7 @@ export default function ListadoCargue() {
             {loading ? (
               Array.from({ length: 4 }).map((_, idx) => (
                 <tr key={`sk-${idx}`} className="animate-pulse">
-                  {Array.from({ length: 13 }).map((__, i) => (
+                  {Array.from({ length: 12 }).map((__, i) => (
                     <td key={i} className="whitespace-nowrap px-4 py-4 border-b border-slate-100">
                       <div className="h-4 w-16 rounded bg-slate-200" />
                     </td>
@@ -272,7 +275,7 @@ export default function ListadoCargue() {
 
             {showEmpty ? (
               <tr>
-                <td colSpan={13} className="px-4 py-8 text-center text-sm text-slate-500">
+                <td colSpan={12} className="px-4 py-8 text-center text-sm text-slate-500">
                   No hay líneas de órdenes de compra en Iniciado, En curso o Transporte para esta cuenta.
                 </td>
               </tr>
@@ -307,11 +310,8 @@ export default function ListadoCargue() {
                     <td className="whitespace-nowrap px-4 py-4 border-b border-slate-100 text-right tabular-nums">
                       {d.pesoUnitario !== null ? `${numberFormatter.format(d.pesoUnitario)} Kg` : "—"}
                     </td>
-                    <td className="whitespace-nowrap px-4 py-4 border-b border-slate-100 text-right tabular-nums">
-                      {d.piezas !== null ? numberFormatter.format(d.piezas) : "—"}
-                    </td>
                     <td className="whitespace-nowrap px-4 py-4 border-b border-slate-100 text-right font-bold text-slate-900 tabular-nums">
-                      {numberFormatter.format(d.kilosActual)} Kg
+                      {`${numberFormatter.format(d.kilosActual)} Kg`}
                     </td>
                     <td className="whitespace-nowrap px-4 py-4 border-b border-slate-100 text-slate-700">
                       {d.caducidad || "—"}
@@ -347,13 +347,11 @@ export default function ListadoCargue() {
         >
           <div className="flex flex-col items-stretch sm:flex-row sm:items-center sm:justify-end sm:gap-4">
             <span className="text-center text-[11px] font-bold uppercase tracking-[0.2em] text-slate-500 sm:text-right sm:pt-1">
-              Total kilos pedidos (líneas mostradas)
+              Total pedido (líneas mostradas)
             </span>
-            <div className="mt-2 flex justify-center sm:mt-0 sm:justify-end">
+            <div className="mt-2 flex flex-col items-center gap-1 sm:mt-0 sm:items-end">
               <span className="inline-flex min-w-[10rem] items-center justify-center rounded-xl border border-[#A8D5BA]/60 bg-white px-5 py-2 text-right text-xl font-extrabold tracking-tight text-slate-900 shadow-sm tabular-nums sm:min-w-[12rem] sm:text-2xl">
-                {totalKg > 0
-                  ? `${totalKg.toLocaleString("es-CO", { maximumFractionDigits: 3 })} kg`
-                  : "—"}
+                {`${totalKgPedido.toLocaleString("es-CO", { maximumFractionDigits: 3 })} kg`}
               </span>
             </div>
           </div>

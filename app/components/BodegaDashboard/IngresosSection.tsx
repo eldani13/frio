@@ -149,9 +149,9 @@ export default function IngresosSection(props: Props) {
 
   return (
     <>
-      <section className="grid w-full min-w-0 gap-4 sm:gap-6 items-stretch [grid-template-columns:repeat(auto-fit,minmax(min(100%,17.5rem),1fr))] md:[grid-template-columns:repeat(auto-fit,minmax(min(100%,20rem),1fr))] xl:[grid-template-columns:repeat(auto-fit,minmax(min(100%,22rem),1fr))]">
+      <section className="grid w-full min-w-0 grid-cols-1 items-stretch gap-4 sm:gap-6 md:grid-cols-2 lg:grid-cols-4">
         {/* 1. Orden de ingreso (OC en transporte → checklist → cajas en zona) */}
-        <div className="w-full min-w-0 flex h-full min-h-0">
+        <div className="flex h-full min-h-0 w-full min-w-0">
           <OcOrdenIngresoPanel
             warehouseId={warehouseId}
             isBodegaInterna={isBodegaInterna}

@@ -18,6 +18,7 @@ import type {
   OrdenCompraRecepcionLineaAdicional,
 } from "@/app/types/ordenCompra";
 import { resolveProveedorPedidoIntegracion } from "@/app/services/pedidoProveedorResolve";
+import { ordenCompraIngresoLineKey } from "@/app/lib/ordenCompraIngresoLineKey";
 
 /** OC con ruta de dueño (custodio / vistas globales). */
 export type OrdenCompraPendienteRecepcion = OrdenCompra & {
@@ -47,6 +48,79 @@ function lineItemForFirestore(item: OrdenCompraLineItem): Record<string, string 
     row.codeSnapshot = String(item.codeSnapshot);
   }
   return row;
+}
+
+/** Firestore no acepta `undefined` en mapas anidados; limpia el payload de updateDoc. */
+function stripUndefinedDeep<T>(value: T): T {
+  if (value === undefined || value === null) return value;
+  if (typeof value !== "object") return value;
+  if (Array.isArray(value)) {
+    return value.map((item) => stripUndefinedDeep(item)) as T;
+  }
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+    if (v === undefined) continue;
+    out[k] = stripUndefinedDeep(v);
+  }
+  return out as T;
+}
+
+function lineaRecepcionForFirestore(l: OrdenCompraRecepcionLinea): Record<string, string | number> {
+  const catalogoProductId = String(l.catalogoProductId ?? "").trim();
+  const row: Record<string, string | number> = {
+    catalogoProductId,
+    cantidadRecibida: Number.isFinite(Number(l.cantidadRecibida))
+      ? Math.max(0, Number(l.cantidadRecibida))
+      : 0,
+  };
+  const pkg = l.pesoKgRecibido;
+  if (pkg != null && Number.isFinite(Number(pkg))) {
+    row.pesoKgRecibido = Math.max(0, Number(pkg));
+  }
+  return row;
+}
+
+/** Evita `undefined` dentro de `recepcion` (updateDoc falla con "Unsupported field value: undefined"). */
+function lineaAdicionalRecepcionForFirestore(
+  a: OrdenCompraRecepcionLineaAdicional,
+): Record<string, string | number> {
+  const row: Record<string, string | number> = {
+    titleSnapshot: String(a.titleSnapshot ?? "").trim() || "Producto adicional",
+    pesoKgRecibido: Number.isFinite(Number(a.pesoKgRecibido)) ? Number(a.pesoKgRecibido) : 0,
+  };
+  const pid = String(a.catalogoProductId ?? "").trim();
+  if (pid) row.catalogoProductId = pid;
+  if (
+    a.temperaturaRegistrada != null &&
+    Number.isFinite(Number(a.temperaturaRegistrada))
+  ) {
+    row.temperaturaRegistrada = Number(a.temperaturaRegistrada);
+  }
+  return row;
+}
+
+function buildRecepcionDocForFirestore(params: {
+  lineas: OrdenCompraRecepcionLinea[];
+  sinDiferencias: boolean;
+  cerradaPorUid: string;
+  cerradaPorNombre?: string;
+  lineasAdicionales?: OrdenCompraRecepcionLineaAdicional[];
+  notas?: string;
+}): Record<string, unknown> {
+  const out: Record<string, unknown> = {
+    lineas: params.lineas.map(lineaRecepcionForFirestore),
+    cerradaAt: Date.now(),
+    cerradaPorUid: params.cerradaPorUid.trim(),
+    sinDiferencias: params.sinDiferencias,
+  };
+  const name = (params.cerradaPorNombre ?? "").trim();
+  if (name) out.cerradaPorNombre = name;
+  if (params.lineasAdicionales?.length) {
+    out.lineasAdicionales = params.lineasAdicionales.map(lineaAdicionalRecepcionForFirestore);
+  }
+  const notas = (params.notas ?? "").trim();
+  if (notas) out.notas = notas;
+  return out;
 }
 
 type OrdenCompraConId = OrdenCompra & { id: string };
@@ -293,8 +367,8 @@ export const OrdenCompraService = {
       return row;
     });
 
-    const sinDiferencias = items.every((li) => {
-      const rec = lineas.find((l) => l.catalogoProductId === li.catalogoProductId);
+    const sinDiferencias = items.every((li, idx) => {
+      const rec = lineas[idx];
       const pedidoKg =
         li.pesoKg != null && Number.isFinite(Number(li.pesoKg)) && Number(li.pesoKg) > 0
           ? Number(li.pesoKg)
@@ -308,19 +382,21 @@ export const OrdenCompraService = {
     });
 
     const notas = (payload.notas ?? "").trim();
-    const recepcion = {
+    const recepcion = buildRecepcionDocForFirestore({
       lineas,
-      cerradaAt: Date.now(),
-      cerradaPorUid: payload.cerradaPorUid.trim(),
-      cerradaPorNombre: (payload.cerradaPorNombre ?? "").trim() || undefined,
       sinDiferencias,
-      ...(notas ? { notas } : {}),
-    };
-
-    await updateDoc(ref, {
-      estado: sinDiferencias ? "Recibida(ok)" : "Recibida(con diferencias)",
-      recepcion,
+      cerradaPorUid: payload.cerradaPorUid,
+      cerradaPorNombre: payload.cerradaPorNombre,
+      notas,
     });
+
+    await updateDoc(
+      ref,
+      stripUndefinedDeep({
+        estado: sinDiferencias ? "Recibida(ok)" : "Recibida(con diferencias)",
+        recepcion,
+      }),
+    );
   },
 
   /**
@@ -359,12 +435,16 @@ export const OrdenCompraService = {
 
     const map = payload.pesosKgRecibidosPorLinea ?? {};
 
-    const lineas: OrdenCompraRecepcionLinea[] = items.map((li) => {
+    const lineas: OrdenCompraRecepcionLinea[] = items.map((li, idx) => {
       const pedidoKg =
         li.pesoKg != null && Number.isFinite(Number(li.pesoKg)) && Number(li.pesoKg) > 0
           ? Number(li.pesoKg)
           : null;
-      const raw = map[li.catalogoProductId];
+      const byLineKey = map[ordenCompraIngresoLineKey(idx)];
+      const raw =
+        byLineKey != null && Number.isFinite(Number(byLineKey))
+          ? byLineKey
+          : map[li.catalogoProductId];
       const val = raw != null && Number.isFinite(Number(raw)) ? Number(raw) : 0;
 
       if (pedidoKg != null) {
@@ -375,14 +455,16 @@ export const OrdenCompraService = {
           pesoKgRecibido: v,
         };
       }
+      const v = Math.max(0, val);
       return {
         catalogoProductId: li.catalogoProductId,
-        cantidadRecibida: Math.max(0, Math.floor(val)),
+        cantidadRecibida: Math.max(0, Math.floor(v)),
+        ...(v > 0 ? { pesoKgRecibido: v } : {}),
       };
     });
 
-    const lineasMatch = items.every((li) => {
-      const rec = lineas.find((l) => l.catalogoProductId === li.catalogoProductId);
+    const lineasMatch = items.every((li, idx) => {
+      const rec = lineas[idx];
       const pedidoKg =
         li.pesoKg != null && Number.isFinite(Number(li.pesoKg)) && Number(li.pesoKg) > 0
           ? Number(li.pesoKg)
@@ -398,19 +480,21 @@ export const OrdenCompraService = {
     const extras = payload.lineasAdicionales ?? [];
     const sinDiferencias = lineasMatch && extras.length === 0;
 
-    const recepcion = {
+    const recepcion = buildRecepcionDocForFirestore({
       lineas,
-      ...(extras.length ? { lineasAdicionales: extras } : {}),
-      cerradaAt: Date.now(),
-      cerradaPorUid: payload.cerradaPorUid.trim(),
-      cerradaPorNombre: (payload.cerradaPorNombre ?? "").trim() || undefined,
       sinDiferencias,
-    };
-
-    await updateDoc(ref, {
-      estado: sinDiferencias ? "Cerrado(ok)" : "Cerrado(no ok)",
-      recepcion,
+      cerradaPorUid: payload.cerradaPorUid,
+      cerradaPorNombre: payload.cerradaPorNombre,
+      lineasAdicionales: extras.length ? extras : undefined,
     });
+
+    await updateDoc(
+      ref,
+      stripUndefinedDeep({
+        estado: sinDiferencias ? "Cerrado(ok)" : "Cerrado(no ok)",
+        recepcion,
+      }),
+    );
 
     return { sinDiferencias };
   },

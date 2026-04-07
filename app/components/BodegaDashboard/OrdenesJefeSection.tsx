@@ -1098,6 +1098,7 @@ export default function OrdenesJefeSection(props: {
                                       name: slot.name,
                                       autoId: slot.autoId,
                                       temperature: slot.temperature,
+                                      zone: "bodega",
                                     },
                                   ]);
                                 }}

@@ -81,6 +81,23 @@ type UserProfile = {
 const DEFAULT_TOTAL_SLOTS = 12;
 const WAREHOUSE_ID = DEFAULT_WAREHOUSE_ID;
 
+/** > este valor (°C) dispara alertas de temperatura (misma regla que reportes / jefe). */
+const HIGH_TEMP_ALERT_THRESHOLD = 5;
+
+/**
+ * Firestore o ediciones manuales pueden guardar la temperatura como string;
+ * si solo aceptamos `number`, se pierde el valor y no hay alertas en tiempo real.
+ */
+function coerceTemperatureFromCloud(value: unknown): number | null {
+  if (value === null || value === undefined) return null;
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string") {
+    const t = Number(String(value).trim().replace(",", "."));
+    return Number.isFinite(t) ? t : null;
+  }
+  return null;
+}
+
 type AlertReason = "no_tuve_tiempo" | "no_quise" | "no_pude";
 
 type WarehouseMeta = {
@@ -192,10 +209,7 @@ const normalizeSlots = (value: unknown, expectedSize = DEFAULT_TOTAL_SLOTS): Slo
         : normalizedName
           ? createAutoId("BOX")
           : "";
-    const normalizedTemp =
-      typeof temperature === "number" || temperature === null
-        ? temperature
-        : null;
+    const normalizedTemp = coerceTemperatureFromCloud(temperature);
     const normalizedClient =
       typeof client === "string"
         ? client
@@ -286,10 +300,18 @@ const normalizeBoxes = (value: unknown): Box[] | null => {
       continue;
     }
     const record = item as Record<string, unknown>;
-    const position = record.position;
-    const temperature = record.temperature;
     const client = record.client;
-    if (typeof position !== "number" || typeof temperature !== "number") {
+    const rawPos = record.position;
+    const positionNum = Math.floor(
+      typeof rawPos === "number" && Number.isFinite(rawPos)
+        ? rawPos
+        : Number(String(rawPos ?? "").trim()),
+    );
+    if (!Number.isFinite(positionNum) || positionNum < 1) {
+      continue;
+    }
+    const temperature = coerceTemperatureFromCloud(record.temperature);
+    if (temperature === null) {
       continue;
     }
 
@@ -314,7 +336,7 @@ const normalizeBoxes = (value: unknown): Box[] | null => {
         : undefined;
 
     boxes.push({
-      position,
+      position: positionNum,
       autoId,
       name: name ?? "",
       temperature,
@@ -1474,6 +1496,60 @@ export default function BodegaDashboard() {
     return () => window.clearInterval(timerId);
   }, []);
 
+  /** Si la temperatura en bodega vuelve a subir (p. ej. cambio en Firestore), ya no debe ocultarse como "resuelta". */
+  useEffect(() => {
+    const hotBodega = new Set<number>();
+    for (const s of slots) {
+      if (!s.autoId?.trim()) continue;
+      if (
+        typeof s.temperature === "number" &&
+        Number.isFinite(s.temperature) &&
+        s.temperature > HIGH_TEMP_ALERT_THRESHOLD
+      ) {
+        hotBodega.add(s.position);
+      }
+    }
+    setAlertasOperarioSolved((prev) => {
+      const next = prev.filter((p) => !hotBodega.has(p));
+      return next.length === prev.length ? prev : next;
+    });
+  }, [slots]);
+
+  /** Si el mapa ya marca temperatura OK, no dejar filas en `alertasOperario` (sincroniza con Firestore vía save automático). */
+  useEffect(() => {
+    if (!cloudReady || isExternalWarehouse || alertasOperario.length === 0) return;
+
+    const liveTempForAlertRow = (a: (typeof alertasOperario)[number]): number | null => {
+      const pos = Number(a.position);
+      const zone = ((a as { zone?: OrderSource }).zone ?? "bodega") as OrderSource;
+      if (zone === "bodega") {
+        const s = slots.find((x) => x.position === pos);
+        return coerceTemperatureFromCloud(s?.temperature ?? null);
+      }
+      if (zone === "ingresos") {
+        const b = inboundBoxes.find((x) => x.position === pos);
+        return coerceTemperatureFromCloud(b?.temperature ?? null);
+      }
+      const b = outboundBoxes.find((x) => x.position === pos);
+      return coerceTemperatureFromCloud(b?.temperature ?? null);
+    };
+
+    const pruned = alertasOperario.filter((a) => {
+      const t = liveTempForAlertRow(a);
+      if (t === null) return true;
+      return t > HIGH_TEMP_ALERT_THRESHOLD;
+    });
+    if (pruned.length === alertasOperario.length) return;
+    setAlertasOperario(pruned);
+  }, [
+    alertasOperario,
+    cloudReady,
+    inboundBoxes,
+    isExternalWarehouse,
+    outboundBoxes,
+    slots,
+  ]);
+
   const occupiedCount = useMemo(
     () => slots.filter((slot) => slot.autoId.trim() !== "").length,
     [slots],
@@ -1594,11 +1670,23 @@ export default function BodegaDashboard() {
   };
 
   const inboundHighBoxes = useMemo(
-    () => inboundBoxes.filter((box) => box.temperature > 5),
+    () =>
+      inboundBoxes.filter(
+        (box) =>
+          typeof box.temperature === "number" &&
+          Number.isFinite(box.temperature) &&
+          box.temperature > HIGH_TEMP_ALERT_THRESHOLD,
+      ),
     [inboundBoxes],
   );
   const outboundHighBoxes = useMemo(
-    () => outboundBoxes.filter((box) => box.temperature > 5),
+    () =>
+      outboundBoxes.filter(
+        (box) =>
+          typeof box.temperature === "number" &&
+          Number.isFinite(box.temperature) &&
+          box.temperature > HIGH_TEMP_ALERT_THRESHOLD,
+      ),
     [outboundBoxes],
   );
   const bodegaHighSlots = React.useMemo(() => {
@@ -1606,7 +1694,8 @@ export default function BodegaDashboard() {
     return slots.filter(
       (slot) =>
         typeof slot.temperature === "number" &&
-        slot.temperature > 5 &&
+        Number.isFinite(slot.temperature) &&
+        slot.temperature > HIGH_TEMP_ALERT_THRESHOLD &&
         !solvedPositions.has(slot.position),
     );
   }, [alertasOperarioSolved, slots]);
@@ -3154,6 +3243,117 @@ export default function BodegaDashboard() {
     });
   }
 
+  /** Operario: al guardar temperatura al resolver alerta, actualizar la caja en la zona correcta y persistir. */
+  function handlePersistTemperatureForAlert(
+    position: number,
+    newTemp: number,
+    zone: OrderSource,
+  ) {
+    const pos = Number(position);
+    if (!Number.isFinite(newTemp)) return;
+
+    let nextSlots = slots;
+    let nextInbound = inboundBoxes;
+    let nextOutbound = outboundBoxes;
+
+    if (zone === "bodega") {
+      nextSlots = slots.map((s) => (s.position === pos ? { ...s, temperature: newTemp } : s));
+      setSlots(nextSlots);
+    } else if (zone === "ingresos") {
+      nextInbound = inboundBoxes.map((b) =>
+        b.position === pos ? { ...b, temperature: newTemp } : b,
+      );
+      setInboundBoxes(nextInbound);
+    } else if (zone === "salida") {
+      nextOutbound = outboundBoxes.map((b) =>
+        b.position === pos ? { ...b, temperature: newTemp } : b,
+      );
+      setOutboundBoxes(nextOutbound);
+    }
+
+    setSelectedBoxModal((prev) =>
+      prev && prev.position === pos ? { ...prev, temperature: newTemp } : prev,
+    );
+    setMessage("Temperatura actualizada");
+    persistWarehouseStateNow({
+      slots: nextSlots,
+      inboundBoxes: nextInbound,
+      outboundBoxes: nextOutbound,
+      dispatchedBoxes,
+      orders,
+      stats,
+      warehouseName,
+      alerts,
+      assignedAlerts,
+      alertasOperario,
+      alertasOperarioSolved,
+      llamadasJefe,
+    });
+  }
+
+  /**
+   * Un solo persist con temperatura + lista de alertas ya sin la fila resuelta.
+   * Si se persiste antes de quitar la alerta, onSnapshot vuelve a traer la alerta desde Firestore.
+   */
+  function handleOperarioResolveTemperatureAlert(payload: {
+    position: number;
+    newTemp: number;
+    zone: OrderSource;
+    alertIndex: number;
+  }) {
+    const { position, newTemp, zone, alertIndex } = payload;
+    const pos = Number(position);
+    if (!Number.isFinite(newTemp) || alertIndex < 0 || alertIndex >= alertasOperario.length) {
+      return;
+    }
+
+    let nextSlots = slots;
+    let nextInbound = inboundBoxes;
+    let nextOutbound = outboundBoxes;
+
+    if (zone === "bodega") {
+      nextSlots = slots.map((s) => (s.position === pos ? { ...s, temperature: newTemp } : s));
+    } else if (zone === "ingresos") {
+      nextInbound = inboundBoxes.map((b) =>
+        b.position === pos ? { ...b, temperature: newTemp } : b,
+      );
+    } else if (zone === "salida") {
+      nextOutbound = outboundBoxes.map((b) =>
+        b.position === pos ? { ...b, temperature: newTemp } : b,
+      );
+    }
+
+    const remainingAlerts = alertasOperario.filter((_, i) => i !== alertIndex);
+    const solvedPositions = alertasOperarioSolved.includes(pos)
+      ? alertasOperarioSolved
+      : [...alertasOperarioSolved, pos];
+
+    setSlots(nextSlots);
+    setInboundBoxes(nextInbound);
+    setOutboundBoxes(nextOutbound);
+    setAlertasOperario(remainingAlerts);
+    setAlertasOperarioSolved(solvedPositions);
+    setSelectedBoxModal((prev) =>
+      prev && prev.position === pos ? { ...prev, temperature: newTemp } : prev,
+    );
+    setMessage("Temperatura actualizada");
+
+    persistWarehouseStateNow({
+      slots: nextSlots,
+      inboundBoxes: nextInbound,
+      outboundBoxes: nextOutbound,
+      dispatchedBoxes,
+      orders,
+      stats,
+      warehouseName,
+      alerts,
+      assignedAlerts,
+      alertasOperario: remainingAlerts,
+      alertasOperarioSolved: solvedPositions,
+      llamadasJefe,
+    });
+  }
+
   return (
     <div className="min-h-screen bg-slate-50 px-6 py-10 text-slate-900">
       <main
@@ -3454,6 +3654,8 @@ export default function BodegaDashboard() {
                       onUpdateAlertasOperario={setAlertasOperario}
                       onUpdateAlertasOperarioSolved={setAlertasOperarioSolved}
                       onUpdateLlamadasJefe={setLlamadasJefe}
+                      onPersistTemperatureForAlert={handlePersistTemperatureForAlert}
+                      onOperarioResolveTemperatureAlert={handleOperarioResolveTemperatureAlert}
                     />
                   </div>
                 </div>
@@ -3476,6 +3678,8 @@ export default function BodegaDashboard() {
                   onUpdateAlertasOperario={setAlertasOperario}
                   onUpdateAlertasOperarioSolved={setAlertasOperarioSolved}
                   onUpdateLlamadasJefe={setLlamadasJefe}
+                  onPersistTemperatureForAlert={handlePersistTemperatureForAlert}
+                  onOperarioResolveTemperatureAlert={handleOperarioResolveTemperatureAlert}
                 />
               </section>
             ) : null}

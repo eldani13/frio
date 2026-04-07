@@ -59,6 +59,39 @@ const STATUS_STYLES: Record<
 const orderTimestamp = (order: BodegaOrder) =>
   typeof order.createdAtMs === "number" ? order.createdAtMs : Date.now();
 
+/** Mismo umbral que `BodegaDashboard` / jefe: por encima = temperatura alta. */
+const HIGH_TEMP_ALERT_THRESHOLD = 5;
+
+function coerceTempLocal(v: unknown): number | null {
+  if (v === null || v === undefined) return null;
+  if (typeof v === "number" && Number.isFinite(v)) return v;
+  if (typeof v === "string") {
+    const t = Number(String(v).trim().replace(",", "."));
+    return Number.isFinite(t) ? t : null;
+  }
+  return null;
+}
+
+function liveTempAssignedAlert(
+  alerta: { position: number; zone?: unknown },
+  slots: RequestsQueueProps["slots"],
+  inboundBoxes: RequestsQueueProps["inboundBoxes"],
+  outboundBoxes: RequestsQueueProps["outboundBoxes"],
+): number | null {
+  const pos = Number(alerta.position);
+  const zone = (alerta.zone as OrderSource | undefined) ?? "bodega";
+  if (zone === "bodega") {
+    const s = slots.find((x) => x.position === pos);
+    return coerceTempLocal(s?.temperature);
+  }
+  if (zone === "ingresos") {
+    const b = inboundBoxes.find((x) => x.position === pos);
+    return coerceTempLocal(b?.temperature);
+  }
+  const b = outboundBoxes.find((x) => x.position === pos);
+  return coerceTempLocal(b?.temperature);
+}
+
 type ReviewDetail = {
   zone: OrderSource;
   position: number;
@@ -84,6 +117,8 @@ export default function RequestsQueue(props: RequestsQueueProps) {
     onUpdateAlertasOperario,
     onUpdateAlertasOperarioSolved,
     onUpdateLlamadasJefe,
+    onPersistTemperatureForAlert,
+    onOperarioResolveTemperatureAlert,
   } = props;
 
   // Optional callbacks may be provided from parent, keep refs without invoking
@@ -123,6 +158,26 @@ export default function RequestsQueue(props: RequestsQueueProps) {
     [requests],
   );
   const nextRequest = orderedRequests[0];
+
+  /**
+   * Solo alertas cuya zona sigue por encima del umbral. Evita listar asignaciones “fantasma”
+   * si Firestore aún tiene la fila pero el mapa ya tiene temperatura corregida.
+   * `sourceIndex` = índice en `alertasOperario` (para resolver / persistir).
+   */
+  const alertasOperarioVisibles = useMemo(() => {
+    const out: Array<{
+      alerta: (typeof alertasOperario)[number];
+      sourceIndex: number;
+    }> = [];
+    alertasOperario.forEach((alerta, sourceIndex) => {
+      const live = liveTempAssignedAlert(alerta, slots, inboundBoxes, outboundBoxes);
+      if (live !== null && Number.isFinite(live) && live <= HIGH_TEMP_ALERT_THRESHOLD) {
+        return;
+      }
+      out.push({ alerta, sourceIndex });
+    });
+    return out;
+  }, [alertasOperario, slots, inboundBoxes, outboundBoxes]);
 
   const originStatus: keyof typeof STATUS_STYLES = nextRequest
     ? (() => {
@@ -193,6 +248,11 @@ export default function RequestsQueue(props: RequestsQueueProps) {
     newTemp: number,
     opts: { zone?: OrderSource; name?: string; autoId?: string } = {},
   ) => {
+    const zone = opts.zone ?? "bodega";
+    if (Number.isFinite(newTemp) && onPersistTemperatureForAlert) {
+      onPersistTemperatureForAlert(Number(position), newTemp, zone);
+    }
+
     const updated = alertasOperario.map((a) =>
       Number(a.position) === position ? { ...a, temperature: newTemp } : a,
     );
@@ -204,19 +264,12 @@ export default function RequestsQueue(props: RequestsQueueProps) {
         : prev;
     });
 
-    // Trigger solved flow when editing temperature from a solve modal
     if (alertaSeleccionada) {
       const pos = Number(position);
       const solved = alertasOperarioSolved.includes(pos)
         ? alertasOperarioSolved
         : [...alertasOperarioSolved, pos];
       onUpdateAlertasOperarioSolved(solved);
-    }
-
-    // Mirror the temp change into slots list if we have it
-    const zone = opts.zone ?? "bodega";
-    if (zone === "bodega") {
-      // parent is responsible for persisting; this component just updates alerts
     }
   };
 
@@ -287,7 +340,7 @@ export default function RequestsQueue(props: RequestsQueueProps) {
               </button>
             </div>
             <div className="px-8 py-6 min-h-30 flex flex-col items-center">
-              {alertasOperario.length === 0 ? (
+              {alertasOperarioVisibles.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-8">
                   <svg
                     className="w-16 h-16 text-slate-200 mb-3"
@@ -311,9 +364,9 @@ export default function RequestsQueue(props: RequestsQueueProps) {
                 </div>
               ) : (
                 <ul className="mt-2 w-full space-y-3">
-                  {alertasOperario.map((alerta, idx) => (
+                  {alertasOperarioVisibles.map(({ alerta, sourceIndex }) => (
                     <li
-                      key={idx}
+                      key={`${sourceIndex}-${Number(alerta.position)}`}
                       className="bg-linear-to-r from-red-50 to-white border border-red-200 rounded-xl px-5 py-4 text-red-800 flex items-center gap-4 shadow-sm hover:shadow-md transition-all"
                     >
                       <span className="inline-flex items-center justify-center w-10 h-10 rounded-full bg-red-100">
@@ -330,17 +383,26 @@ export default function RequestsQueue(props: RequestsQueueProps) {
                             </span>
                           )}
                         </div>
-                        {typeof (alerta as any).temperature === "number" && (
-                          <span className="inline-block text-xs font-semibold text-white bg-red-500 rounded px-2 py-0.5 animate-pulse shadow">
-                            {(alerta as any).temperature} °C
-                          </span>
-                        )}
+                        {(() => {
+                          const live = liveTempAssignedAlert(alerta, slots, inboundBoxes, outboundBoxes);
+                          const shown =
+                            live !== null && Number.isFinite(live)
+                              ? live
+                              : typeof (alerta as any).temperature === "number"
+                                ? (alerta as any).temperature
+                                : null;
+                          return shown !== null ? (
+                            <span className="inline-block text-xs font-semibold text-white bg-red-500 rounded px-2 py-0.5 animate-pulse shadow">
+                              {shown} °C
+                            </span>
+                          ) : null;
+                        })()}
                         <div className="text-xs text-slate-500 mt-1">Alerta de temperatura alta</div>
                       </div>
                       <button
                         className="ml-2 px-3 py-1 rounded-lg bg-green-500 hover:bg-green-600 text-white text-xs font-bold shadow transition-all focus:outline-none focus:ring-2 focus:ring-green-300"
                         onClick={() => {
-                          setAlertaSeleccionada({ alerta, idx });
+                          setAlertaSeleccionada({ alerta, idx: sourceIndex });
                           setShowSolveModal(true);
                         }}
                         title="Marcar como solucionada"
@@ -471,22 +533,22 @@ export default function RequestsQueue(props: RequestsQueueProps) {
           <button
             type="button"
             className={`flex-1 flex items-center justify-center gap-2 rounded-2xl font-bold text-lg py-4 shadow transition-all border-2 focus:outline-none focus:ring-2
-              ${alertasOperario.length > 0
+              ${alertasOperarioVisibles.length > 0
                 ? "bg-red-100 hover:bg-red-200 text-red-700 border-red-200 focus:ring-red-300"
                 : "bg-slate-100 text-slate-400 border-slate-200 focus:ring-slate-300 cursor-not-allowed"}
             `}
             style={{ minWidth: 0 }}
-            onClick={() => alertasOperario.length > 0 && setShowAlertModal(true)}
-            disabled={alertasOperario.length === 0}
+            onClick={() => alertasOperarioVisibles.length > 0 && setShowAlertModal(true)}
+            disabled={alertasOperarioVisibles.length === 0}
           >
             <FiAlertCircle className="w-6 h-6" />
             Alertas
-            {alertasOperario.length > 0 && (
+            {alertasOperarioVisibles.length > 0 && (
               <span
                 className="ml-2 px-2 py-0.5 rounded-full bg-red-500 text-white text-base font-bold animate-pulse"
                 style={{ minWidth: 28, textAlign: "center" }}
               >
-                {alertasOperario.length}
+                {alertasOperarioVisibles.length}
               </span>
             )}
           </button>
@@ -775,7 +837,9 @@ export default function RequestsQueue(props: RequestsQueueProps) {
                       autoId: (alertaSeleccionada.alerta as any).autoId,
                       name: (alertaSeleccionada.alerta as any).name,
                       temperature: (alertaSeleccionada.alerta as any).temperature,
-                      zone: "bodega",
+                      zone:
+                        ((alertaSeleccionada.alerta as { zone?: OrderSource }).zone as OrderSource) ??
+                        "bodega",
                     })
                   }
                 >
@@ -898,8 +962,22 @@ export default function RequestsQueue(props: RequestsQueueProps) {
                 onSubmit={(e) => {
                   e.preventDefault();
                   const formData = new FormData(e.currentTarget);
-                  const temp = Number(formData.get("temp"));
-                  if (!Number.isNaN(temp)) {
+                  const raw = formData.get("temp");
+                  const temp =
+                    raw === "" || raw == null ? NaN : Number(String(raw).replace(",", "."));
+                  if (Number.isNaN(temp) || !Number.isFinite(temp)) {
+                    return;
+                  }
+                  if (alertaSeleccionada && onOperarioResolveTemperatureAlert) {
+                    onOperarioResolveTemperatureAlert({
+                      position: editTempModal.position,
+                      newTemp: temp,
+                      zone: editTempModal.zone,
+                      alertIndex: alertaSeleccionada.idx,
+                    });
+                    setShowSolveModal(false);
+                    setAlertaSeleccionada(null);
+                  } else {
                     handleUpdateAlertTemperature(editTempModal.position, temp, {
                       zone: editTempModal.zone,
                       name: editTempModal.name,
@@ -911,8 +989,8 @@ export default function RequestsQueue(props: RequestsQueueProps) {
                         alertaSeleccionada.idx,
                       );
                     }
-                    setEditTempModal(null);
                   }
+                  setEditTempModal(null);
                 }}
                 className="flex flex-col gap-1 w-full"
               >
@@ -948,8 +1026,7 @@ export default function RequestsQueue(props: RequestsQueueProps) {
                     step="any"
                     inputMode="decimal"
                     className="w-full flex-1 rounded-lg border border-blue-200 px-2 py-1 text-sm font-semibold text-blue-900 shadow-sm focus:ring-2 focus:ring-blue-300 outline-none transition"
-                    placeholder="Solo por imagen"
-                    readOnly
+                    placeholder="Ej. 2,5 o subí imagen"
                   />
                   <button
                     type="button"

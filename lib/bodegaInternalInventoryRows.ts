@@ -75,7 +75,8 @@ export function filasInventarioInternoFromSlots(slots: Slot[]): FilaInventarioIn
     .sort((a, b) => a.position - b.position)
     .map((s) => {
       const raw = slotExtras(s);
-      const cat = categoriaTermica(s.temperature);
+      const tempResolved = pickNum(s.temperature ?? raw.temperature);
+      const cat = categoriaTermica(tempResolved);
       const estadoTexto =
         cat === "sin_dato"
           ? "Sin dato térmico"
@@ -95,7 +96,7 @@ export function filasInventarioInternoFromSlots(slots: Slot[]): FilaInventarioIn
         posicion: s.position,
         nombre: nombreRaw || "Sin nombre",
         cantidadKg: kg,
-        temperatura: s.temperature,
+        temperatura: tempResolved,
         estadoTexto,
         esAlerta: cat === "alta",
         categoriaTermica: cat,

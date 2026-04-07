@@ -42,10 +42,10 @@ export function ProviderOrdenesModal({
       onClick={onClose}
     >
       <div
-        className="max-h-[90vh] w-full max-w-4xl overflow-hidden rounded-[12px] border border-gray-100 bg-white shadow-xl"
+        className="flex max-h-[min(90vh,900px)] w-full max-w-4xl flex-col overflow-hidden rounded-[12px] border border-gray-100 bg-white shadow-xl"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between border-b border-[#eef1f4] px-6 py-4">
+        <div className="flex shrink-0 items-center justify-between border-b border-[#eef1f4] px-6 py-4">
           <div>
             <h2 id="provider-ordenes-title" className="text-lg font-semibold text-gray-900">
               Órdenes de compra
@@ -62,18 +62,18 @@ export function ProviderOrdenesModal({
           </button>
         </div>
 
-        <div className="overflow-hidden p-5">
-          <div className="overflow-x-auto overflow-y-auto rounded-xl border border-slate-200">
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-4">
+          <div className="overflow-x-auto rounded-xl border border-slate-200">
             <table className="w-full min-w-[520px] border-collapse text-left text-sm">
-              <thead>
+              <thead className="sticky top-0 z-10 bg-slate-50 shadow-[0_1px_0_0_rgb(226_232_240)]">
                 <tr className="border-b border-slate-200 bg-slate-50">
-                  <th className="px-4 py-3 text-left text-[11px] font-bold uppercase tracking-wide text-slate-500">
+                  <th className="bg-slate-50 px-4 py-3 text-left text-[11px] font-bold uppercase tracking-wide text-slate-500">
                     Orden de compra
                   </th>
-                  <th className="px-4 py-3 text-left text-[11px] font-bold uppercase tracking-wide text-slate-500">
+                  <th className="bg-slate-50 px-4 py-3 text-left text-[11px] font-bold uppercase tracking-wide text-slate-500">
                     Estado
                   </th>
-                  <th className="px-4 py-3 text-left text-[11px] font-bold uppercase tracking-wide text-slate-500">
+                  <th className="bg-slate-50 px-4 py-3 text-left text-[11px] font-bold uppercase tracking-wide text-slate-500">
                     Pedido vs ingreso (bodega)
                   </th>
                 </tr>
@@ -120,9 +120,9 @@ export function ProviderOrdenesModal({
                           <span className="text-slate-400">Sin líneas en la orden.</span>
                         ) : (
                           <ul className="space-y-1.5">
-                            {row.lineasDiff.map((ln) => (
+                            {row.lineasDiff.map((ln, lnIdx) => (
                               <li
-                                key={ln.catalogoProductId}
+                                key={`${row.id}-ln-${lnIdx}-${ln.catalogoProductId}`}
                                 className="flex items-start gap-2 text-[12px] leading-snug"
                               >
                                 {ln.ok ? (
@@ -168,7 +168,7 @@ export function ProviderOrdenesModal({
           </div>
         </div>
 
-        <div className="border-t border-[#eef1f4] px-6 py-3">
+        <div className="shrink-0 border-t border-[#eef1f4] bg-white px-6 py-3">
           <button
             type="button"
             onClick={onClose}
