@@ -30,9 +30,19 @@ export interface OrdenCompraRecepcionLinea {
   pesoKgRecibido?: number;
 }
 
+/** Producto ingresado en bodega que no estaba en la OC (custodio). */
+export interface OrdenCompraRecepcionLineaAdicional {
+  titleSnapshot: string;
+  catalogoProductId?: string;
+  pesoKgRecibido: number;
+  temperaturaRegistrada?: number;
+}
+
 /** Registro de recepción física frente a la OC. */
 export interface OrdenCompraRecepcion {
   lineas: OrdenCompraRecepcionLinea[];
+  /** Cajas/productos extra respecto al pedido (custodio). */
+  lineasAdicionales?: OrdenCompraRecepcionLineaAdicional[];
   notas?: string;
   cerradaAt: number;
   cerradaPorUid: string;

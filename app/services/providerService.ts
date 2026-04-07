@@ -1,15 +1,16 @@
 import { db } from "@/lib/firebaseClient";
-import { 
-  collection, 
-  addDoc, 
-  getDocs, 
-  deleteDoc, 
-  doc, 
-  updateDoc, 
-  query, 
-  where, 
-  orderBy, 
-  limit 
+import {
+  collection,
+  addDoc,
+  getDocs,
+  getDoc,
+  deleteDoc,
+  doc,
+  updateDoc,
+  query,
+  where,
+  orderBy,
+  limit,
 } from "firebase/firestore";
 import { Provider } from "@/app/types/provider";
 
@@ -44,6 +45,20 @@ export const ProviderService = {
     } catch (error: any) {
       console.error("Error en getAll:", error.message);
       return [];
+    }
+  },
+
+  /** Un proveedor por ID de documento (misma subcolección bajo el cliente). */
+  async getById(idCliente: string, id: string): Promise<Provider | null> {
+    try {
+      if (!idCliente?.trim() || !id?.trim()) return null;
+      const snap = await getDoc(getProviderDocRef(idCliente.trim(), id.trim()));
+      if (!snap.exists()) return null;
+      return { id: snap.id, ...snap.data() } as Provider;
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : String(error);
+      console.error("ProviderService.getById:", msg);
+      return null;
     }
   },
 

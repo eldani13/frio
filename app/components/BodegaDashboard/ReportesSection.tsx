@@ -1085,7 +1085,8 @@ const ReportesSection: React.FC<ReportesSectionProps> = ({
                   Órdenes de Compras
                 </h1>
                 <p className="text-sm text-slate-500">
-                  Cada orden usa productos de tu catálogo y un proveedor registrado.
+                  Cada orden usa productos de tu catálogo; el proveedor queda asignado automáticamente
+                  (mismo que en solicitudes).
                 </p>
               </div>
             </div>
@@ -1095,7 +1096,7 @@ const ReportesSection: React.FC<ReportesSectionProps> = ({
                 setOrdenDetalle(null);
                 setOrdenCompraModalOpen(true);
               }}
-              disabled={!idCliente.trim() || proveedoresOrden.length === 0 || catalogosOrden.length === 0}
+              disabled={!idCliente.trim() || catalogosOrden.length === 0}
               className="inline-flex items-center justify-center gap-2 rounded-[10px] bg-[#A8D5BA] px-5 py-2.5 text-sm font-semibold text-[#2D5A3F] shadow-sm transition hover:bg-[#97c4a9] active:scale-[0.98] disabled:pointer-events-none disabled:opacity-50"
             >
               <HiOutlinePlus strokeWidth={2.5} className="h-5 w-5" />
@@ -1107,17 +1108,16 @@ const ReportesSection: React.FC<ReportesSectionProps> = ({
             <p className="rounded-xl border border-dashed border-slate-200 p-6 text-center text-sm text-slate-500">
               Iniciá sesión como cliente para ver y crear órdenes de compra.
             </p>
-          ) : proveedoresOrden.length === 0 || catalogosOrden.length === 0 ? (
+          ) : catalogosOrden.length === 0 ? (
             <p className="rounded-xl border border-amber-100 bg-amber-50/80 p-4 text-sm text-amber-900">
               {esOperadorCuentas ? (
                 <>
-                  Tu administrador de cuenta debe registrar al menos un <strong>proveedor</strong> y productos en el{" "}
-                  <strong>catálogo</strong> (Asignación y creación) para poder usar órdenes de compra.
+                  Tu administrador de cuenta debe registrar productos en el <strong>catálogo</strong> (Asignación y
+                  creación) para poder usar órdenes de compra.
                 </>
               ) : (
                 <>
-                  Necesitás al menos un <strong>proveedor</strong> (Asignaciones → Proveedores) y productos en el{" "}
-                  <strong>catálogo</strong> para armar órdenes vinculadas al catálogo.
+                  Necesitás productos en el <strong>catálogo</strong> para armar órdenes vinculadas al catálogo.
                 </>
               )}
             </p>
@@ -1245,7 +1245,6 @@ const ReportesSection: React.FC<ReportesSectionProps> = ({
           idCliente={idCliente}
           codeCuenta={codeCuenta}
           productos={catalogosOrden}
-          proveedores={proveedoresOrden}
           onSuccess={reloadOrdenesCompra}
         />
       </section>

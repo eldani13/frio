@@ -3,7 +3,6 @@
 import React, { useEffect, useState } from "react";
 import { HiOutlinePlus, HiOutlineTrash, HiOutlineXMark } from "react-icons/hi2";
 import type { Catalogo } from "@/app/types/catalogo";
-import type { Provider } from "@/app/types/provider";
 import { ORDEN_COMPRA_ESTADOS, type OrdenCompraLineItem } from "@/app/types/ordenCompra";
 import { OrdenCompraService } from "@/app/services/ordenCompraService";
 import { formatKgEs, parseDecimalEs } from "@/app/lib/decimalEs";
@@ -16,7 +15,6 @@ interface Props {
   idCliente: string;
   codeCuenta: string;
   productos: Catalogo[];
-  proveedores: Provider[];
   onSuccess: () => void;
 }
 
@@ -26,10 +24,8 @@ export function OrdenCompraFormModal({
   idCliente,
   codeCuenta,
   productos,
-  proveedores,
   onSuccess,
 }: Props) {
-  const [proveedorId, setProveedorId] = useState("");
   const [fecha, setFecha] = useState("");
   const [estado, setEstado] = useState<string>("Iniciado");
   const [lines, setLines] = useState<DraftLine[]>([]);
@@ -40,7 +36,6 @@ export function OrdenCompraFormModal({
 
   useEffect(() => {
     if (!isOpen) return;
-    setProveedorId("");
     setFecha(new Date().toISOString().slice(0, 10));
     setEstado("Iniciado");
     setLines([]);
@@ -85,26 +80,14 @@ export function OrdenCompraFormModal({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
-    if (!proveedorId) {
-      setError("Seleccioná un proveedor.");
-      return;
-    }
     if (lines.length === 0) {
       setError("Agregá al menos una línea con productos del catálogo.");
-      return;
-    }
-    const prov = proveedores.find((x) => x.id === proveedorId);
-    if (!prov?.id) {
-      setError("Proveedor inválido.");
       return;
     }
 
     setSaving(true);
     try {
       await OrdenCompraService.create(idCliente, codeCuenta, {
-        proveedorId: prov.id,
-        proveedorCode: prov.code ?? "",
-        proveedorNombre: prov.name,
         fecha,
         estado,
         lineItems: lines,
@@ -148,7 +131,8 @@ export function OrdenCompraFormModal({
         <p className="mb-4 text-xs text-[#6B7280]">
           Cada línea debe ser un producto de tu <strong>catálogo</strong> (mismo SKU y datos que en
           Catálogo). Indicá el <strong>peso en kg</strong> por línea (coma o punto:{" "}
-          <span className="whitespace-nowrap">15,6</span>).
+          <span className="whitespace-nowrap">15,6</span>). El proveedor es el definido para integración
+          (ID en código + datos en Proveedores: nombre, código y teléfono).
         </p>
 
         {error ? (
@@ -156,29 +140,6 @@ export function OrdenCompraFormModal({
         ) : null}
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label
-              htmlFor="oc-proveedor-id"
-              className="mb-1 block text-[11px] font-bold uppercase text-gray-500"
-            >
-              Proveedor
-            </label>
-            <select
-              id="oc-proveedor-id"
-              value={proveedorId}
-              onChange={(e) => setProveedorId(e.target.value)}
-              required
-              className="w-full rounded-[8px] border border-gray-200 px-4 py-2 text-sm focus:border-[#A8D5BA] focus:outline-none"
-            >
-              <option value="">Seleccionar proveedor…</option>
-              {proveedores.map((pr) => (
-                <option key={pr.id} value={pr.id}>
-                  {pr.name}
-                </option>
-              ))}
-            </select>
-          </div>
-
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label

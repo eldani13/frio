@@ -15,7 +15,9 @@ import type {
   OrdenCompra,
   OrdenCompraLineItem,
   OrdenCompraRecepcionLinea,
+  OrdenCompraRecepcionLineaAdicional,
 } from "@/app/types/ordenCompra";
+import { resolveProveedorPedidoIntegracion } from "@/app/services/pedidoProveedorResolve";
 
 /** OC con ruta de dueño (custodio / vistas globales). */
 export type OrdenCompraPendienteRecepcion = OrdenCompra & {
@@ -47,14 +49,88 @@ function lineItemForFirestore(item: OrdenCompraLineItem): Record<string, string 
   return row;
 }
 
+type OrdenCompraConId = OrdenCompra & { id: string };
+
+function isNumeroOrdenVacio(numero: unknown): boolean {
+  return !String(numero ?? "").trim();
+}
+
+/**
+ * Órdenes creadas por automatización (n8n) a veces llegan sin `numero` / `numericId`.
+ * Al listar, se persisten OC-#### secuenciales (misma lógica que create) y se normaliza
+ * estado Pendiente → Iniciado en esos documentos.
+ */
+async function repairOrdenesCompraSinNumero(
+  idCliente: string,
+  list: OrdenCompraConId[],
+): Promise<OrdenCompraConId[]> {
+  if (!list.length) return list;
+
+  let maxN = 0;
+  for (const o of list) {
+    const n = Number(o.numericId);
+    if (Number.isFinite(n) && n > 0) maxN = Math.max(maxN, n);
+  }
+
+  const patched = new Map<string, Partial<OrdenCompra>>();
+  const tasks: Promise<void>[] = [];
+
+  for (const o of list) {
+    if (!isNumeroOrdenVacio(o.numero)) continue;
+    const nid = Number(o.numericId);
+    if (Number.isFinite(nid) && nid > 0) {
+      const ref = doc(db, PARENT, idCliente, SUB, o.id);
+      const numero = `OC-${String(nid).padStart(4, "0")}`;
+      const patch =
+        o.estado === "Pendiente"
+          ? ({ numero, estado: "Iniciado" } as const)
+          : ({ numero } as const);
+      tasks.push(updateDoc(ref, { ...patch }).then(() => undefined));
+      patched.set(o.id, patch);
+    }
+  }
+
+  const needNewId = list
+    .filter(
+      (o) =>
+        isNumeroOrdenVacio(o.numero) &&
+        !(Number.isFinite(Number(o.numericId)) && Number(o.numericId) > 0),
+    )
+    .sort((a, b) => (a.createdAt ?? 0) - (b.createdAt ?? 0));
+
+  for (const o of needNewId) {
+    maxN += 1;
+    const ref = doc(db, PARENT, idCliente, SUB, o.id);
+    const numero = `OC-${String(maxN).padStart(4, "0")}`;
+    const patch =
+      o.estado === "Pendiente"
+        ? ({ numericId: maxN, numero, estado: "Iniciado" } as const)
+        : ({ numericId: maxN, numero } as const);
+    tasks.push(updateDoc(ref, { ...patch }).then(() => undefined));
+    patched.set(o.id, patch);
+  }
+
+  if (tasks.length) {
+    try {
+      await Promise.all(tasks);
+    } catch (e: unknown) {
+      console.error("repairOrdenesCompraSinNumero", e);
+      return list;
+    }
+  }
+
+  return list.map((o) => (patched.has(o.id) ? { ...o, ...patched.get(o.id)! } : o));
+}
+
 export const OrdenCompraService = {
   async getAll(idCliente: string, codeCuenta: string): Promise<OrdenCompra[]> {
     try {
       if (!idCliente?.trim()) return [];
       const q = query(col(idCliente), where("codeCuenta", "==", codeCuenta));
       const snap = await getDocs(q);
-      const list = snap.docs.map((d) => ({ id: d.id, ...d.data() } as OrdenCompra));
-      return list.sort((a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0));
+      const list = snap.docs.map((d) => ({ id: d.id, ...d.data() } as OrdenCompraConId));
+      const repaired = await repairOrdenesCompraSinNumero(idCliente.trim(), list);
+      return repaired.sort((a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0));
     } catch (e: unknown) {
       console.error("OrdenCompraService.getAll", e);
       return [];
@@ -102,14 +178,16 @@ export const OrdenCompraService = {
       for (const c of clientsSnap.docs) {
         const idCliente = c.id;
         const snap = await getDocs(col(idCliente));
-        for (const d of snap.docs) {
-          const data = d.data() as Omit<OrdenCompra, "id">;
+        let rows = snap.docs.map((d) => ({ id: d.id, ...d.data() } as OrdenCompraConId));
+        rows = await repairOrdenesCompraSinNumero(idCliente, rows);
+        for (const data of rows) {
           if (
             data.destinoTipo === "interna" &&
             (data.destinoWarehouseId ?? "").trim() === wid &&
             data.estado === "Transporte"
           ) {
-            out.push({ id: d.id, idClienteDueno: idCliente, ...data });
+            const { id, ...rest } = data;
+            out.push({ id, idClienteDueno: idCliente, ...rest });
           }
         }
       }
@@ -130,13 +208,13 @@ export const OrdenCompraService = {
       const clientsSnap = await getDocs(collection(db, PARENT));
       const out: OrdenCompraPendienteRecepcion[] = [];
       for (const c of clientsSnap.docs) {
-        const snap = await getDocs(col(c.id));
-        for (const d of snap.docs) {
-          out.push({
-            id: d.id,
-            idClienteDueno: c.id,
-            ...(d.data() as Omit<OrdenCompra, "id">),
-          });
+        const idCliente = c.id;
+        const snap = await getDocs(col(idCliente));
+        let rows = snap.docs.map((d) => ({ id: d.id, ...d.data() } as OrdenCompraConId));
+        rows = await repairOrdenesCompraSinNumero(idCliente, rows);
+        for (const o of rows) {
+          const { id, ...rest } = o;
+          out.push({ id, idClienteDueno: idCliente, ...rest });
         }
       }
       out.sort((a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0));
@@ -245,13 +323,105 @@ export const OrdenCompraService = {
     });
   },
 
+  /**
+   * Custodio: tras ingreso en zona, compara pedido vs recibido y cierra la OC (no pasa por «En curso»).
+   * Acepta orden en Transporte o Enviada, destino interna.
+   */
+  async finalizarIngresoCustodio(
+    idCliente: string,
+    ordenId: string,
+    payload: {
+      pesosKgRecibidosPorLinea: Record<string, number>;
+      lineasAdicionales?: OrdenCompraRecepcionLineaAdicional[];
+      cerradaPorUid: string;
+      cerradaPorNombre?: string;
+    },
+  ): Promise<{ sinDiferencias: boolean }> {
+    if (!idCliente?.trim()) throw new Error("idCliente requerido");
+    if (!ordenId?.trim()) throw new Error("orden requerida");
+    if (!payload.cerradaPorUid?.trim()) throw new Error("usuario requerido");
+
+    const ref = doc(db, PARENT, idCliente.trim(), SUB, ordenId.trim());
+    const snap = await getDoc(ref);
+    if (!snap.exists()) throw new Error("Orden no encontrada");
+    const orden = { id: snap.id, ...snap.data() } as OrdenCompra;
+
+    const estado = String(orden.estado ?? "").trim();
+    if (estado !== "Transporte" && estado !== "Enviada") {
+      throw new Error("Solo se puede cerrar una orden en transporte o enviada");
+    }
+    if (orden.destinoTipo !== "interna") {
+      throw new Error("Solo aplica a órdenes con destino bodega interna");
+    }
+
+    const items = orden.lineItems ?? [];
+    if (!items.length) throw new Error("La orden no tiene líneas");
+
+    const map = payload.pesosKgRecibidosPorLinea ?? {};
+
+    const lineas: OrdenCompraRecepcionLinea[] = items.map((li) => {
+      const pedidoKg =
+        li.pesoKg != null && Number.isFinite(Number(li.pesoKg)) && Number(li.pesoKg) > 0
+          ? Number(li.pesoKg)
+          : null;
+      const raw = map[li.catalogoProductId];
+      const val = raw != null && Number.isFinite(Number(raw)) ? Number(raw) : 0;
+
+      if (pedidoKg != null) {
+        const v = Math.max(0, val);
+        return {
+          catalogoProductId: li.catalogoProductId,
+          cantidadRecibida: v,
+          pesoKgRecibido: v,
+        };
+      }
+      return {
+        catalogoProductId: li.catalogoProductId,
+        cantidadRecibida: Math.max(0, Math.floor(val)),
+      };
+    });
+
+    const lineasMatch = items.every((li) => {
+      const rec = lineas.find((l) => l.catalogoProductId === li.catalogoProductId);
+      const pedidoKg =
+        li.pesoKg != null && Number.isFinite(Number(li.pesoKg)) && Number(li.pesoKg) > 0
+          ? Number(li.pesoKg)
+          : null;
+      if (pedidoKg != null) {
+        const recKg = rec?.pesoKgRecibido ?? rec?.cantidadRecibida;
+        if (recKg == null || !Number.isFinite(Number(recKg))) return false;
+        return Math.abs(Number(recKg) - pedidoKg) < 1e-4;
+      }
+      return (rec?.cantidadRecibida ?? 0) === (Number(li.cantidad) || 0);
+    });
+
+    const extras = payload.lineasAdicionales ?? [];
+    const sinDiferencias = lineasMatch && extras.length === 0;
+
+    const recepcion = {
+      lineas,
+      ...(extras.length ? { lineasAdicionales: extras } : {}),
+      cerradaAt: Date.now(),
+      cerradaPorUid: payload.cerradaPorUid.trim(),
+      cerradaPorNombre: (payload.cerradaPorNombre ?? "").trim() || undefined,
+      sinDiferencias,
+    };
+
+    await updateDoc(ref, {
+      estado: sinDiferencias ? "Cerrado(ok)" : "Cerrado(no ok)",
+      recepcion,
+    });
+
+    return { sinDiferencias };
+  },
+
   async create(
     idCliente: string,
     codeCuenta: string,
     payload: {
-      proveedorId: string;
-      proveedorCode: string;
-      proveedorNombre: string;
+      proveedorId?: string;
+      proveedorCode?: string;
+      proveedorNombre?: string;
       fecha: string;
       estado: string;
       lineItems: OrdenCompraLineItem[];
@@ -259,6 +429,12 @@ export const OrdenCompraService = {
   ) {
     if (!idCliente?.trim()) throw new Error("idCliente requerido");
     if (!payload.lineItems?.length) throw new Error("Agregá al menos un producto del catálogo");
+
+    const snap = await resolveProveedorPedidoIntegracion(idCliente.trim(), codeCuenta ?? "");
+    const proveedorId = String(payload.proveedorId ?? "").trim() || snap.proveedorId;
+    const proveedorCode = String(payload.proveedorCode ?? "").trim() || snap.proveedorCode;
+    const proveedorNombre =
+      String(payload.proveedorNombre ?? "").trim() || snap.proveedor_nombre;
 
     const qLast = query(col(idCliente), orderBy("numericId", "desc"), limit(1));
     const lastSnap = await getDocs(qLast);
@@ -272,9 +448,9 @@ export const OrdenCompraService = {
       codeCuenta: codeCuenta ?? "",
       numericId: nextId,
       numero: `OC-${String(nextId).padStart(4, "0")}`,
-      proveedorId: payload.proveedorId,
-      proveedorCode: String(payload.proveedorCode ?? "").trim(),
-      proveedorNombre: payload.proveedorNombre?.trim() ?? "",
+      proveedorId,
+      proveedorCode,
+      proveedorNombre,
       fecha: payload.fecha ?? "",
       estado: String(payload.estado ?? "").trim() || "Iniciado",
       lineItems: payload.lineItems.map(lineItemForFirestore),

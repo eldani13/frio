@@ -8,6 +8,8 @@ import {
 } from "@/app/services/ordenCompraService";
 import type { OrdenCompraLineItem } from "@/app/types/ordenCompra";
 import { formatKgEs, parseDecimalEs } from "@/app/lib/decimalEs";
+import { CatalogoService } from "@/app/services/catalogoService";
+import type { Catalogo } from "@/app/types/catalogo";
 
 export type LineaIngresoDesdeOc = {
   catalogoProductId: string;
@@ -16,9 +18,20 @@ export type LineaIngresoDesdeOc = {
   quantityKg: number;
 };
 
+export type LineaAdicionalIngresoOc = {
+  catalogoProductId: string;
+  name: string;
+  temperature: number;
+  quantityKg: number;
+};
+
 export type IngresoDesdeOrdenCompraPayload = {
   orden: OrdenCompraPendienteRecepcion;
+  /** Cajas solo para líneas marcadas en checklist (kg > 0). */
   lineas: LineaIngresoDesdeOc[];
+  /** Kg (o unidades según línea) recibidos por cada producto de la OC; 0 si no se marcó. */
+  pesosRecibidosPorLinea: Record<string, number>;
+  lineaAdicional?: LineaAdicionalIngresoOc | null;
 };
 
 function defaultKgPorLinea(li: OrdenCompraLineItem): number {
@@ -46,6 +59,10 @@ export function OcOrdenIngresoPanel({ warehouseId, isBodegaInterna, onRegistrar 
   const [checked, setChecked] = useState<Record<string, boolean>>({});
   const [temps, setTemps] = useState<Record<string, string>>({});
   const [kgs, setKgs] = useState<Record<string, string>>({});
+  const [catalogos, setCatalogos] = useState<Catalogo[]>([]);
+  const [extraProductId, setExtraProductId] = useState("");
+  const [extraTemp, setExtraTemp] = useState("");
+  const [extraKg, setExtraKg] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
@@ -87,6 +104,10 @@ export function OcOrdenIngresoPanel({ warehouseId, isBodegaInterna, onRegistrar 
       setChecked({});
       setTemps({});
       setKgs({});
+      setCatalogos([]);
+      setExtraProductId("");
+      setExtraTemp("");
+      setExtraKg("");
       return;
     }
     const nextCheck: Record<string, boolean> = {};
@@ -101,40 +122,87 @@ export function OcOrdenIngresoPanel({ warehouseId, isBodegaInterna, onRegistrar 
     setChecked(nextCheck);
     setTemps(nextTemp);
     setKgs(nextKg);
+    setExtraProductId("");
+    setExtraTemp("");
+    setExtraKg("");
     setSubmitError(null);
+
+    const cid = selected.idClienteDueno?.trim();
+    const cc = selected.codeCuenta?.trim() ?? "";
+    if (cid) {
+      void CatalogoService.getAll(cid, cc).then(setCatalogos);
+    } else {
+      setCatalogos([]);
+    }
   }, [selected]);
 
   const lineItems = selected?.lineItems ?? [];
-  const allChecked = lineItems.length > 0 && lineItems.every((li) => checked[li.catalogoProductId]);
-  const tempsOk = lineItems.every((li) => {
-    if (!checked[li.catalogoProductId]) return true;
-    const t = Number(String(temps[li.catalogoProductId] ?? "").replace(",", "."));
-    return !Number.isNaN(t);
-  });
-  const kgsOk = lineItems.every((li) => {
-    if (!checked[li.catalogoProductId]) return true;
-    const k = parseDecimalEs(String(kgs[li.catalogoProductId] ?? ""));
+
+  const checkedLinesValid = lineItems.every((li) => {
+    const id = li.catalogoProductId;
+    if (!checked[id]) return true;
+    const t = Number(String(temps[id] ?? "").replace(",", "."));
+    if (Number.isNaN(t)) return false;
+    const k = parseDecimalEs(String(kgs[id] ?? ""));
     return k != null && k > 0;
   });
-  const canSubmit = Boolean(selected && allChecked && tempsOk && kgsOk && !submitting);
+
+  const extraOk =
+    !extraProductId.trim() ||
+    (() => {
+      const t = Number(String(extraTemp).replace(",", "."));
+      if (Number.isNaN(t)) return false;
+      const k = parseDecimalEs(extraKg);
+      return k != null && k > 0;
+    })();
+
+  const canSubmit = Boolean(selected && checkedLinesValid && extraOk && !submitting);
 
   const handleRegistrar = async () => {
     if (!selected || !canSubmit) return;
     setSubmitError(null);
     setSubmitting(true);
-    const lineas: LineaIngresoDesdeOc[] = lineItems.map((li) => {
+
+    const pesosRecibidosPorLinea: Record<string, number> = {};
+    const lineas: LineaIngresoDesdeOc[] = [];
+
+    for (const li of lineItems) {
       const id = li.catalogoProductId;
-      const temperature = Number(String(temps[id] ?? "").replace(",", "."));
-      const quantityKg = parseDecimalEs(String(kgs[id] ?? "")) ?? 0;
-      return {
-        catalogoProductId: id,
-        name: li.titleSnapshot?.trim() || "Producto",
+      if (checked[id]) {
+        const temperature = Number(String(temps[id] ?? "").replace(",", "."));
+        const quantityKg = parseDecimalEs(String(kgs[id] ?? "")) ?? 0;
+        pesosRecibidosPorLinea[id] = quantityKg;
+        lineas.push({
+          catalogoProductId: id,
+          name: li.titleSnapshot?.trim() || "Producto",
+          temperature,
+          quantityKg,
+        });
+      } else {
+        pesosRecibidosPorLinea[id] = 0;
+      }
+    }
+
+    let lineaAdicional: LineaAdicionalIngresoOc | null = null;
+    if (extraProductId.trim()) {
+      const cat = catalogos.find((c) => c.id === extraProductId);
+      const temperature = Number(String(extraTemp).replace(",", "."));
+      const quantityKg = parseDecimalEs(extraKg) ?? 0;
+      lineaAdicional = {
+        catalogoProductId: extraProductId.trim(),
+        name: (cat?.title ?? "Producto").trim(),
         temperature,
         quantityKg,
       };
-    });
+    }
+
     try {
-      await onRegistrar({ orden: selected, lineas });
+      await onRegistrar({
+        orden: selected,
+        lineas,
+        pesosRecibidosPorLinea,
+        lineaAdicional,
+      });
       setSelectedKey("");
       reload();
     } catch (e: unknown) {
@@ -163,9 +231,9 @@ export function OcOrdenIngresoPanel({ warehouseId, isBodegaInterna, onRegistrar 
         <div className="min-w-0">
           <h2 className="text-lg font-semibold text-slate-900">Orden de ingreso</h2>
           <p className="text-xs text-slate-500">
-            Elegí una orden en <strong>transporte</strong> para esta bodega. Verificá cada producto, cargá la
-            temperatura y confirmá; las cajas pasan a <strong>Zona de ingreso</strong> y la OC a{" "}
-            <strong>En curso</strong>.
+            Elegí una orden en <strong>transporte</strong> para esta bodega. Podés marcar ninguna, algunas o todas las
+            líneas. Las cajas marcadas pasan a <strong>Zona de ingreso</strong>. Al confirmar se compara pedido vs
+            recibido: la OC queda en <strong>Cerrado(ok)</strong> o <strong>Cerrado(no ok)</strong> (no en «En curso»).
           </p>
         </div>
       </div>
@@ -288,6 +356,60 @@ export function OcOrdenIngresoPanel({ warehouseId, isBodegaInterna, onRegistrar 
             })}
           </ul>
 
+          <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50/80 p-3">
+            <p className="mb-2 text-[11px] font-bold uppercase text-slate-500">
+              Producto adicional (no estaba en la orden) — opcional
+            </p>
+            <p className="mb-2 text-xs text-slate-600">
+              Si ingresás algo extra, elegí del catálogo de la cuenta y completá temperatura y peso.
+            </p>
+            <div className="grid gap-2 sm:grid-cols-3">
+              <label className="flex flex-col gap-1 text-xs font-medium text-slate-600 sm:col-span-3">
+                Producto del catálogo
+                <select
+                  value={extraProductId}
+                  onChange={(e) => setExtraProductId(e.target.value)}
+                  className="rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm"
+                >
+                  <option value="">Sin producto adicional</option>
+                  {catalogos
+                    .filter((c) => c.id)
+                    .map((c) => (
+                      <option key={c.id} value={c.id!}>
+                        {c.title}
+                      </option>
+                    ))}
+                </select>
+              </label>
+              {extraProductId ? (
+                <>
+                  <label className="flex flex-col gap-1 text-xs font-medium text-slate-600">
+                    Temperatura (°C)
+                    <input
+                      type="number"
+                      step="any"
+                      value={extraTemp}
+                      onChange={(e) => setExtraTemp(e.target.value)}
+                      className="rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm"
+                      placeholder="Ej: -18"
+                    />
+                  </label>
+                  <label className="flex flex-col gap-1 text-xs font-medium text-slate-600 sm:col-span-2">
+                    Peso (kg)
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      value={extraKg}
+                      onChange={(e) => setExtraKg(e.target.value)}
+                      placeholder="Ej. 10,5"
+                      className="rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm"
+                    />
+                  </label>
+                </>
+              ) : null}
+            </div>
+          </div>
+
           {submitError ? (
             <p className="text-sm text-rose-600">{submitError}</p>
           ) : null}
@@ -298,7 +420,9 @@ export function OcOrdenIngresoPanel({ warehouseId, isBodegaInterna, onRegistrar 
             onClick={() => void handleRegistrar()}
             className="mt-auto w-full rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:bg-slate-300"
           >
-            {submitting ? "Registrando…" : "Registrar ingreso (zona de ingreso + OC en curso)"}
+            {submitting
+              ? "Registrando…"
+              : "Registrar ingreso y cerrar orden (comparación pedido vs recibido)"}
           </button>
         </div>
       )}

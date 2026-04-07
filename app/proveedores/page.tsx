@@ -10,6 +10,7 @@ import {
 } from "@/app/components/ui/providers/ProviderOrdenesModal";
 import { OrdenCompraService } from "@/app/services/ordenCompraService";
 import { formatKgEs } from "@/app/lib/decimalEs";
+import { buildLineasRecepcionDiff } from "@/app/lib/ordenCompraRecepcionDiff";
 import { HiOutlinePlus, HiOutlineSquares2X2 } from "react-icons/hi2";
 import { useAuth } from "@/app/context/AuthContext";
 
@@ -48,20 +49,26 @@ export default function ProvidersPage() {
       .then((list) => {
         if (cancelled) return;
         setOrdenesList(
-          list.map((o) => ({
-            id: o.id ?? o.numero,
-            ordenCompra: o.numero,
-            estado: o.estado,
-            resumenProductos: (o.lineItems ?? [])
-              .map((li) => {
-                const medida =
-                  li.pesoKg != null && Number(li.pesoKg) > 0
-                    ? `${formatKgEs(Number(li.pesoKg))} kg`
-                    : `${li.cantidad} u.`;
-                return `${li.titleSnapshot} · ${medida}`;
-              })
-              .join(" · "),
-          })),
+          list.map((o) => {
+            const { lineasDiff, adicionales, tieneRecepcion } = buildLineasRecepcionDiff(o);
+            return {
+              id: o.id ?? o.numero,
+              ordenCompra: o.numero,
+              estado: o.estado,
+              resumenProductos: (o.lineItems ?? [])
+                .map((li) => {
+                  const medida =
+                    li.pesoKg != null && Number(li.pesoKg) > 0
+                      ? `${formatKgEs(Number(li.pesoKg))} kg`
+                      : `${li.cantidad} u.`;
+                  return `${li.titleSnapshot} · ${medida}`;
+                })
+                .join(" · "),
+              lineasDiff,
+              adicionales,
+              tieneRecepcion,
+            };
+          }),
         );
       })
       .catch(() => {

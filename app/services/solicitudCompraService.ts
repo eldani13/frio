@@ -9,6 +9,8 @@ import {
   limit,
 } from "firebase/firestore";
 import type { SolicitudCompra, SolicitudLineItem } from "@/app/types/solicitudCompra";
+import { postPedidoProveedorWebhook } from "@/app/services/pedidoProveedorWebhook";
+import { resolveProveedorPedidoIntegracion } from "@/app/services/pedidoProveedorResolve";
 
 const PARENT = "clientes";
 const SUB = "solicitudesCompra";
@@ -59,6 +61,16 @@ export const SolicitudCompraService = {
     if (!idCliente?.trim()) throw new Error("idCliente requerido");
     if (!payload.lineItems?.length) throw new Error("Agregá al menos un producto del catálogo");
 
+    const proveedor = await resolveProveedorPedidoIntegracion(idCliente.trim(), codeCuenta ?? "");
+
+    await postPedidoProveedorWebhook({
+      idCliente: idCliente.trim(),
+      codeCuenta: codeCuenta ?? "",
+      lineItems: payload.lineItems,
+      proveedor,
+      estado: "Iniciado",
+    });
+
     const qLast = query(col(idCliente), orderBy("numericId", "desc"), limit(1));
     const lastSnap = await getDocs(qLast);
     let nextId = 1;
@@ -72,9 +84,9 @@ export const SolicitudCompraService = {
       codeCuenta: codeCuenta ?? "",
       numericId: nextId,
       numero: `SOL-${String(nextId).padStart(4, "0")}`,
-      proveedorId: String(payload.proveedorId ?? "").trim(),
-      proveedorCode: String(payload.proveedorCode ?? "").trim(),
-      proveedorNombre: String(payload.proveedorNombre ?? "").trim(),
+      proveedorId: proveedor.proveedorId,
+      proveedorCode: proveedor.proveedorCode,
+      proveedorNombre: proveedor.proveedor_nombre,
       fecha: String(payload.fecha ?? "").trim() || hoy,
       estado: String(payload.estado ?? "").trim() || "En curso",
       lineItems: payload.lineItems.map(lineItemForFirestore),

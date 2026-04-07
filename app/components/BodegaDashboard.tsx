@@ -2134,6 +2134,9 @@ export default function BodegaDashboard() {
       if (role !== "custodio") {
         throw new Error("Solo el custodio registra ingresos.");
       }
+      if (!session?.uid) {
+        throw new Error("No hay sesión para registrar el cierre de la orden.");
+      }
       if (warehouseCapacity <= 0) {
         throw new Error("Configurá una capacidad mayor a 0 para esta bodega.");
       }
@@ -2145,17 +2148,21 @@ export default function BodegaDashboard() {
       if (!clientId) {
         throw new Error("La orden no tiene cuenta dueña válida.");
       }
+
       const lines = payload.lineas;
-      if (!lines.length) {
-        throw new Error("No hay líneas para registrar.");
-      }
+      const extra = payload.lineaAdicional ?? null;
 
       const created: Box[] = [];
       let acc = [...inboundBoxes];
-      for (const row of lines) {
+      const pushBox = (row: {
+        name: string;
+        temperature: number;
+        quantityKg: number;
+        ordenCompraId?: string;
+      }) => {
         const nextPosition = getNextIngresoPosition(acc, warehouseCapacity);
         if (nextPosition <= 0 || nextPosition > warehouseCapacity) {
-          throw new Error("No hay cupos suficientes en ingreso para todas las líneas.");
+          throw new Error("No hay cupos suficientes en ingreso.");
         }
         if (Number.isNaN(row.temperature)) {
           throw new Error("Revisá la temperatura de cada producto verificado.");
@@ -2170,27 +2177,71 @@ export default function BodegaDashboard() {
           temperature: row.temperature,
           client: clientId,
           quantityKg: row.quantityKg,
-          ordenCompraId: payload.orden.id,
-          ordenCompraClienteId: payload.orden.idClienteDueno,
+          ...(row.ordenCompraId
+            ? {
+                ordenCompraId: row.ordenCompraId,
+                ordenCompraClienteId: payload.orden.idClienteDueno,
+              }
+            : {}),
         };
         created.push(newBox);
         acc = sortByPosition([newBox, ...acc]);
-      }
-      setInboundBoxes(acc);
-      created.forEach((b) => addIngreso(b));
-      setStats((prev) => ({ ...prev, ingresos: prev.ingresos + created.length }));
+      };
 
-      await OrdenCompraService.actualizarEstado(
+      for (const row of lines) {
+        pushBox({
+          name: row.name,
+          temperature: row.temperature,
+          quantityKg: row.quantityKg,
+          ordenCompraId: payload.orden.id,
+        });
+      }
+      if (extra) {
+        pushBox({
+          name: extra.name,
+          temperature: extra.temperature,
+          quantityKg: extra.quantityKg,
+        });
+      }
+
+      if (created.length) {
+        setInboundBoxes(acc);
+        created.forEach((b) => addIngreso(b));
+        setStats((prev) => ({ ...prev, ingresos: prev.ingresos + created.length }));
+      }
+
+      const adicionales =
+        extra != null
+          ? [
+              {
+                titleSnapshot: extra.name.trim(),
+                catalogoProductId: extra.catalogoProductId,
+                pesoKgRecibido: extra.quantityKg,
+                temperaturaRegistrada: extra.temperature,
+              },
+            ]
+          : undefined;
+
+      const { sinDiferencias } = await OrdenCompraService.finalizarIngresoCustodio(
         payload.orden.idClienteDueno,
         payload.orden.id,
-        "En curso",
+        {
+          pesosKgRecibidosPorLinea: payload.pesosRecibidosPorLinea,
+          lineasAdicionales: adicionales,
+          cerradaPorUid: session.uid,
+          cerradaPorNombre: session.displayName,
+        },
       );
+
+      const estadoMsg = sinDiferencias ? "Cerrado(ok)" : "Cerrado(no ok)";
       setMessage(
-        `Ingreso desde ${payload.orden.numero}: ${created.length} caja(s) en zona de ingreso. La orden pasó a «En curso».`,
+        `Ingreso desde ${payload.orden.numero}: ${created.length} caja(s) en zona de ingreso. La orden quedó en «${estadoMsg}».`,
       );
     },
     [
       role,
+      session?.uid,
+      session?.displayName,
       warehouseCapacity,
       warehouseId,
       inboundBoxes,
@@ -2908,24 +2959,50 @@ export default function BodegaDashboard() {
         return;
       }
 
+      const alertId = resolveModalAlert.id;
+      let nextInbound = inboundBoxes;
+      let nextOutbound = outboundBoxes;
+      let nextSlotsState = slots;
+
       if (tempFixZone === "ingresos") {
-        setInboundBoxes((prev) =>
-          prev.map((box) => (box.position === tempFixPosition ? { ...box, temperature: parsedTemp } : box)),
+        nextInbound = inboundBoxes.map((box) =>
+          box.position === tempFixPosition ? { ...box, temperature: parsedTemp } : box,
         );
       } else if (tempFixZone === "salida") {
-        setOutboundBoxes((prev) =>
-          prev.map((box) => (box.position === tempFixPosition ? { ...box, temperature: parsedTemp } : box)),
+        nextOutbound = outboundBoxes.map((box) =>
+          box.position === tempFixPosition ? { ...box, temperature: parsedTemp } : box,
         );
       } else {
-        setSlots((prev) =>
-          prev.map((slot) =>
-            slot.position === tempFixPosition ? { ...slot, temperature: parsedTemp } : slot,
-          ),
+        nextSlotsState = slots.map((slot) =>
+          slot.position === tempFixPosition ? { ...slot, temperature: parsedTemp } : slot,
         );
       }
 
+      const nextAlerts = alerts.filter((a) => a.id !== alertId);
+      const nextAssigned = assignedAlerts.filter((a) => a.alertId !== alertId);
+
+      setInboundBoxes(nextInbound);
+      setOutboundBoxes(nextOutbound);
+      setSlots(nextSlotsState);
+      setAlerts(nextAlerts);
+      setAssignedAlerts(nextAssigned);
+
+      persistWarehouseStateNow({
+        slots: nextSlotsState,
+        inboundBoxes: nextInbound,
+        outboundBoxes: nextOutbound,
+        dispatchedBoxes,
+        orders,
+        stats,
+        warehouseName,
+        alerts: nextAlerts,
+        assignedAlerts: nextAssigned,
+        alertasOperario,
+        alertasOperarioSolved,
+        llamadasJefe,
+      });
+
       setMessage("Temperatura actualizada.");
-      handleResolveAlert(resolveModalAlert.id);
       setResolveModalAlert(null);
       return;
     }
@@ -3053,13 +3130,28 @@ export default function BodegaDashboard() {
   }
 
   function handleUpdateBoxTemperature(position: number, newTemp: number) {
-    setSlots((prev) =>
-      prev.map((slot) => (slot.position === position ? { ...slot, temperature: newTemp } : slot)),
+    const nextSlotsState = slots.map((slot) =>
+      slot.position === position ? { ...slot, temperature: newTemp } : slot,
     );
+    setSlots(nextSlotsState);
     setSelectedBoxModal((prev) =>
       prev && prev.position === position ? { ...prev, temperature: newTemp } : prev,
     );
     setMessage("Temperatura actualizada");
+    persistWarehouseStateNow({
+      slots: nextSlotsState,
+      inboundBoxes,
+      outboundBoxes,
+      dispatchedBoxes,
+      orders,
+      stats,
+      warehouseName,
+      alerts,
+      assignedAlerts,
+      alertasOperario,
+      alertasOperarioSolved,
+      llamadasJefe,
+    });
   }
 
   return (
