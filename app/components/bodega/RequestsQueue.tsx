@@ -15,6 +15,7 @@ import {
   FiUser,
 } from "react-icons/fi";
 import { IoCloseOutline } from "react-icons/io5";
+import { temperatureStringFromAnalyzeResponse } from "@/app/lib/imageAnalyzeApi";
 
 const TYPE_LABELS: Record<OrderType, string> = {
   a_bodega: "A bodega",
@@ -1073,19 +1074,19 @@ export default function RequestsQueue(props: RequestsQueueProps) {
                     setEditTempLoading(true);
                     try {
                       const res = await fetch(
-                        "https://asistencia-dos.onrender.com/api/image/analyze",
+                        "http://localhost:3000/api/image/analyze",
                         {
                           method: "POST",
                           body: fd,
                         },
                       );
                       const data = await res.json();
+                      const tempValue =
+                        temperatureStringFromAnalyzeResponse(data);
                       if (
-                        data.numbersDetected &&
-                        data.numbersDetected.length > 0
+                        tempValue !== null &&
+                        Number.isFinite(Number(tempValue))
                       ) {
-                        let tempValue = data.numbersDetected[0];
-                        tempValue = tempValue.replace(",", ".");
                         if (tempInput) tempInput.value = tempValue;
                       } else {
                         alert("No se detecto temperatura en la imagen.");

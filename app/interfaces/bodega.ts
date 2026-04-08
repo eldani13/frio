@@ -84,6 +84,8 @@ export type BodegaOrder = {
 	targetPosition?: number;
 	createdAt: string;
 	createdAtMs: number;
+	/** Cuando la orden ya fue ejecutada por el operario (historial en reportes). */
+	completadoAtMs?: number;
 	createdBy: Role;
 	client?: string;
 	autoId?: string;
@@ -126,11 +128,23 @@ export type AlertHistoryEntry = {
 	meta?: string;
 };
 
+/** Caja registrada en historial de ingresos (marca de tiempo al archivar). */
+export type HistoryIngresoSnapshot = Box & { historialAtMs?: number };
+
+/** Despacho definitivo (no se quita del historial aunque la caja salga del mapa). */
+export type DispatchedHistoryEntry = {
+	id: string;
+	box: Box;
+	atMs: number;
+	fromSalidaPosition: number;
+};
+
 export type HistoryState = {
-	ingresos: Box[];
+	ingresos: HistoryIngresoSnapshot[];
 	salidas: BodegaOrder[];
 	movimientosBodega: BodegaOrder[];
 	alertas: AlertHistoryEntry[];
+	despachadosHistorial: DispatchedHistoryEntry[];
 };
 
 export type WarehouseMeta = {

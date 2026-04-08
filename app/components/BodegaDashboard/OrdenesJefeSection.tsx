@@ -5,6 +5,7 @@ import React, { useState, useMemo } from "react";
 import { clientLabelFromList, formatBoxQuantityKg } from "@/app/lib/bodegaDisplay";
 import EntradaAlertButton from "../common/EntradaAlertButton";
 import { RiUserReceivedLine } from "react-icons/ri";
+import { temperatureStringFromAnalyzeResponse } from "@/app/lib/imageAnalyzeApi";
 
 const HIGH_TEMP_THRESHOLD = 5;
 
@@ -525,19 +526,19 @@ export default function OrdenesJefeSection(props: {
                               setEditTempLoading(true);
                               try {
                                 const res = await fetch(
-                                  "https://asistencia-dos.onrender.com/api/image/analyze",
+                                  "http://localhost:3000/api/image/analyze",
                                   {
                                     method: "POST",
                                     body: formData,
                                   },
                                 );
                                 const data = await res.json();
+                                const tempValue =
+                                  temperatureStringFromAnalyzeResponse(data);
                                 if (
-                                  data.numbersDetected &&
-                                  data.numbersDetected.length > 0
+                                  tempValue !== null &&
+                                  Number.isFinite(Number(tempValue))
                                 ) {
-                                  let tempValue = data.numbersDetected[0];
-                                  tempValue = tempValue.replace(",", ".");
                                   if (tempInput)
                                     (tempInput as HTMLInputElement).value =
                                       tempValue;

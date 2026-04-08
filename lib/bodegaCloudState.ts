@@ -79,6 +79,7 @@ export const defaultHistoryState: HistoryState = {
   salidas: [],
   movimientosBodega: [],
   alertas: [],
+  despachadosHistorial: [],
 };
 
 export async function ensureWarehouseState(warehouseId: string) {

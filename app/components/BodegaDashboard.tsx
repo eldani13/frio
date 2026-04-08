@@ -12,6 +12,7 @@ import { OrdenCompraService } from "@/app/services/ordenCompraService";
 import type { IngresoDesdeOrdenCompraPayload } from "./BodegaDashboard/OcOrdenIngresoPanel";
 import { AiTwotoneAppstore } from "react-icons/ai";
 import { SlGraph } from "react-icons/sl";
+import { FaBoxOpen } from "react-icons/fa6";
 import {
   FiAlertTriangle,
   FiClipboard,
@@ -1639,6 +1640,7 @@ export default function BodegaDashboard() {
     addSalida,
     addMovimientoBodega,
     addAlerta,
+    addDespachado,
     setWarehouseId: setHistoryWarehouseId,
   } = useBodegaHistory();
 
@@ -2211,7 +2213,7 @@ export default function BodegaDashboard() {
 
     setInboundBoxes((prev) => sortByPosition([newBox, ...prev]));
     setStats((prev) => ({ ...prev, ingresos: prev.ingresos + 1 }));
-    addIngreso(newBox);
+    addIngreso({ ...newBox, historialAtMs: Date.now() });
     setIngresoName("");
     setIngresoTemp("");
     setIngresoQuantityKg("");
@@ -2295,7 +2297,8 @@ export default function BodegaDashboard() {
 
       if (created.length) {
         setInboundBoxes(acc);
-        created.forEach((b) => addIngreso(b));
+        const now = Date.now();
+        created.forEach((b) => addIngreso({ ...b, historialAtMs: now }));
         setStats((prev) => ({ ...prev, ingresos: prev.ingresos + created.length }));
       }
 
@@ -2410,12 +2413,6 @@ export default function BodegaDashboard() {
     };
 
     setOrders((prev) => [newOrder, ...prev]);
-    if (newOrder.type === "a_salida" && newOrder.sourceZone === "bodega") {
-      addSalida(newOrder);
-    }
-    if (newOrder.type === "a_bodega") {
-      addMovimientoBodega(newOrder);
-    }
     setMessage("Orden creada correctamente.");
     if (role === "jefe") {
       setBodegaOrderSourcePosition(availableBodegaForOrders[0]?.position ?? 1);
@@ -2695,6 +2692,8 @@ export default function BodegaDashboard() {
       setOrders(nextOrdersBodega);
       setStats(nextStatsBodega);
 
+      addMovimientoBodega({ ...order, completadoAtMs: Date.now() });
+
       if (pendingCierreOc) {
         void OrdenCompraService.actualizarEstado(
           pendingCierreOc.idCliente,
@@ -2828,6 +2827,8 @@ export default function BodegaDashboard() {
     setOrders(nextOrdersSalida);
     setStats(nextStatsSalida);
 
+    addSalida({ ...order, targetPosition: target, completadoAtMs: Date.now() });
+
     setMessage("Orden ejecutada correctamente.");
   };
 
@@ -2873,6 +2874,12 @@ export default function BodegaDashboard() {
 
     setOutboundBoxes((prev) => prev.filter((item) => item.position !== position));
     setDispatchedBoxes((prev) => sortByPosition([box, ...prev]));
+    addDespachado({
+      id: `desp-${Date.now()}-${box.autoId}`,
+      box,
+      atMs: Date.now(),
+      fromSalidaPosition: position,
+    });
     setMessage(`Caja en salida ${position} enviada.`);
   };
 
@@ -3412,7 +3419,7 @@ export default function BodegaDashboard() {
                   {tabs.map((tab) => {
                     let icon = null;
                     if (tab.key === "estado") icon = <span className="mr-2"><AiTwotoneAppstore /></span>;
-                    if (tab.key === "ingresos") icon = <span className="mr-2">📦</span>;
+                    if (tab.key === "ingresos") icon = <span className="mr-2"><FaBoxOpen /></span>;
                     if (tab.key === "ordenes") icon = <span className="mr-2">📝</span>;
                     if (tab.key === "solicitudes") icon = <span className="mr-2">⏳</span>;
                     if (tab.key === "reportes") icon = <span className="mr-2"><SlGraph /></span>;
