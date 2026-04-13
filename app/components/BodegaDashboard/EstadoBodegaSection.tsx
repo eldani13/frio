@@ -4,8 +4,10 @@ import React, { useState, useEffect } from "react";
 import SlotsGrid from "../bodega/SlotsGrid";
 import SelectedSlotCard from "../bodega/SelectedSlotCard";
 import type { Box, Client, Slot, Role } from "../../interfaces/bodega";
+import type { SolicitudProcesamiento } from "@/app/types/solicitudProcesamiento";
 import EntradaAlertButton from "../common/EntradaAlertButton";
 import { clientLabelFromList, formatBoxQuantityKg } from "@/app/lib/bodegaDisplay";
+import { ProcesamientoOrdenesActivasBodega } from "@/app/components/BodegaDashboard/ProcesamientoOrdenesActivasBodega";
 
 
 type Props = {
@@ -20,7 +22,19 @@ type Props = {
   sortByPosition: <T extends { position: number }>(items: T[]) => T[];
   role?: Role;
   /** Para mostrar nombre de cliente en Entrada/Salida (el id se guarda en la caja). */
-  clients?: Pick<Client, "id" | "name">[];
+  clients?: Client[];
+  /** Código de cuenta de la bodega para el modal Procesamiento en el mapa. */
+  warehouseCodeCuenta?: string;
+  sessionUid?: string;
+  sessionRole?: Role;
+  operariosBodega?: Array<{ id: string; name: string }>;
+  tareasProcesamientoOperario?: Array<Record<string, unknown>>;
+  onPushTareaProcesamientoOperario?: (tarea: Record<string, unknown>) => void;
+  warehouseId?: string;
+  onProcesamientoTerminadoInventario?: (
+    nextSlots: Slot[],
+    meta: { row: SolicitudProcesamiento; deductedKg: number; warning?: string },
+  ) => void | Promise<void>;
 };
 
 
@@ -37,6 +51,14 @@ export default function EstadoBodegaSection(props: Props) {
     sortByPosition,
     role,
     clients = [],
+    warehouseCodeCuenta = "",
+    sessionUid,
+    sessionRole,
+    operariosBodega = [],
+    tareasProcesamientoOperario = [],
+    onPushTareaProcesamientoOperario,
+    warehouseId = "",
+    onProcesamientoTerminadoInventario,
   } = props;
 
   const ITEMS_PER_PAGE = 4;
@@ -273,6 +295,23 @@ export default function EstadoBodegaSection(props: Props) {
           pageSize={MAP_PAGE_SIZE}
           onPageChange={(page) => setMapPage(page)}
         />
+        {(role === "administrador" || role === "jefe") && (
+          <div className="w-full rounded-2xl border border-sky-200 bg-white p-3 shadow-md sm:p-4">
+            <ProcesamientoOrdenesActivasBodega
+              clients={clients}
+              warehouseCodeCuenta={warehouseCodeCuenta}
+              warehouseId={warehouseId}
+              slots={slots}
+              layout="cards"
+              sessionUid={sessionUid}
+              sessionRole={sessionRole}
+              operariosBodega={operariosBodega}
+              tareasProcesamientoOperario={tareasProcesamientoOperario}
+              onPushTareaProcesamientoOperario={onPushTareaProcesamientoOperario}
+              onProcesamientoTerminadoInventario={onProcesamientoTerminadoInventario}
+            />
+          </div>
+        )}
         <SelectedSlotCard
           slot={selectedSlot}
           onClose={() => setSelectedPosition(null)}

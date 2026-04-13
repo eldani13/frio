@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { compareOrdenCompraNewestFirst } from "@/lib/ordenCompraSort";
 import {
   OrdenCompraService,
   type OrdenCompraPendienteRecepcion,
@@ -42,6 +43,8 @@ export default function CustodioOrdenesCompraTab({ warehousesFallback = [] }: Pr
   useEffect(() => {
     reload();
   }, [reload]);
+
+  const listTabla = useMemo(() => [...list].sort(compareOrdenCompraNewestFirst), [list]);
 
   return (
     <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6 lg:p-8">
@@ -111,14 +114,14 @@ export default function CustodioOrdenesCompraTab({ warehousesFallback = [] }: Pr
                     Cargando…
                   </td>
                 </tr>
-              ) : list.length === 0 ? (
+              ) : listTabla.length === 0 ? (
                 <tr>
                   <td colSpan={8} className="px-3 py-12 text-center text-slate-500">
                     No hay órdenes registradas.
                   </td>
                 </tr>
               ) : (
-                list.map((o) => (
+                listTabla.map((o) => (
                   <tr
                     key={`${o.idClienteDueno}-${o.id}`}
                     role="button"

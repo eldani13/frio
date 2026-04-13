@@ -9,11 +9,13 @@ import {
   FiArrowRight,
   FiBox,
   FiCalendar,
+  FiCpu,
   FiMapPin,
   FiPackage,
   FiPhoneCall,
   FiUser,
 } from "react-icons/fi";
+import { SolicitudProcesamientoService } from "@/app/services/solicitudProcesamientoService";
 import { IoCloseOutline } from "react-icons/io5";
 import { temperatureStringFromAnalyzeResponse } from "@/app/lib/imageAnalyzeApi";
 
@@ -120,6 +122,10 @@ export default function RequestsQueue(props: RequestsQueueProps) {
     onUpdateLlamadasJefe,
     onPersistTemperatureForAlert,
     onOperarioResolveTemperatureAlert,
+    tareasProcesamientoOperario = [],
+    onUpdateTareasProcesamientoOperario,
+    operarioSessionUid,
+    onProcesamientoTerminadoDesdeOperario,
   } = props;
 
   // Optional callbacks may be provided from parent, keep refs without invoking
@@ -146,6 +152,7 @@ export default function RequestsQueue(props: RequestsQueueProps) {
   >(null);
   const [editTempLoading, setEditTempLoading] = useState(false);
   const [showCallModal, setShowCallModal] = useState(false);
+  const [procBusyKey, setProcBusyKey] = useState<string | null>(null);
   const [reviewModal, setReviewModal] = useState<
     | null
     | {
@@ -179,6 +186,75 @@ export default function RequestsQueue(props: RequestsQueueProps) {
     });
     return out;
   }, [alertasOperario, slots, inboundBoxes, outboundBoxes]);
+
+  const tareasProcesamientoOperarioVisibles = useMemo(() => {
+    if (!canExecute) return [];
+    const uid = String(operarioSessionUid ?? "").trim();
+    if (!uid) return [];
+    return tareasProcesamientoOperario.filter(
+      (t) => String(t.operarioUid ?? "").trim() === uid,
+    );
+  }, [canExecute, operarioSessionUid, tareasProcesamientoOperario]);
+
+  const totalAsignacionesOperario =
+    alertasOperarioVisibles.length + tareasProcesamientoOperarioVisibles.length;
+
+  const bandejaLabel =
+    canExecute && tareasProcesamientoOperarioVisibles.length > 0
+      ? "Alertas y tareas"
+      : "Alertas";
+
+  const handlePasarProcesamientoEnCurso = async (tarea: Record<string, unknown>) => {
+    if (!onUpdateTareasProcesamientoOperario) return;
+    const clientId = String(tarea.clientId ?? "").trim();
+    const solicitudId = String(tarea.solicitudId ?? "").trim();
+    if (!clientId || !solicitudId) return;
+    const key = `${clientId}::${solicitudId}`;
+    setProcBusyKey(key);
+    try {
+      await SolicitudProcesamientoService.actualizarEstado(clientId, solicitudId, "En curso");
+      onUpdateTareasProcesamientoOperario(
+        tareasProcesamientoOperario.map((x) =>
+          String(x.clientId ?? "").trim() === clientId && String(x.solicitudId ?? "").trim() === solicitudId
+            ? { ...x, faseCola: "en_curso" }
+            : x,
+        ),
+      );
+    } catch {
+      window.alert("No se pudo pasar la orden a «En curso». Revisá que sigas asignado o intentá de nuevo.");
+    } finally {
+      setProcBusyKey(null);
+    }
+  };
+
+  const handleTerminarProcesamiento = async (tarea: Record<string, unknown>) => {
+    const clientId = String(tarea.clientId ?? "").trim();
+    const solicitudId = String(tarea.solicitudId ?? "").trim();
+    if (!clientId || !solicitudId) return;
+    if (!onUpdateTareasProcesamientoOperario) return;
+    const key = `${clientId}::${solicitudId}`;
+    setProcBusyKey(key);
+    try {
+      await SolicitudProcesamientoService.actualizarEstado(clientId, solicitudId, "Terminado");
+      if (onProcesamientoTerminadoDesdeOperario) {
+        await onProcesamientoTerminadoDesdeOperario(tarea);
+      } else {
+        onUpdateTareasProcesamientoOperario(
+          tareasProcesamientoOperario.filter(
+            (x) =>
+              !(
+                String(x.clientId ?? "").trim() === clientId &&
+                String(x.solicitudId ?? "").trim() === solicitudId
+              ),
+          ),
+        );
+      }
+    } catch {
+      window.alert("No se pudo marcar la orden como terminada.");
+    } finally {
+      setProcBusyKey(null);
+    }
+  };
 
   const originStatus: keyof typeof STATUS_STYLES = nextRequest
     ? (() => {
@@ -321,16 +397,35 @@ export default function RequestsQueue(props: RequestsQueueProps) {
       {/* Modal de Alertas */}
       {showAlertModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center backdrop-blur-sm bg-black/10 animate-fade-in">
-          <div className="bg-white rounded-3xl shadow-2xl p-0 max-w-lg w-full relative animate-fade-in-up border border-red-100">
-            <div className="flex flex-col items-center justify-center pt-8 pb-4 px-8 border-b border-red-100 bg-linear-to-r from-red-50 to-white rounded-t-3xl">
-              <span className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-red-100 shadow animate-pulse mb-2">
-                <FiAlertCircle className="w-9 h-9 text-red-500" />
-              </span>
-              <h2 className="text-2xl font-extrabold text-red-700 drop-shadow mb-1">
-                Alertas asignadas
+          <div className="bg-white rounded-3xl shadow-2xl p-0 max-w-lg w-full relative animate-fade-in-up border border-slate-200">
+            <div
+              className={`flex flex-col items-center justify-center pt-8 pb-4 px-8 border-b border-slate-100 rounded-t-3xl bg-linear-to-r ${
+                alertasOperarioVisibles.length > 0 && tareasProcesamientoOperarioVisibles.length > 0
+                  ? "from-red-50 via-white to-sky-50"
+                  : tareasProcesamientoOperarioVisibles.length > 0
+                    ? "from-sky-50 to-white"
+                    : "from-red-50 to-white"
+              }`}
+            >
+              <div className="flex items-center justify-center gap-2 mb-2">
+                {alertasOperarioVisibles.length > 0 ? (
+                  <span className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-red-100 shadow">
+                    <FiAlertCircle className="w-8 h-8 text-red-500" />
+                  </span>
+                ) : null}
+                {tareasProcesamientoOperarioVisibles.length > 0 ? (
+                  <span className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-sky-100 shadow">
+                    <FiCpu className="w-8 h-8 text-sky-600" />
+                  </span>
+                ) : null}
+              </div>
+              <h2 className="text-2xl font-extrabold text-slate-800 drop-shadow mb-1 text-center">
+                {tareasProcesamientoOperarioVisibles.length > 0 ? "Tus asignaciones" : "Alertas asignadas"}
               </h2>
-              <p className="text-sm text-slate-500 font-medium text-center">
-                Estas son las alertas de temperatura que tienes asignadas actualmente.
+              <p className="text-sm text-slate-500 font-medium text-center max-w-sm">
+                {tareasProcesamientoOperarioVisibles.length > 0
+                  ? "Temperatura alta y procesamiento que el jefe te envió a la cola."
+                  : "Estas son las alertas de temperatura que tienes asignadas actualmente."}
               </p>
               <button
                 className="absolute top-4 right-4 text-slate-400 text-2xl font-bold focus:outline-none transition-colors"
@@ -340,31 +435,36 @@ export default function RequestsQueue(props: RequestsQueueProps) {
                 <IoCloseOutline />
               </button>
             </div>
-            <div className="px-8 py-6 min-h-30 flex flex-col items-center">
+            <div className="px-8 py-6 min-h-30 flex flex-col items-stretch w-full max-w-lg mx-auto">
+              <p className="text-xs font-bold uppercase tracking-wide text-slate-500 mb-2">Temperatura</p>
               {alertasOperarioVisibles.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-8">
-                  <svg
-                    className="w-16 h-16 text-slate-200 mb-3"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                    />
-                  </svg>
-                  <p className="text-slate-400 text-lg font-semibold text-center">
-                    No hay alertas asignadas
+                tareasProcesamientoOperarioVisibles.length > 0 ? (
+                  <p className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2 text-sm text-slate-600 mb-1">
+                    No tenés alertas de temperatura pendientes.
                   </p>
-                  <p className="text-slate-400 text-sm text-center mt-1">
-                    Cuando se te asigne una alerta, aparecerá aquí.
-                  </p>
-                </div>
+                ) : (
+                  <div className="flex flex-col items-center justify-center py-8">
+                    <svg
+                      className="w-16 h-16 text-slate-200 mb-3"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                      />
+                    </svg>
+                    <p className="text-slate-400 text-lg font-semibold text-center">No hay alertas asignadas</p>
+                    <p className="text-slate-400 text-sm text-center mt-1">
+                      Cuando se te asigne una alerta, aparecerá aquí.
+                    </p>
+                  </div>
+                )
               ) : (
-                <ul className="mt-2 w-full space-y-3">
+                <ul className="mt-0 w-full space-y-3">
                   {alertasOperarioVisibles.map(({ alerta, sourceIndex }) => (
                     <li
                       key={`${sourceIndex}-${Number(alerta.position)}`}
@@ -375,9 +475,7 @@ export default function RequestsQueue(props: RequestsQueueProps) {
                       </span>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-1">
-                          <span className="font-bold text-base text-red-700">
-                            Alerta {alerta.position}
-                          </span>
+                          <span className="font-bold text-base text-red-700">Alerta {alerta.position}</span>
                           {(alerta as any).name && (
                             <span className="ml-2 text-xs text-slate-700 bg-slate-100 rounded px-2 py-0.5">
                               {(alerta as any).name}
@@ -401,7 +499,7 @@ export default function RequestsQueue(props: RequestsQueueProps) {
                         <div className="text-xs text-slate-500 mt-1">Alerta de temperatura alta</div>
                       </div>
                       <button
-                        className="ml-2 px-3 py-1 rounded-lg bg-green-500 hover:bg-green-600 text-white text-xs font-bold shadow transition-all focus:outline-none focus:ring-2 focus:ring-green-300"
+                        className="ml-2 shrink-0 px-3 py-1 rounded-lg bg-green-500 hover:bg-green-600 text-white text-xs font-bold shadow transition-all focus:outline-none focus:ring-2 focus:ring-green-300"
                         onClick={() => {
                           setAlertaSeleccionada({ alerta, idx: sourceIndex });
                           setShowSolveModal(true);
@@ -414,6 +512,61 @@ export default function RequestsQueue(props: RequestsQueueProps) {
                   ))}
                 </ul>
               )}
+              {tareasProcesamientoOperarioVisibles.length > 0 ? (
+                <div className="mt-6 w-full border-t border-slate-100 pt-4">
+                  <p className="text-xs font-bold uppercase tracking-wide text-sky-700 mb-2">Procesamiento</p>
+                  <ul className="w-full space-y-3">
+                    {tareasProcesamientoOperarioVisibles.map((tarea) => {
+                      const cid = String(tarea.clientId ?? "").trim();
+                      const sid = String(tarea.solicitudId ?? "").trim();
+                      const pkey = `${cid}::${sid}`;
+                      const busy = procBusyKey === pkey;
+                      const num = String(tarea.numero ?? "").trim() || "—";
+                      const cuenta = String(tarea.clientName ?? tarea.clientId ?? "").trim() || "—";
+                      const prim = String(tarea.productoPrimarioTitulo ?? "").trim() || "—";
+                      const fase = String(tarea.faseCola ?? "asignado").trim();
+                      const enCursoCola = fase === "en_curso";
+                      return (
+                        <li
+                          key={pkey}
+                          className="flex flex-col gap-3 rounded-xl border border-sky-200 bg-linear-to-r from-sky-50 to-white px-4 py-4 text-slate-800 shadow-sm sm:flex-row sm:items-center"
+                        >
+                          <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-sky-100">
+                            <FiCpu className="h-5 w-5 text-sky-600" />
+                          </span>
+                          <div className="min-w-0 flex-1">
+                            <div className="font-mono text-sm font-bold text-sky-950">{num}</div>
+                            <div className="text-xs font-semibold text-slate-700">{cuenta}</div>
+                            <div className="mt-1 line-clamp-2 text-xs text-slate-600">{prim}</div>
+                            {enCursoCola ? (
+                              <p className="mt-1 text-[10px] font-semibold text-amber-800">En curso — al terminar se descuenta kg en bodega.</p>
+                            ) : null}
+                          </div>
+                          {enCursoCola ? (
+                            <button
+                              type="button"
+                              disabled={busy || !onUpdateTareasProcesamientoOperario}
+                              onClick={() => void handleTerminarProcesamiento(tarea)}
+                              className="shrink-0 rounded-lg bg-linear-to-r from-emerald-600 to-teal-500 px-4 py-2 text-xs font-bold text-white shadow-md transition hover:from-emerald-700 hover:to-teal-600 disabled:cursor-not-allowed disabled:opacity-50"
+                            >
+                              {busy ? "Guardando…" : "Terminar y descontar"}
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              disabled={busy || !onUpdateTareasProcesamientoOperario}
+                              onClick={() => void handlePasarProcesamientoEnCurso(tarea)}
+                              className="shrink-0 rounded-lg bg-linear-to-r from-blue-600 to-cyan-500 px-4 py-2 text-xs font-bold text-white shadow-md transition hover:from-blue-700 hover:to-cyan-600 disabled:cursor-not-allowed disabled:opacity-50"
+                            >
+                              {busy ? "Guardando…" : "Pasar a en curso"}
+                            </button>
+                          )}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </div>
+              ) : null}
             </div>
             <div className="flex justify-center pb-6 pt-2 px-8">
               <button
@@ -534,22 +687,34 @@ export default function RequestsQueue(props: RequestsQueueProps) {
           <button
             type="button"
             className={`flex-1 flex items-center justify-center gap-2 rounded-2xl font-bold text-lg py-4 shadow transition-all border-2 focus:outline-none focus:ring-2
-              ${alertasOperarioVisibles.length > 0
-                ? "bg-red-100 hover:bg-red-200 text-red-700 border-red-200 focus:ring-red-300"
-                : "bg-slate-100 text-slate-400 border-slate-200 focus:ring-slate-300 cursor-not-allowed"}
+              ${
+                totalAsignacionesOperario > 0
+                  ? tareasProcesamientoOperarioVisibles.length > 0 && alertasOperarioVisibles.length === 0
+                    ? "bg-sky-100 hover:bg-sky-200 text-sky-900 border-sky-200 focus:ring-sky-300"
+                    : "bg-red-100 hover:bg-red-200 text-red-700 border-red-200 focus:ring-red-300"
+                  : "bg-slate-100 text-slate-400 border-slate-200 focus:ring-slate-300 cursor-not-allowed"
+              }
             `}
             style={{ minWidth: 0 }}
-            onClick={() => alertasOperarioVisibles.length > 0 && setShowAlertModal(true)}
-            disabled={alertasOperarioVisibles.length === 0}
+            onClick={() => totalAsignacionesOperario > 0 && setShowAlertModal(true)}
+            disabled={totalAsignacionesOperario === 0}
           >
-            <FiAlertCircle className="w-6 h-6" />
-            Alertas
-            {alertasOperarioVisibles.length > 0 && (
+            {tareasProcesamientoOperarioVisibles.length > 0 ? (
+              <FiCpu className="w-6 h-6 shrink-0" />
+            ) : (
+              <FiAlertCircle className="w-6 h-6 shrink-0" />
+            )}
+            <span className="truncate">{bandejaLabel}</span>
+            {totalAsignacionesOperario > 0 && (
               <span
-                className="ml-2 px-2 py-0.5 rounded-full bg-red-500 text-white text-base font-bold animate-pulse"
+                className={`ml-2 px-2 py-0.5 rounded-full text-white text-base font-bold animate-pulse ${
+                  tareasProcesamientoOperarioVisibles.length > 0 && alertasOperarioVisibles.length === 0
+                    ? "bg-sky-600"
+                    : "bg-red-500"
+                }`}
                 style={{ minWidth: 28, textAlign: "center" }}
               >
-                {alertasOperarioVisibles.length}
+                {totalAsignacionesOperario}
               </span>
             )}
           </button>

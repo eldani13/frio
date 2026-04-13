@@ -235,11 +235,7 @@ export function OcOrdenIngresoPanel({ warehouseId, isBodegaInterna, onRegistrar 
         </span>
         <div className="min-w-0">
           <h2 className="text-lg font-semibold text-slate-900">Orden de ingreso</h2>
-          <p className="text-xs text-slate-500">
-            Elegí una orden en <strong>transporte</strong> para esta bodega. Podés marcar ninguna, algunas o todas las
-            líneas. Las cajas marcadas pasan a <strong>Zona de ingreso</strong>. Al confirmar se compara pedido vs
-            recibido: la OC queda en <strong>Cerrado(ok)</strong> o <strong>Cerrado(no ok)</strong> (no en «En curso»).
-          </p>
+          
         </div>
       </div>
 

@@ -1,4 +1,5 @@
 import type { Slot } from "../app/interfaces/bodega";
+import { kgFromFirestoreSlotRecord } from "./coerceBodegaKg";
 
 /** Alineado con ingresos / mapa: por encima de 5 °C se considera alerta. */
 export const TEMP_ESTABLE_MAX_C = 5;
@@ -27,6 +28,14 @@ export type FilaInventarioInterno = {
   caducidad: string | null;
   fechaIngreso: string | null;
   llaveUnica: string | null;
+};
+
+export type InventarioInternoFromSlotsOptions = {
+  /**
+   * Último snapshot por `autoId` en `state/history.ingresos`.
+   * Rellena kg (y trazas) cuando el slot en Firestore quedó sin esos campos.
+   */
+  ingresoRecordsByAutoId?: Map<string, Record<string, unknown>>;
 };
 
 function pickStr(v: unknown): string | null {
@@ -69,12 +78,46 @@ function categoriaTermica(temp: number | null | undefined): CategoriaTermica {
   return Number(temp) > TEMP_ESTABLE_MAX_C ? "alta" : "estable";
 }
 
-export function filasInventarioInternoFromSlots(slots: Slot[]): FilaInventarioInterno[] {
+/** Último registro por autoId (orden del array: el último gana). */
+export function buildIngresoRecordByAutoId(
+  ingresos: Array<Record<string, unknown>>,
+): Map<string, Record<string, unknown>> {
+  const m = new Map<string, Record<string, unknown>>();
+  for (const row of ingresos) {
+    const id = typeof row.autoId === "string" ? row.autoId.trim() : "";
+    if (!id) continue;
+    m.set(id, row);
+  }
+  return m;
+}
+
+function resolveKilosMerged(
+  s: Slot,
+  raw: Record<string, unknown>,
+  hist: Record<string, unknown>,
+): number | null {
+  const merged: Record<string, unknown> = { ...hist, ...raw };
+  if (s.quantityKg !== undefined) merged.quantityKg = s.quantityKg;
+  if (s.pesoUnitario !== undefined && s.pesoUnitario !== null) {
+    merged.pesoUnitario = s.pesoUnitario;
+  }
+  if (s.piezas !== undefined && s.piezas !== null) merged.piezas = s.piezas;
+  const kg = kgFromFirestoreSlotRecord(merged);
+  return kg !== undefined ? kg : null;
+}
+
+export function filasInventarioInternoFromSlots(
+  slots: Slot[],
+  opts?: InventarioInternoFromSlotsOptions,
+): FilaInventarioInterno[] {
+  const byAuto = opts?.ingresoRecordsByAutoId;
   return [...slots]
     .filter((s) => s.autoId?.trim())
     .sort((a, b) => a.position - b.position)
     .map((s) => {
       const raw = slotExtras(s);
+      const hist =
+        s.autoId?.trim() && byAuto ? (byAuto.get(s.autoId.trim()) ?? {}) : {};
       const tempResolved = pickNum(s.temperature ?? raw.temperature);
       const cat = categoriaTermica(tempResolved);
       const estadoTexto =
@@ -83,10 +126,7 @@ export function filasInventarioInternoFromSlots(slots: Slot[]): FilaInventarioIn
           : cat === "alta"
             ? "Alta temperatura"
             : "Temperatura estable";
-      const kg =
-        typeof s.quantityKg === "number" && Number.isFinite(s.quantityKg)
-          ? s.quantityKg
-          : null;
+      const kg = resolveKilosMerged(s, raw, hist);
       const nombreRaw = s.name?.trim() ?? "";
       const llave =
         pickStr(s.llaveUnica ?? raw.llaveUnica ?? raw.llaveunica) ??
@@ -100,25 +140,30 @@ export function filasInventarioInternoFromSlots(slots: Slot[]): FilaInventarioIn
         estadoTexto,
         esAlerta: cat === "alta",
         categoriaTermica: cat,
-        rd: pickStr(s.rd ?? raw.rd),
-        renglon: pickStr(s.renglon ?? raw.renglon),
-        lote: pickStr(s.lote ?? raw.lote),
+        rd: pickStr(s.rd ?? raw.rd ?? hist.rd),
+        renglon: pickStr(s.renglon ?? raw.renglon ?? hist.renglon),
+        lote: pickStr(s.lote ?? raw.lote ?? hist.lote),
         descripcion: nombreRaw,
-        marca: pickStr(s.marca ?? raw.marca),
-        embalaje: pickStr(s.embalaje ?? raw.embalaje),
-        pesoUnitario: pickNum(s.pesoUnitario ?? raw.pesoUnitario ?? raw.peso_unitario),
-        piezas: pickNum(s.piezas ?? raw.piezas),
+        marca: pickStr(s.marca ?? raw.marca ?? hist.marca),
+        embalaje: pickStr(s.embalaje ?? raw.embalaje ?? hist.embalaje),
+        pesoUnitario: pickNum(s.pesoUnitario ?? raw.pesoUnitario ?? raw.peso_unitario ?? hist.pesoUnitario ?? hist.peso_unitario),
+        piezas: pickNum(s.piezas ?? raw.piezas ?? hist.piezas),
         kilosActual: kg,
-        caducidad: pickStr(s.caducidad ?? raw.caducidad),
-        fechaIngreso: pickStr(s.fechaIngreso ?? raw.fechaIngreso ?? raw.fecha_ingreso),
+        caducidad: pickStr(s.caducidad ?? raw.caducidad ?? hist.caducidad),
+        fechaIngreso: pickStr(
+          s.fechaIngreso ?? raw.fechaIngreso ?? raw.fecha_ingreso ?? hist.fechaIngreso ?? hist.fecha_ingreso,
+        ),
         llaveUnica: llave,
       };
     });
 }
 
 /** Suma de kg en posiciones ocupadas (misma lógica que el pie del listado). */
-export function totalKgInternoDesdeSlots(slots: Slot[]): number {
-  return filasInventarioInternoFromSlots(slots).reduce(
+export function totalKgInternoDesdeSlots(
+  slots: Slot[],
+  opts?: InventarioInternoFromSlotsOptions,
+): number {
+  return filasInventarioInternoFromSlots(slots, opts).reduce(
     (acc, r) => acc + (r.cantidadKg ?? 0),
     0,
   );

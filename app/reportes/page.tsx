@@ -7,8 +7,11 @@ import { useAuth } from "@/app/context/AuthContext";
 import { AsignarBodegaService } from "@/app/services/asignarbodegaService";
 import type { WarehouseMeta } from "@/app/interfaces/bodega";
 import { fetchFridemInventoryRows } from "@/lib/fridemInventory";
-import { fetchWarehouseStateOnce } from "@/lib/bodegaCloudState";
-import { totalKgInternoDesdeSlots } from "@/lib/bodegaInternalInventoryRows";
+import { fetchHistoryStateOnce, fetchWarehouseStateOnce } from "@/lib/bodegaCloudState";
+import {
+  buildIngresoRecordByAutoId,
+  totalKgInternoDesdeSlots,
+} from "@/lib/bodegaInternalInventoryRows";
 import { kilosPedidoLineItem } from "@/app/lib/ordenCompraLineKgPedido";
 import { OrdenCompraService } from "@/app/services/ordenCompraService";
 import type { OrdenCompra } from "@/app/types/ordenCompra";
@@ -236,10 +239,15 @@ const ReportesSection = () => {
 
         await Promise.all(
           internas.map((w) =>
-            fetchWarehouseStateOnce(w.id)
-              .then((state) => {
+            Promise.all([fetchWarehouseStateOnce(w.id), fetchHistoryStateOnce(w.id)])
+              .then(([state, hist]) => {
                 if (cancelled) return;
-                const kg = totalKgInternoDesdeSlots(state.slots ?? []);
+                const ingresoRecordsByAutoId = buildIngresoRecordByAutoId(
+                  (hist.ingresos ?? []) as Record<string, unknown>[],
+                );
+                const kg = totalKgInternoDesdeSlots(state.slots ?? [], {
+                  ingresoRecordsByAutoId,
+                });
                 setInternalTotalKg((prev) => prev + kg);
               })
               .catch(() => {}),

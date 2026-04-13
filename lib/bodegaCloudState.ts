@@ -30,6 +30,8 @@ export type CloudWarehouseState = {
   assignedAlerts: AlertAssignment[];
   alertasOperario: Array<{ position: number; [key: string]: unknown }>;
   alertasOperarioSolved: number[];
+  /** Tareas de procesamiento enviadas al operario (misma idea que alertasOperario). */
+  tareasProcesamientoOperario: Array<Record<string, unknown>>;
   llamadasJefe: Array<Record<string, unknown>>;
 };
 
@@ -45,6 +47,7 @@ export const defaultWarehouseState: CloudWarehouseState = {
   assignedAlerts: [],
   alertasOperario: [],
   alertasOperarioSolved: [],
+  tareasProcesamientoOperario: [],
   llamadasJefe: [],
 };
 
@@ -98,6 +101,14 @@ export async function fetchWarehouseStateOnce(
   if (!snap.exists()) return defaultWarehouseState;
   const data = snap.data() as Partial<CloudWarehouseState>;
   return { ...defaultWarehouseState, ...data };
+}
+
+/** Lectura puntual del historial (ingresos archivados, etc.) para enriquecer reportes. */
+export async function fetchHistoryStateOnce(warehouseId: string): Promise<HistoryState> {
+  const snap = await getDoc(historyDocRef(warehouseId));
+  if (!snap.exists()) return defaultHistoryState;
+  const data = snap.data() as Partial<HistoryState>;
+  return { ...defaultHistoryState, ...data };
 }
 
 export function subscribeWarehouseState(

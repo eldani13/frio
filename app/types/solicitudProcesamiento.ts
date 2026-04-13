@@ -1,0 +1,46 @@
+import type { Timestamp } from "firebase/firestore";
+
+export const PROCESAMIENTO_ESTADOS = ["Iniciado", "En curso", "Terminado"] as const;
+export type ProcesamientoEstado = (typeof PROCESAMIENTO_ESTADOS)[number];
+
+export function normalizeProcesamientoEstado(v: string): ProcesamientoEstado {
+  const t = String(v ?? "").trim();
+  if (t === "En curso" || t === "Terminado" || t === "Iniciado") return t;
+  return "Iniciado";
+}
+
+/** Solicitud de procesamiento (cuenta → bodega interna). */
+export type SolicitudProcesamiento = {
+  id: string;
+  clientId: string;
+  codeCuenta: string;
+  clientName: string;
+  creadoPorNombre: string;
+  creadoPorUid: string;
+  numero: string;
+  numericId: number;
+  productoPrimarioId: string;
+  productoPrimarioTitulo: string;
+  productoSecundarioId: string;
+  productoSecundarioTitulo: string;
+  cantidadPrimario: number;
+  /** Tomado del catálogo del primario al crear la solicitud. */
+  unidadPrimarioVisualizacion?: "cantidad" | "peso" | string;
+  /** Bodega interna elegida al crear (Firestore `warehouses`). */
+  warehouseId?: string;
+  /** Estimación según regla de tres del secundario al momento del alta. */
+  estimadoUnidadesSecundario?: number | null;
+  fecha: string;
+  estado: ProcesamientoEstado;
+  createdAt?: Timestamp | null;
+  /** Operario de bodega asignado por jefe/admin (solo él puede pasar Iniciado → En curso). */
+  operarioBodegaUid?: string;
+  operarioBodegaNombre?: string;
+};
+
+export function procesamientoEstadoBadgeClass(estado: string): string {
+  const e = normalizeProcesamientoEstado(estado);
+  if (e === "Terminado") return "bg-slate-200 text-slate-800";
+  if (e === "En curso") return "bg-amber-100 text-amber-900";
+  return "bg-sky-100 text-sky-900";
+}

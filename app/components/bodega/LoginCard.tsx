@@ -9,6 +9,8 @@ export interface LoginCardProps {
   onPasswordChange: (value: string) => void;
   onSubmit: () => void;
   errorMessage?: string;
+  /** Botones bajo «Entrar» que rellenan usuario y contraseña (p. ej. atajos de desarrollo). */
+  quickFillActions?: Array<{ label: string; onFill: () => void }>;
 }
 
 const LoginCard: React.FC<LoginCardProps> = ({
@@ -18,6 +20,7 @@ const LoginCard: React.FC<LoginCardProps> = ({
   onPasswordChange,
   onSubmit,
   errorMessage,
+  quickFillActions,
 }) => {
   const [showPassword, setShowPassword] = useState(false);
   return (
@@ -103,6 +106,26 @@ const LoginCard: React.FC<LoginCardProps> = ({
           Entrar
         </button>
       </form>
+
+      {quickFillActions && quickFillActions.length > 0 ? (
+        <div className="mt-6 border-t border-slate-200 pt-5">
+          <p className="mb-3 text-center text-xs font-semibold uppercase tracking-wide text-slate-400">
+            Acceso rápido por rol
+          </p>
+          <div className="flex flex-wrap justify-center gap-2">
+            {quickFillActions.map(({ label, onFill }) => (
+              <button
+                key={label}
+                type="button"
+                onClick={onFill}
+                className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:border-sky-300 hover:bg-sky-50 hover:text-slate-900 focus:outline-none focus:ring-2 focus:ring-sky-200"
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : null}
 
     </div>
   );

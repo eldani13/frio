@@ -23,10 +23,12 @@ import {
   YAxis,
 } from "recharts";
 import {
+  subscribeHistoryState,
   subscribeWarehouseState,
   type CloudWarehouseState,
 } from "@/lib/bodegaCloudState";
 import {
+  buildIngresoRecordByAutoId,
   filasInventarioInternoFromSlots,
   type CategoriaTermica,
   type FilaInventarioInterno,
@@ -182,6 +184,7 @@ type Props = { warehouseId?: string; onTotalChange?: (totalKg: number) => void }
 
 const Operacion: React.FC<Props> = ({ warehouseId, onTotalChange }) => {
   const [cloud, setCloud] = useState<CloudWarehouseState | null>(null);
+  const [ingresoRows, setIngresoRows] = useState<Record<string, unknown>[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -199,9 +202,29 @@ const Operacion: React.FC<Props> = ({ warehouseId, onTotalChange }) => {
     return () => unsub();
   }, [warehouseId]);
 
+  useEffect(() => {
+    const id = warehouseId?.trim();
+    if (!id) {
+      setIngresoRows([]);
+      return;
+    }
+    const unsub = subscribeHistoryState(id, (h) => {
+      setIngresoRows((h.ingresos ?? []) as Record<string, unknown>[]);
+    });
+    return () => unsub();
+  }, [warehouseId]);
+
+  const ingresoRecordsByAutoId = useMemo(
+    () => buildIngresoRecordByAutoId(ingresoRows),
+    [ingresoRows],
+  );
+
   const filas = useMemo(
-    () => filasInventarioInternoFromSlots(cloud?.slots ?? []),
-    [cloud?.slots],
+    () =>
+      filasInventarioInternoFromSlots(cloud?.slots ?? [], {
+        ingresoRecordsByAutoId,
+      }),
+    [cloud?.slots, ingresoRecordsByAutoId],
   );
 
   const totalKg = useMemo(

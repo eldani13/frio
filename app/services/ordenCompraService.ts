@@ -19,6 +19,7 @@ import type {
 } from "@/app/types/ordenCompra";
 import { resolveProveedorPedidoIntegracion } from "@/app/services/pedidoProveedorResolve";
 import { ordenCompraIngresoLineKey } from "@/app/lib/ordenCompraIngresoLineKey";
+import { compareOrdenCompraNewestFirst } from "@/lib/ordenCompraSort";
 
 /** OC con ruta de dueño (custodio / vistas globales). */
 export type OrdenCompraPendienteRecepcion = OrdenCompra & {
@@ -204,7 +205,7 @@ export const OrdenCompraService = {
       const snap = await getDocs(q);
       const list = snap.docs.map((d) => ({ id: d.id, ...d.data() } as OrdenCompraConId));
       const repaired = await repairOrdenesCompraSinNumero(idCliente.trim(), list);
-      return repaired.sort((a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0));
+      return repaired.sort(compareOrdenCompraNewestFirst);
     } catch (e: unknown) {
       console.error("OrdenCompraService.getAll", e);
       return [];
@@ -265,7 +266,7 @@ export const OrdenCompraService = {
           }
         }
       }
-      return out.sort((a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0));
+      return out.sort(compareOrdenCompraNewestFirst);
     } catch (e: unknown) {
       console.error("OrdenCompraService.listParaRecepcionEnBodegaGlobal", e);
       throw e;
@@ -291,7 +292,7 @@ export const OrdenCompraService = {
           out.push({ id, idClienteDueno: idCliente, ...rest });
         }
       }
-      out.sort((a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0));
+      out.sort(compareOrdenCompraNewestFirst);
       return out.slice(0, cap);
     } catch (e: unknown) {
       console.error("OrdenCompraService.listTodasOrdenesCompraGlobal", e);

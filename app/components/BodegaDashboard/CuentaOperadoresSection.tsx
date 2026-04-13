@@ -113,8 +113,13 @@ export function CuentaOperadoresSection() {
       await reload();
     } catch (err: unknown) {
       const fromFirebase =
-        typeof err === "object" && err !== null && "code" in err && String((err as { code: string }).code).startsWith("auth/");
-      setError(fromFirebase ? firebaseErrorMessage(err) : err instanceof Error ? err.message : firebaseErrorMessage(err));
+        typeof err === "object" &&
+        err !== null &&
+        "code" in err &&
+        String((err as { code: string }).code).startsWith("auth/");
+      setError(
+        fromFirebase ? firebaseErrorMessage(err) : err instanceof Error ? err.message : firebaseErrorMessage(err),
+      );
     } finally {
       setSaving(false);
     }
@@ -126,8 +131,8 @@ export function CuentaOperadoresSection() {
         <div>
           <h2 className="text-lg font-bold text-slate-900">Operadores de cuenta</h2>
           <p className="mt-1 text-sm text-slate-500">
-            Usuarios con rol <span className="font-semibold text-slate-700">operador de cuentas</span>. Inician
-            sesión con correo y contraseña.
+            Usuarios con rol <span className="font-semibold text-slate-700">operador de cuentas</span>. Inician sesión
+            con correo y contraseña.
           </p>
         </div>
         {puedeCrear ? (
@@ -159,18 +164,10 @@ export function CuentaOperadoresSection() {
             <table className="w-full min-w-[520px] border-collapse text-left text-sm">
               <thead>
                 <tr className="border-b border-slate-200 bg-slate-50">
-                  <th className="px-4 py-3 text-[11px] font-bold uppercase tracking-wide text-slate-500">
-                    Nombre
-                  </th>
-                  <th className="px-4 py-3 text-[11px] font-bold uppercase tracking-wide text-slate-500">
-                    Correo
-                  </th>
-                  <th className="px-4 py-3 text-[11px] font-bold uppercase tracking-wide text-slate-500">
-                    Código
-                  </th>
-                  <th className="px-4 py-3 text-[11px] font-bold uppercase tracking-wide text-slate-500">
-                    Alta
-                  </th>
+                  <th className="px-4 py-3 text-[11px] font-bold uppercase tracking-wide text-slate-500">Nombre</th>
+                  <th className="px-4 py-3 text-[11px] font-bold uppercase tracking-wide text-slate-500">Correo</th>
+                  <th className="px-4 py-3 text-[11px] font-bold uppercase tracking-wide text-slate-500">Código</th>
+                  <th className="px-4 py-3 text-[11px] font-bold uppercase tracking-wide text-slate-500">Alta</th>
                 </tr>
               </thead>
               <tbody>
@@ -264,8 +261,8 @@ export function CuentaOperadoresSection() {
                   autoComplete="off"
                 />
                 <p className="mt-1 text-xs text-slate-500">
-                  Se genera igual que las cuentas (base 36, 5 caracteres). Al salir del nombre sin código, se
-                  sugiere uno.
+                  Se genera igual que las cuentas (base 36, 5 caracteres). Al salir del nombre sin código, se sugiere
+                  uno.
                 </p>
               </div>
               <div>

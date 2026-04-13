@@ -8,6 +8,8 @@ import ReportesPage from "@/app/reportes/page";
 import AsignarBodegasPage from "@/app/asignarbodegas/page";
 import AdminBodegaReportes from "@/app/components/BodegaDashboard/AdminBodegaReportes";
 import { CuentaOperadoresSection } from "@/app/components/BodegaDashboard/CuentaOperadoresSection";
+import { VentasEnCursoOperadorPanel } from "@/app/components/BodegaDashboard/VentasEnCursoOperadorPanel";
+import { ProcesamientoOperadorPanel } from "@/app/components/BodegaDashboard/ProcesamientoOperadorPanel";
 import type { Box, Client, Slot, WarehouseMeta } from "@/app/interfaces/bodega";
 import { OrdenCompraFormModal } from "@/app/components/ui/ordenes/OrdenCompraFormModal";
 import { OrdenCompraDetalleModal } from "@/app/components/ui/ordenes/OrdenCompraDetalleModal";
@@ -18,7 +20,9 @@ import { CatalogoService } from "@/app/services/catalogoService";
 import { OrdenCompraService } from "@/app/services/ordenCompraService";
 import { SolicitudCompraService } from "@/app/services/solicitudCompraService";
 import { ProviderService } from "@/app/services/providerService";
+import { CompradorService } from "@/app/services/compradorService";
 import type { Catalogo } from "@/app/types/catalogo";
+import type { Comprador } from "@/app/types/comprador";
 import {
   ORDEN_COMPRA_ESTADOS,
   ordenCompraEstadoBadgeClass,
@@ -32,8 +36,10 @@ import {
   type SolicitudIntegracion,
 } from "@/app/types/solicitudIntegracion";
 import { SolicitudIntegracionService } from "@/app/services/solicitudIntegracionService";
+import { compareOrdenCompraByCodigoDesc } from "@/lib/ordenCompraSort";
+import { compareSolicitudCompraByCodigoDesc } from "@/lib/solicitudCompraSort";
 
-import { MdAssignment, MdBusiness, MdShoppingCart } from "react-icons/md";
+import { MdAssignment, MdBusiness, MdShoppingCart, MdWarehouse } from "react-icons/md";
 import { BiBarChartAlt2, BiCollection, BiUserCheck } from "react-icons/bi";
 import {
   HiOutlineArrowLeft,
@@ -43,7 +49,7 @@ import {
   HiOutlineTruck,
   HiOutlineUsers,
 } from "react-icons/hi2";
-import { FiExternalLink } from "react-icons/fi";
+import { FiCpu, FiExternalLink } from "react-icons/fi";
 
 interface ReportesSectionProps {
   isCliente?: boolean;
@@ -116,12 +122,17 @@ const ReportesSection: React.FC<ReportesSectionProps> = ({
     | "asignarBodegasInterna"
     | "asignarBodegasExterna"
     | "camiones"
+    | "ventasOperadorHub"
+    | "ventasEnCurso"
+    | "bodegaInternaOperadorHub"
+    | "procesamientoOperador"
     | null
   >(isCliente ? null : "reporte");
 
   const [ordenesCompra, setOrdenesCompra] = React.useState<OrdenCompra[]>([]);
   const [catalogosOrden, setCatalogosOrden] = React.useState<Catalogo[]>([]);
   const [proveedoresOrden, setProveedoresOrden] = React.useState<Provider[]>([]);
+  const [compradoresCuenta, setCompradoresCuenta] = React.useState<Comprador[]>([]);
   const [ordenesDataLoading, setOrdenesDataLoading] = React.useState(false);
   const [ordenCompraModalOpen, setOrdenCompraModalOpen] = React.useState(false);
   const [solicitudModalOpen, setSolicitudModalOpen] = React.useState(false);
@@ -141,11 +152,76 @@ const ReportesSection: React.FC<ReportesSectionProps> = ({
   const [intFormError, setIntFormError] = React.useState<string | null>(null);
   const [intEnviando, setIntEnviando] = React.useState(false);
 
+  const ORDENES_COMPRA_PAGE_SIZE = 10;
+  const [ordenesCompraPage, setOrdenesCompraPage] = React.useState(1);
+
+  const ordenesCompraTabla = React.useMemo(
+    () => [...ordenesCompra].sort(compareOrdenCompraByCodigoDesc),
+    [ordenesCompra],
+  );
+
+  const ordenesCompraPageCount = Math.max(
+    1,
+    Math.ceil(ordenesCompraTabla.length / ORDENES_COMPRA_PAGE_SIZE),
+  );
+  const ordenesCompraCurrentPage = Math.min(
+    Math.max(1, ordenesCompraPage),
+    ordenesCompraPageCount,
+  );
+
+  React.useEffect(() => {
+    setOrdenesCompraPage((p) => Math.min(Math.max(1, p), ordenesCompraPageCount));
+  }, [ordenesCompraPageCount]);
+
+  const ordenesCompraTablaPagina = React.useMemo(
+    () =>
+      ordenesCompraTabla.slice(
+        (ordenesCompraCurrentPage - 1) * ORDENES_COMPRA_PAGE_SIZE,
+        ordenesCompraCurrentPage * ORDENES_COMPRA_PAGE_SIZE,
+      ),
+    [ordenesCompraTabla, ordenesCompraCurrentPage],
+  );
+
+  const SOLICITUDES_COMPRA_PAGE_SIZE = 10;
+  const [solicitudesCompraPage, setSolicitudesCompraPage] = React.useState(1);
+
+  const solicitudesCompraTabla = React.useMemo(
+    () => [...solicitudesCompra].sort(compareSolicitudCompraByCodigoDesc),
+    [solicitudesCompra],
+  );
+
+  const solicitudesCompraPageCount = Math.max(
+    1,
+    Math.ceil(solicitudesCompraTabla.length / SOLICITUDES_COMPRA_PAGE_SIZE),
+  );
+  const solicitudesCompraCurrentPage = Math.min(
+    Math.max(1, solicitudesCompraPage),
+    solicitudesCompraPageCount,
+  );
+
+  React.useEffect(() => {
+    setSolicitudesCompraPage((p) => Math.min(Math.max(1, p), solicitudesCompraPageCount));
+  }, [solicitudesCompraPageCount]);
+
+  const solicitudesCompraTablaPagina = React.useMemo(
+    () =>
+      solicitudesCompraTabla.slice(
+        (solicitudesCompraCurrentPage - 1) * SOLICITUDES_COMPRA_PAGE_SIZE,
+        solicitudesCompraCurrentPage * SOLICITUDES_COMPRA_PAGE_SIZE,
+      ),
+    [solicitudesCompraTabla, solicitudesCompraCurrentPage],
+  );
+
   const bodegasExternasCuenta = React.useMemo(
     () =>
       warehousesFallback.filter(
         (w) => w.status === "externa" || w.status === "external",
       ),
+    [warehousesFallback],
+  );
+
+  const bodegasInternasCuenta = React.useMemo(
+    () => warehousesFallback.filter((w) => w.status === "interna"),
     [warehousesFallback],
   );
 
@@ -203,12 +279,15 @@ const ReportesSection: React.FC<ReportesSectionProps> = ({
   React.useEffect(() => {
     const vistaOrdenes = viewMode === "ordenesCompra";
     const vistaSolicitudes = viewMode === "realizarSolicitudOperador";
-    if (!isCliente || (!vistaOrdenes && !vistaSolicitudes)) return;
+    const vistaVentas = viewMode === "ventasEnCurso";
+    const vistaProcesamiento = viewMode === "procesamientoOperador";
+    if (!isCliente || (!vistaOrdenes && !vistaSolicitudes && !vistaVentas && !vistaProcesamiento)) return;
     if (!idCliente.trim()) {
       setOrdenesCompra([]);
       setSolicitudesCompra([]);
       setCatalogosOrden([]);
       setProveedoresOrden([]);
+      setCompradoresCuenta([]);
       return;
     }
     let cancelled = false;
@@ -219,20 +298,28 @@ const ReportesSection: React.FC<ReportesSectionProps> = ({
     const solicitudesP = vistaSolicitudes
       ? SolicitudCompraService.getAll(idCliente, codeCuenta)
       : Promise.resolve([] as SolicitudCompra[]);
+    const needProviders = vistaOrdenes || vistaSolicitudes;
+    const needCompradores = vistaVentas;
     void Promise.all([
       ordenesP,
       solicitudesP,
       CatalogoService.getAll(idCliente, codeCuenta),
-      ProviderService.getAll(idCliente, codeCuenta),
+      needProviders
+        ? ProviderService.getAll(idCliente, codeCuenta)
+        : Promise.resolve(null as Provider[] | null),
+      needCompradores
+        ? CompradorService.getAll(idCliente, codeCuenta)
+        : Promise.resolve(null as Comprador[] | null),
     ])
-      .then(([ordenes, solicitudes, cats, provs]) => {
+      .then(([ordenes, solicitudes, cats, provs, comps]) => {
         if (cancelled) return;
         if (vistaOrdenes) setOrdenesCompra(ordenes);
         else setOrdenesCompra([]);
         if (vistaSolicitudes) setSolicitudesCompra(solicitudes);
         else setSolicitudesCompra([]);
         setCatalogosOrden(cats);
-        setProveedoresOrden(provs);
+        if (provs !== null) setProveedoresOrden(provs);
+        if (comps !== null) setCompradoresCuenta(comps);
       })
       .catch(() => {
         if (!cancelled) {
@@ -240,6 +327,7 @@ const ReportesSection: React.FC<ReportesSectionProps> = ({
           setSolicitudesCompra([]);
           setCatalogosOrden([]);
           setProveedoresOrden([]);
+          setCompradoresCuenta([]);
         }
       })
       .finally(() => {
@@ -304,7 +392,7 @@ const ReportesSection: React.FC<ReportesSectionProps> = ({
     if (esOperadorCuentas) {
       return (
         <section className="p-4 sm:p-8">
-          <div className="mx-auto grid max-w-6xl grid-cols-1 justify-items-stretch gap-4 sm:grid-cols-2 sm:justify-items-center sm:gap-5">
+          <div className="mx-auto grid max-w-6xl grid-cols-1 justify-items-stretch gap-4 sm:grid-cols-2 sm:justify-items-center sm:gap-5 lg:grid-cols-4">
             <button
               type="button"
               onClick={() => setViewMode("proveedorHubOperador")}
@@ -335,6 +423,38 @@ const ReportesSection: React.FC<ReportesSectionProps> = ({
               </span>
               <h3 className={`max-w-[13rem] text-lg font-bold leading-snug tracking-tight sm:text-xl ${cuentaMenuText}`}>
                 Bodega externa
+              </h3>
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode("bodegaInternaOperadorHub")}
+              style={{
+                backgroundColor: "#e0f2fe",
+                boxShadow: "0 14px 40px -10px rgba(2, 132, 199, 0.22)",
+              }}
+              className={`${cuentaMenuTile} w-full max-w-sm hover:shadow-[0_20px_48px_-12px_rgba(2,132,199,0.28)]`}
+            >
+              <span className={cuentaMenuIconWrap}>
+                <MdWarehouse size={38} className="text-sky-700" aria-hidden />
+              </span>
+              <h3 className={`max-w-[13rem] text-lg font-bold leading-snug tracking-tight sm:text-xl ${cuentaMenuText}`}>
+                Bodega interna
+              </h3>
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode("ventasOperadorHub")}
+              style={{
+                backgroundColor: "#D1FAE5",
+                boxShadow: "0 14px 40px -10px rgba(5, 122, 85, 0.22)",
+              }}
+              className={`${cuentaMenuTile} w-full max-w-sm hover:shadow-[0_20px_48px_-12px_rgba(5,122,85,0.28)]`}
+            >
+              <span className={cuentaMenuIconWrap}>
+                <MdShoppingCart size={38} className="text-[#047857]" aria-hidden />
+              </span>
+              <h3 className={`max-w-[13rem] text-lg font-bold leading-snug tracking-tight sm:text-xl ${cuentaMenuText}`}>
+                Ventas
               </h3>
             </button>
           </div>
@@ -453,6 +573,132 @@ const ReportesSection: React.FC<ReportesSectionProps> = ({
           </div>
         </div>
       </section>
+    );
+  }
+
+  // Operador: hub Ventas → Ordenes de ventas
+  if (isCliente && esOperadorCuentas && viewMode === "ventasOperadorHub") {
+    return (
+      <section className="rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
+        <div className="mx-auto flex w-full max-w-4xl flex-col gap-4 px-4">
+          <button
+            type="button"
+            onClick={() => setViewMode(null)}
+            className="flex items-center gap-2 self-start text-sm font-semibold text-slate-600 transition-colors hover:text-slate-900"
+          >
+            <HiOutlineArrowLeft size={18} />
+            Volver
+          </button>
+
+          <div className="flex flex-col gap-3">
+            <h2 className="pl-1 text-xs font-bold uppercase tracking-widest text-slate-500">Ventas</h2>
+            <p className="pl-1 text-sm text-slate-600">
+              Seguimiento de pedidos de venta: productos en unidades y mismos estados operativos que en órdenes de
+              compra.
+            </p>
+            <div className="flex flex-col gap-3">
+              <button
+                type="button"
+                onClick={() => setViewMode("ventasEnCurso")}
+                className="group flex w-full cursor-pointer items-center justify-between rounded-2xl border border-emerald-100/90 bg-[#ecfdf5] p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md active:scale-95"
+              >
+                <div className="flex items-center gap-4">
+                  <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-white/80 text-emerald-800 shadow-sm">
+                    <MdShoppingCart size={24} />
+                  </span>
+                  <div className="text-left">
+                    <p className="text-lg font-bold text-slate-900">Ordenes de ventas</p>
+                    <p className="text-xs text-slate-600">
+                      Comprador, productos en unidades, estado y fecha (mismos estados que órdenes de compra).
+                    </p>
+                  </div>
+                </div>
+                <HiOutlineArrowRight size={18} className="text-slate-500 transition-transform group-hover:translate-x-1" />
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+    );
+  }
+
+  if (isCliente && esOperadorCuentas && viewMode === "ventasEnCurso") {
+    return (
+      <VentasEnCursoOperadorPanel
+        onBack={() => setViewMode("ventasOperadorHub")}
+        idCliente={idCliente}
+        productos={catalogosOrden}
+        compradores={compradoresCuenta}
+        dataLoading={ordenesDataLoading}
+      />
+    );
+  }
+
+  // Operador: hub Bodega interna → Procesamiento
+  if (isCliente && esOperadorCuentas && viewMode === "bodegaInternaOperadorHub") {
+    return (
+      <section className="rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
+        <div className="mx-auto flex w-full max-w-4xl flex-col gap-4 px-4">
+          <button
+            type="button"
+            onClick={() => setViewMode(null)}
+            className="flex items-center gap-2 self-start text-sm font-semibold text-slate-600 transition-colors hover:text-slate-900"
+          >
+            <HiOutlineArrowLeft size={18} />
+            Volver
+          </button>
+
+          <div className="flex flex-col gap-3">
+            <h2 className="pl-1 text-xs font-bold uppercase tracking-widest text-slate-500">Bodega interna</h2>
+            <p className="pl-1 text-sm text-slate-600">
+              Órdenes de transformación entre productos del catálogo de la cuenta (insumo primario → resultado
+              secundario).
+            </p>
+            <div className="flex flex-col gap-3">
+              <button
+                type="button"
+                onClick={() => setViewMode("procesamientoOperador")}
+                className="group flex w-full cursor-pointer items-center justify-between rounded-2xl border border-sky-100/90 bg-sky-50/90 p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md active:scale-95"
+              >
+                <div className="flex items-center gap-4">
+                  <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-white/80 text-sky-800 shadow-sm">
+                    <FiCpu size={24} strokeWidth={2} />
+                  </span>
+                  <div className="text-left">
+                    <p className="text-lg font-bold text-slate-900">Procesamiento</p>
+                    <p className="text-xs text-slate-600">
+                      Primario y secundario según catálogo; cantidad hasta inventario; estimado del secundario por
+                      regla de conversión.
+                    </p>
+                  </div>
+                </div>
+                <HiOutlineArrowRight
+                  size={18}
+                  className="text-slate-500 transition-transform group-hover:translate-x-1"
+                />
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+    );
+  }
+
+  if (isCliente && esOperadorCuentas && viewMode === "procesamientoOperador") {
+    const nombreCuenta =
+      clients.find((c) => c.id === idCliente.trim())?.name?.trim() || idCliente.trim() || "";
+    return (
+      <ProcesamientoOperadorPanel
+        onBack={() => setViewMode("bodegaInternaOperadorHub")}
+        idCliente={idCliente}
+        codeCuenta={codeCuenta}
+        clientName={nombreCuenta}
+        productos={catalogosOrden}
+        bodegasInternas={bodegasInternasCuenta}
+        creadoPorUid={session?.uid ?? ""}
+        creadoPorNombre={session?.email?.trim() || "Usuario"}
+        dataLoading={ordenesDataLoading}
+      />
     );
   }
 
@@ -991,14 +1237,14 @@ const ReportesSection: React.FC<ReportesSectionProps> = ({
                           Cargando solicitudes…
                         </td>
                       </tr>
-                    ) : solicitudesCompra.length === 0 ? (
+                    ) : solicitudesCompraTabla.length === 0 ? (
                       <tr>
                         <td colSpan={3} className="px-4 py-12 text-center text-slate-500">
                           No hay solicitudes. Usá &quot;Nueva solicitud&quot; para crear la primera.
                         </td>
                       </tr>
                     ) : (
-                      solicitudesCompra.map((sol) => (
+                      solicitudesCompraTablaPagina.map((sol) => (
                         <tr
                           key={sol.id ?? sol.numero}
                           role="button"
@@ -1036,6 +1282,40 @@ const ReportesSection: React.FC<ReportesSectionProps> = ({
                   </tbody>
                 </table>
               </div>
+              {!ordenesDataLoading && solicitudesCompraTabla.length > 0 ? (
+                <div className="flex flex-col gap-3 border-t border-slate-100 bg-white px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                  <span className="text-xs text-slate-500 tabular-nums">
+                    {solicitudesCompraTabla.length}{" "}
+                    {solicitudesCompraTabla.length === 1 ? "registro" : "registros"} · Página{" "}
+                    {solicitudesCompraCurrentPage} de {solicitudesCompraPageCount}
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setSolicitudesCompraPage((p) => Math.max(1, p - 1))}
+                      disabled={solicitudesCompraCurrentPage === 1}
+                      className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold uppercase tracking-wider shadow-sm hover:border-slate-300 disabled:opacity-50"
+                    >
+                      Anterior
+                    </button>
+                    <span className="text-xs text-slate-600 tabular-nums">
+                      Página {solicitudesCompraCurrentPage} / {solicitudesCompraPageCount}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setSolicitudesCompraPage((p) =>
+                          Math.min(solicitudesCompraPageCount, p + 1),
+                        )
+                      }
+                      disabled={solicitudesCompraCurrentPage === solicitudesCompraPageCount}
+                      className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold uppercase tracking-wider shadow-sm hover:border-slate-300 disabled:opacity-50"
+                    >
+                      Siguiente
+                    </button>
+                  </div>
+                </div>
+              ) : null}
             </div>
           ) : null}
         </div>
@@ -1152,7 +1432,7 @@ const ReportesSection: React.FC<ReportesSectionProps> = ({
                         Cargando órdenes…
                       </td>
                     </tr>
-                  ) : ordenesCompra.length === 0 ? (
+                  ) : ordenesCompraTabla.length === 0 ? (
                     <tr>
                       <td colSpan={5} className="px-4 py-12 text-center text-slate-500">
                         No hay órdenes registradas. Usá &quot;Agregar orden de compra&quot; para crear la
@@ -1160,7 +1440,7 @@ const ReportesSection: React.FC<ReportesSectionProps> = ({
                       </td>
                     </tr>
                   ) : (
-                    ordenesCompra.map((oc) => (
+                    ordenesCompraTablaPagina.map((oc) => (
                       <tr
                         key={oc.id ?? oc.numero}
                         role="button"
@@ -1225,6 +1505,38 @@ const ReportesSection: React.FC<ReportesSectionProps> = ({
                 </tbody>
               </table>
             </div>
+            {!ordenesDataLoading && ordenesCompraTabla.length > 0 ? (
+              <div className="flex flex-col gap-3 border-t border-slate-100 bg-white px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                <span className="text-xs text-slate-500 tabular-nums">
+                  {ordenesCompraTabla.length}{" "}
+                  {ordenesCompraTabla.length === 1 ? "registro" : "registros"} · Página{" "}
+                  {ordenesCompraCurrentPage} de {ordenesCompraPageCount}
+                </span>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setOrdenesCompraPage((p) => Math.max(1, p - 1))}
+                    disabled={ordenesCompraCurrentPage === 1}
+                    className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold uppercase tracking-wider shadow-sm hover:border-slate-300 disabled:opacity-50"
+                  >
+                    Anterior
+                  </button>
+                  <span className="text-xs text-slate-600 tabular-nums">
+                    Página {ordenesCompraCurrentPage} / {ordenesCompraPageCount}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setOrdenesCompraPage((p) => Math.min(ordenesCompraPageCount, p + 1))
+                    }
+                    disabled={ordenesCompraCurrentPage === ordenesCompraPageCount}
+                    className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold uppercase tracking-wider shadow-sm hover:border-slate-300 disabled:opacity-50"
+                  >
+                    Siguiente
+                  </button>
+                </div>
+              </div>
+            ) : null}
           </div>
         </div>
 

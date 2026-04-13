@@ -9,6 +9,11 @@ import DespachadosSection from "./BodegaDashboard/DespachadosSection";
 import ReportesSection from "./BodegaDashboard/ReportesSection";
 import CustodioOrdenesCompraTab from "./BodegaDashboard/CustodioOrdenesCompraTab";
 import { OrdenCompraService } from "@/app/services/ordenCompraService";
+import type { SolicitudProcesamiento } from "@/app/types/solicitudProcesamiento";
+import {
+  deductSlotsAfterProcesamientoTerminado,
+  tareaColaOperarioToSolicitudInventario,
+} from "@/lib/procesamientoInventarioBodega";
 import type { IngresoDesdeOrdenCompraPayload } from "./BodegaDashboard/OcOrdenIngresoPanel";
 import { AiTwotoneAppstore } from "react-icons/ai";
 import { SlGraph } from "react-icons/sl";
@@ -23,9 +28,11 @@ import {
   doc,
   getDoc,
   getDocs,
+  onSnapshot,
   serverTimestamp,
   setDoc,
   updateDoc,
+  type QueryDocumentSnapshot,
 } from "firebase/firestore";
 import {
   createUserWithEmailAndPassword,
@@ -61,7 +68,15 @@ import {
   saveWarehouseState,
   subscribeWarehouseState,
 } from "../../lib/bodegaCloudState";
+import {
+  kgFromFirestoreSlotRecord,
+  slotTracePartialFromRecord,
+} from "../../lib/coerceBodegaKg";
 import { fetchFridemSlots } from "../../lib/fridemInventory";
+import {
+  getLoginRoleShortcuts,
+  loginRoleShortcutsEnabled,
+} from "../../lib/loginRolePresets";
 
 // --- SESION DESDE FIREBASE ---
 type Session = {
@@ -77,6 +92,9 @@ type UserProfile = {
   displayName: string;
   clientId?: string;
 };
+
+/** `users` = perfil legado / Auth; `usuarios` = catálogo que lee el dashboard (asignar operario, etc.). */
+type LoadedUserProfile = UserProfile & { profileCollection: "users" | "usuarios" };
 
 // --- TIPOS Y CONSTANTES ---
 const DEFAULT_TOTAL_SLOTS = 12;
@@ -152,6 +170,27 @@ const createInitialSlots = (size = DEFAULT_TOTAL_SLOTS): Slot[] =>
     client: "",
   }));
 
+/** Al vaciar una posición del mapa se eliminan también trazas guardadas en el slot. */
+const CLEARED_BODEGA_SLOT_PATCH: Partial<Slot> = {
+  autoId: "",
+  name: "",
+  temperature: null,
+  client: "",
+  quantityKg: undefined,
+  ordenCompraId: undefined,
+  ordenCompraClienteId: undefined,
+  rd: undefined,
+  renglon: undefined,
+  lote: undefined,
+  marca: undefined,
+  embalaje: undefined,
+  pesoUnitario: undefined,
+  piezas: undefined,
+  caducidad: undefined,
+  fechaIngreso: undefined,
+  llaveUnica: undefined,
+};
+
 const padNumber = (value: number, length: number) =>
   String(value).padStart(length, "0");
 
@@ -217,9 +256,8 @@ const normalizeSlots = (value: unknown, expectedSize = DEFAULT_TOTAL_SLOTS): Slo
         : typeof record.customer === "string"
           ? record.customer
           : "";
-    const qRaw = record.quantityKg;
-    const quantityKg =
-      typeof qRaw === "number" && Number.isFinite(qRaw) ? qRaw : undefined;
+    const quantityKg = kgFromFirestoreSlotRecord(record);
+    const traceFromRecord = slotTracePartialFromRecord(record) as Partial<Slot>;
     const ordenCompraId =
       typeof record.ordenCompraId === "string" && record.ordenCompraId.trim()
         ? record.ordenCompraId.trim()
@@ -236,6 +274,7 @@ const normalizeSlots = (value: unknown, expectedSize = DEFAULT_TOTAL_SLOTS): Slo
       temperature: normalizedTemp,
       client: normalizedClient,
       ...(quantityKg !== undefined ? { quantityKg } : {}),
+      ...traceFromRecord,
       ...(ordenCompraId ? { ordenCompraId } : {}),
       ...(ordenCompraClienteId ? { ordenCompraClienteId } : {}),
     });
@@ -260,8 +299,7 @@ const resizeSlotsToCapacity = (slots: Slot[], capacity: number) =>
 
 const readQuantityKg = (item: Box | Slot | undefined): number | undefined => {
   if (!item) return undefined;
-  const q = item.quantityKg;
-  return typeof q === "number" && Number.isFinite(q) ? q : undefined;
+  return kgFromFirestoreSlotRecord(item as unknown as Record<string, unknown>);
 };
 
 /** Referencia a la OC en Firestore (cliente + id documento), si la caja/slot la trae. */
@@ -324,9 +362,7 @@ const normalizeBoxes = (value: unknown): Box[] | null => {
         : name
           ? createAutoId("BOX")
           : "";
-    const qRaw = record.quantityKg;
-    const quantityKg =
-      typeof qRaw === "number" && Number.isFinite(qRaw) ? qRaw : undefined;
+    const quantityKg = kgFromFirestoreSlotRecord(record);
     const ordenCompraId =
       typeof record.ordenCompraId === "string" && record.ordenCompraId.trim()
         ? record.ordenCompraId.trim()
@@ -478,18 +514,19 @@ const getNextSalidaPosition = (boxes: Box[], reserved?: Set<number>, capacity?: 
   return next;
 };
 
-const loadUserProfile = async (uid: string): Promise<UserProfile> => {
+const loadUserProfile = async (uid: string): Promise<LoadedUserProfile> => {
   const primaryRef = doc(db, "users", uid);
   const primarySnap = await getDoc(primaryRef);
   if (primarySnap.exists()) {
-    const data = primarySnap.data() as Partial<UserProfile>;
+    const data = primarySnap.data() as Partial<UserProfile> & { name?: string };
     if (!data.role) {
       throw new Error("El perfil de usuario no tiene rol definido");
     }
     return {
       role: data.role as Role,
-      displayName: data.displayName ?? "Usuario",
+      displayName: data.displayName ?? data.name ?? "Usuario",
       clientId: data.clientId,
+      profileCollection: "users",
     };
   }
 
@@ -506,8 +543,75 @@ const loadUserProfile = async (uid: string): Promise<UserProfile> => {
     role: data.role as Role,
     displayName: data.displayName ?? data.name ?? "Usuario",
     clientId: data.clientId,
+    profileCollection: "usuarios",
   };
 };
+
+/** Misma forma que `fetchUsers`: un documento de la colección `usuarios`. */
+function configUserFromUsuariosDocSnap(
+  docSnap: QueryDocumentSnapshot,
+  sanitizeClientCode: (s: string) => string,
+): ConfigUser {
+  const data = docSnap.data() as {
+    name?: string;
+    displayName?: string;
+    role?: Role;
+    code?: string;
+    clientId?: string;
+    email?: string;
+    createdAt?: { toMillis?: () => number };
+    createdBy?: string | null;
+    createdByRole?: Role | null;
+    disabled?: boolean;
+    disabledAt?: { toMillis?: () => number };
+  };
+  const createdAtMs =
+    data.createdAt && typeof data.createdAt.toMillis === "function"
+      ? data.createdAt.toMillis()
+      : undefined;
+  const disabledAtMs =
+    data.disabledAt && typeof data.disabledAt.toMillis === "function"
+      ? data.disabledAt.toMillis()
+      : undefined;
+  return {
+    id: docSnap.id,
+    name: (data.name ?? data.displayName ?? "").toString().trim() || "Sin nombre",
+    code: sanitizeClientCode(data.code ?? ""),
+    role: (data.role ?? "operario") as Role,
+    clientId: data.clientId ?? "",
+    email: data.email ?? "",
+    createdAtMs,
+    createdAt: createdAtMs ? new Date(createdAtMs).toLocaleString("es-CO") : undefined,
+    createdBy: data.createdBy ?? null,
+    createdByRole: data.createdByRole ?? null,
+    disabled: Boolean(data.disabled),
+    disabledAt: disabledAtMs ? new Date(disabledAtMs).toLocaleString("es-CO") : undefined,
+  };
+}
+
+/**
+ * Si el login resolvió solo `users/{uid}`, el jefe no ve a ese usuario en `getDocs(usuarios)` hasta que exista
+ * fila en `usuarios`. Las reglas no permiten listar `users` de terceros, así que replicamos aquí (merge).
+ */
+async function mirrorUsersProfileToUsuariosIfNeeded(
+  uid: string,
+  profile: LoadedUserProfile,
+  email: string | null,
+) {
+  if (profile.profileCollection !== "users") return;
+  await setDoc(
+    doc(db, "usuarios", uid),
+    {
+      role: profile.role,
+      displayName: profile.displayName,
+      name: profile.displayName,
+      email: email ?? "",
+      clientId: profile.clientId ?? "",
+      disabled: false,
+    },
+    { merge: true },
+  );
+}
 
 export default function BodegaDashboard() {
   const [selectedBoxModal, setSelectedBoxModal] = useState<Box | Slot | null>(null);
@@ -552,6 +656,15 @@ export default function BodegaDashboard() {
     try {
       const credentials = await signInWithEmailAndPassword(auth, loginUser, loginPassword);
       const profile = await loadUserProfile(credentials.user.uid);
+      try {
+        await mirrorUsersProfileToUsuariosIfNeeded(
+          credentials.user.uid,
+          profile,
+          credentials.user.email ?? loginUser,
+        );
+      } catch (mirrorErr) {
+        console.warn("[bodega] No se pudo sincronizar perfil a usuarios:", mirrorErr);
+      }
       setSession({
         uid: credentials.user.uid,
         email: credentials.user.email ?? loginUser,
@@ -586,6 +699,11 @@ export default function BodegaDashboard() {
       }
       try {
         const profile = await loadUserProfile(user.uid);
+        try {
+          await mirrorUsersProfileToUsuariosIfNeeded(user.uid, profile, user.email ?? null);
+        } catch (mirrorErr) {
+          console.warn("[bodega] No se pudo sincronizar perfil a usuarios:", mirrorErr);
+        }
         setSession({
           uid: user.uid,
           email: user.email ?? null,
@@ -626,6 +744,7 @@ export default function BodegaDashboard() {
     Array<{ position: number;[key: string]: unknown }>
   >([]);
   const [alertasOperarioSolved, setAlertasOperarioSolved] = useState<number[]>([]);
+  const [tareasProcesamientoOperario, setTareasProcesamientoOperario] = useState<Array<Record<string, unknown>>>([]);
   const [llamadasJefe, setLlamadasJefe] = useState<Array<Record<string, unknown>>>([]);
   const [alertClock, setAlertClock] = useState(() => Date.now());
   const [statusModal, setStatusModal] = useState<{
@@ -819,6 +938,7 @@ export default function BodegaDashboard() {
       setAssignedAlerts([]);
       setAlertasOperario([]);
       setAlertasOperarioSolved([]);
+      setTareasProcesamientoOperario([]);
       setLlamadasJefe([]);
       setWarehouseId(id);
     },
@@ -1020,48 +1140,12 @@ export default function BodegaDashboard() {
     setUsersLoading(true);
     try {
       const snapshot = await getDocs(collection(db, "usuarios"));
-      const items: ConfigUser[] = snapshot.docs.map((docSnap) => {
-        const data = docSnap.data() as {
-          name?: string;
-          displayName?: string;
-          role?: Role;
-          code?: string;
-          clientId?: string;
-          email?: string;
-          createdAt?: { toMillis?: () => number };
-          createdBy?: string | null;
-          createdByRole?: Role | null;
-          disabled?: boolean;
-          disabledAt?: { toMillis?: () => number };
-        };
-        const createdAtMs =
-          data.createdAt && typeof data.createdAt.toMillis === "function"
-            ? data.createdAt.toMillis()
-            : undefined;
-        const disabledAtMs =
-          data.disabledAt && typeof data.disabledAt.toMillis === "function"
-            ? data.disabledAt.toMillis()
-            : undefined;
-        return {
-          id: docSnap.id,
-          name: (data.name ?? data.displayName ?? "").toString().trim() || "Sin nombre",
-          code: sanitizeClientCode(data.code ?? ""),
-          role: (data.role ?? "operario") as Role,
-          clientId: data.clientId ?? "",
-          email: data.email ?? "",
-          createdAtMs,
-          createdAt: createdAtMs ? new Date(createdAtMs).toLocaleString("es-CO") : undefined,
-          createdBy: data.createdBy ?? null,
-          createdByRole: data.createdByRole ?? null,
-          disabled: Boolean(data.disabled),
-          disabledAt: disabledAtMs ? new Date(disabledAtMs).toLocaleString("es-CO") : undefined,
-        };
-      });
-
-      items.sort(
-        (a, b) =>
-          (b.createdAtMs ?? 0) - (a.createdAtMs ?? 0) || a.name.localeCompare(b.name, "es"),
-      );
+      const items = snapshot.docs
+        .map((d) => configUserFromUsuariosDocSnap(d, sanitizeClientCode))
+        .sort(
+          (a, b) =>
+            (b.createdAtMs ?? 0) - (a.createdAtMs ?? 0) || a.name.localeCompare(b.name, "es"),
+        );
       setUsers(items);
     } catch (err) {
       console.error("No se pudieron cargar los usuarios", err);
@@ -1350,6 +1434,7 @@ export default function BodegaDashboard() {
       setAssignedAlerts([]);
       setAlertasOperario([]);
       setAlertasOperarioSolved([]);
+      setTareasProcesamientoOperario([]);
       setLlamadasJefe([]);
     } catch (err) {
       console.warn("No se pudo cargar la bodega externa", err);
@@ -1419,6 +1504,7 @@ export default function BodegaDashboard() {
       setAssignedAlerts(cloud.assignedAlerts ?? []);
       setAlertasOperario(cloud.alertasOperario ?? []);
       setAlertasOperarioSolved(cloud.alertasOperarioSolved ?? []);
+      setTareasProcesamientoOperario(cloud.tareasProcesamientoOperario ?? []);
       setLlamadasJefe(cloud.llamadasJefe ?? []);
       setCloudReady(true);
     });
@@ -1445,6 +1531,7 @@ export default function BodegaDashboard() {
       assignedAlerts,
       alertasOperario,
       alertasOperarioSolved,
+      tareasProcesamientoOperario,
       llamadasJefe,
     });
 
@@ -1465,12 +1552,14 @@ export default function BodegaDashboard() {
       assignedAlerts,
       alertasOperario,
       alertasOperarioSolved,
+      tareasProcesamientoOperario,
       llamadasJefe,
     }).catch(() => { });
   }, [
     alerts,
     alertasOperario,
     alertasOperarioSolved,
+    tareasProcesamientoOperario,
     assignedAlerts,
     cloudReady,
     dispatchedBoxes,
@@ -2061,7 +2150,10 @@ export default function BodegaDashboard() {
 
   const role = session?.role ?? "custodio";
   const isAdmin = role === "administrador";
-  const isOperario = role === "operario";
+  /** Incluye alias legacy `operador` (perfil de bodega); no confundir con `operadorCuentas`. */
+  const isOperario =
+    role === "operario" ||
+    (role !== "operadorCuentas" && String(session?.role ?? "").toLowerCase().trim() === "operador");
   const isCustodio = role === "custodio";
   const isJefe = role === "jefe";
   const isCliente = role === "cliente";
@@ -2126,8 +2218,27 @@ export default function BodegaDashboard() {
 
   useEffect(() => {
     if (!session) return;
-    fetchUsers();
-  }, [fetchUsers, session]);
+    setUsersLoading(true);
+    const unsub = onSnapshot(
+      collection(db, "usuarios"),
+      (snapshot) => {
+        const items = snapshot.docs
+          .map((d) => configUserFromUsuariosDocSnap(d, sanitizeClientCode))
+          .sort(
+            (a, b) =>
+              (b.createdAtMs ?? 0) - (a.createdAtMs ?? 0) || a.name.localeCompare(b.name, "es"),
+          );
+        setUsers(items);
+        setUsersLoading(false);
+      },
+      (err) => {
+        console.error("No se pudieron escuchar usuarios", err);
+        setMessage("No se pudieron cargar los usuarios. Revisa permisos de Firestore.");
+        setUsersLoading(false);
+      },
+    );
+    return () => unsub();
+  }, [session, sanitizeClientCode]);
 
   const configuradorClients = useMemo(
     () => clients.filter((c) => c.createdByRole === "configurador" && !c.disabled),
@@ -2139,6 +2250,30 @@ export default function BodegaDashboard() {
     () => clients.filter((c) => !c.disabled),
     [clients],
   );
+
+  /** Operario de bodega: rol `operario` o alias legacy `operador` (no es `operadorCuentas`). */
+  const operariosBodega = useMemo(() => {
+    return users
+      .filter((u) => {
+        if (u.disabled) return false;
+        const r = String(u.role ?? "").toLowerCase().trim();
+        if (r === "operario") return true;
+        if (u.role === "operadorCuentas") return false;
+        return r === "operador";
+      })
+      .map((u) => ({ id: u.id, name: u.name }));
+  }, [users]);
+
+  const handlePushTareaProcesamientoOperario = useCallback((tarea: Record<string, unknown>) => {
+    const cid = String(tarea.clientId ?? "");
+    const sid = String(tarea.solicitudId ?? "");
+    setTareasProcesamientoOperario((prev) => {
+      if (prev.some((x) => String(x.clientId ?? "") === cid && String(x.solicitudId ?? "") === sid)) {
+        return prev;
+      }
+      return [...prev, tarea];
+    });
+  }, []);
 
   useEffect(() => {
     if (ingresoClientId) return;
@@ -2468,6 +2603,7 @@ export default function BodegaDashboard() {
       assignedAlerts: AlertAssignment[];
       alertasOperario: Array<{ position: number;[key: string]: unknown }>;
       alertasOperarioSolved: number[];
+      tareasProcesamientoOperario: Array<Record<string, unknown>>;
       llamadasJefe: Array<Record<string, unknown>>;
     }) => {
       if (!warehouseId.trim() || isExternalWarehouse) return;
@@ -2483,6 +2619,7 @@ export default function BodegaDashboard() {
         assignedAlerts: full.assignedAlerts,
         alertasOperario: full.alertasOperario,
         alertasOperarioSolved: full.alertasOperarioSolved,
+        tareasProcesamientoOperario: full.tareasProcesamientoOperario,
         llamadasJefe: full.llamadasJefe,
       });
       lastSavedSnapshot.current = snap;
@@ -2498,6 +2635,7 @@ export default function BodegaDashboard() {
         assignedAlerts: full.assignedAlerts,
         alertasOperario: full.alertasOperario,
         alertasOperarioSolved: full.alertasOperarioSolved,
+        tareasProcesamientoOperario: full.tareasProcesamientoOperario,
         llamadasJefe: full.llamadasJefe,
       }).catch((err: unknown) => {
         console.error("[bodega] saveWarehouseState al ejecutar tarea:", err);
@@ -2507,6 +2645,108 @@ export default function BodegaDashboard() {
       });
     },
     [isExternalWarehouse, setMessage, warehouseId],
+  );
+
+  const handleProcesamientoTerminadoInventarioMapa = useCallback(
+    async (nextSlots: Slot[], meta: { row: SolicitudProcesamiento; deductedKg: number; warning?: string }) => {
+      const cid = meta.row.clientId.trim();
+      const sid = meta.row.id.trim();
+      const nextTareas = tareasProcesamientoOperario.filter(
+        (t) => !(String(t.clientId ?? "").trim() === cid && String(t.solicitudId ?? "").trim() === sid),
+      );
+      setSlots(nextSlots);
+      setTareasProcesamientoOperario(nextTareas);
+      setMessage(
+        meta.warning
+          ? `Orden ${meta.row.numero} terminada. ${meta.warning}`
+          : meta.deductedKg > 0
+            ? `Orden ${meta.row.numero} terminada. Descontados ${meta.deductedKg.toLocaleString("es-CO", { maximumFractionDigits: 4 })} kg en bodega.`
+            : `Orden ${meta.row.numero} terminada.`,
+      );
+      persistWarehouseStateNow({
+        slots: nextSlots,
+        inboundBoxes,
+        outboundBoxes,
+        dispatchedBoxes,
+        orders,
+        stats,
+        warehouseName,
+        alerts,
+        assignedAlerts,
+        alertasOperario,
+        alertasOperarioSolved,
+        tareasProcesamientoOperario: nextTareas,
+        llamadasJefe,
+      });
+    },
+    [
+      persistWarehouseStateNow,
+      tareasProcesamientoOperario,
+      inboundBoxes,
+      outboundBoxes,
+      dispatchedBoxes,
+      orders,
+      stats,
+      warehouseName,
+      alerts,
+      assignedAlerts,
+      alertasOperario,
+      alertasOperarioSolved,
+      llamadasJefe,
+    ],
+  );
+
+  const handleProcesamientoTerminadoDesdeColaOperario = useCallback(
+    async (tarea: Record<string, unknown>) => {
+      const like = tareaColaOperarioToSolicitudInventario(tarea);
+      const r = deductSlotsAfterProcesamientoTerminado(slots, like, warehouseId);
+      const cid = String(tarea.clientId ?? "").trim();
+      const sid = String(tarea.solicitudId ?? "").trim();
+      const nextTareas = tareasProcesamientoOperario.filter(
+        (t) => !(String(t.clientId ?? "").trim() === cid && String(t.solicitudId ?? "").trim() === sid),
+      );
+      setSlots(r.slots);
+      setTareasProcesamientoOperario(nextTareas);
+      setMessage(
+        r.warning
+          ? `Orden ${like.numero} terminada. ${r.warning}`
+          : r.deductedKg > 0
+            ? `Orden ${like.numero} terminada. Descontados ${r.deductedKg.toLocaleString("es-CO", { maximumFractionDigits: 4 })} kg en bodega.`
+            : `Orden ${like.numero} terminada.`,
+      );
+      persistWarehouseStateNow({
+        slots: r.slots,
+        inboundBoxes,
+        outboundBoxes,
+        dispatchedBoxes,
+        orders,
+        stats,
+        warehouseName,
+        alerts,
+        assignedAlerts,
+        alertasOperario,
+        alertasOperarioSolved,
+        tareasProcesamientoOperario: nextTareas,
+        llamadasJefe,
+      });
+    },
+    [
+      slots,
+      warehouseId,
+      tareasProcesamientoOperario,
+      persistWarehouseStateNow,
+      inboundBoxes,
+      outboundBoxes,
+      dispatchedBoxes,
+      orders,
+      stats,
+      warehouseName,
+      alerts,
+      assignedAlerts,
+      alertasOperario,
+      alertasOperarioSolved,
+      llamadasJefe,
+    ],
   );
 
   const executeOrder = (orderId: string) => {
@@ -2527,6 +2767,7 @@ export default function BodegaDashboard() {
       assignedAlerts,
       alertasOperario,
       alertasOperarioSolved,
+      tareasProcesamientoOperario,
       llamadasJefe,
     };
 
@@ -2626,12 +2867,14 @@ export default function BodegaDashboard() {
       const qtyToSlot = readQuantityKg(sourceBox as Box | Slot);
       const ocToSlot = readOrdenCompraRefs(sourceBox as Box | Slot);
 
+      const srcRec = sourceBox as unknown as Record<string, unknown>;
       const filledSlotPayload = {
         autoId: boxAutoId,
         name: boxName,
         temperature: boxTemp,
         client: boxClient,
         ...(qtyToSlot !== undefined ? { quantityKg: qtyToSlot } : { quantityKg: undefined }),
+        ...(slotTracePartialFromRecord(srcRec) as Partial<Slot>),
         ...(ocToSlot
           ? {
             ordenCompraId: ocToSlot.ordenCompraId,
@@ -2648,16 +2891,7 @@ export default function BodegaDashboard() {
           return { ...item, ...filledSlotPayload };
         }
         if (sourceIsBodega && item.position === order.sourcePosition) {
-          return {
-            ...item,
-            autoId: "",
-            name: "",
-            temperature: null,
-            client: "",
-            quantityKg: undefined,
-            ordenCompraId: undefined,
-            ordenCompraClienteId: undefined,
-          };
+          return { ...item, ...CLEARED_BODEGA_SLOT_PATCH };
         }
         return item;
       });
@@ -2789,18 +3023,7 @@ export default function BodegaDashboard() {
     let nextSlotsSalida = slots;
     if (sourceIsBodega) {
       nextSlotsSalida = slots.map((item) =>
-        item.position === order.sourcePosition
-          ? {
-            ...item,
-            autoId: "",
-            name: "",
-            temperature: null,
-            client: "",
-            quantityKg: undefined,
-            ordenCompraId: undefined,
-            ordenCompraClienteId: undefined,
-          }
-          : item,
+        item.position === order.sourcePosition ? { ...item, ...CLEARED_BODEGA_SLOT_PATCH } : item,
       );
     }
 
@@ -3095,6 +3318,7 @@ export default function BodegaDashboard() {
         assignedAlerts: nextAssigned,
         alertasOperario,
         alertasOperarioSolved,
+        tareasProcesamientoOperario,
         llamadasJefe,
       });
 
@@ -3219,6 +3443,18 @@ export default function BodegaDashboard() {
             onPasswordChange={setLoginPassword}
             onSubmit={handleLogin}
             errorMessage={loginError}
+            quickFillActions={
+              loginRoleShortcutsEnabled
+                ? getLoginRoleShortcuts().map((s) => ({
+                    label: s.label,
+                    onFill: () => {
+                      setLoginUser(s.email);
+                      setLoginPassword(s.password);
+                      setLoginError("");
+                    },
+                  }))
+                : undefined
+            }
           />
         </main>
       </div>
@@ -3246,6 +3482,7 @@ export default function BodegaDashboard() {
       assignedAlerts,
       alertasOperario,
       alertasOperarioSolved,
+      tareasProcesamientoOperario,
       llamadasJefe,
     });
   }
@@ -3294,6 +3531,7 @@ export default function BodegaDashboard() {
       assignedAlerts,
       alertasOperario,
       alertasOperarioSolved,
+      tareasProcesamientoOperario,
       llamadasJefe,
     });
   }
@@ -3357,6 +3595,7 @@ export default function BodegaDashboard() {
       assignedAlerts,
       alertasOperario: remainingAlerts,
       alertasOperarioSolved: solvedPositions,
+      tareasProcesamientoOperario,
       llamadasJefe,
     });
   }
@@ -3459,6 +3698,14 @@ export default function BodegaDashboard() {
                 sortByPosition={sortByPosition}
                 clients={clients}
                 role={role}
+                warehouseCodeCuenta={(currentWarehouse?.codeCuenta ?? "").toString()}
+                sessionUid={session?.uid}
+                sessionRole={role}
+                operariosBodega={operariosBodega}
+                tareasProcesamientoOperario={tareasProcesamientoOperario}
+                onPushTareaProcesamientoOperario={handlePushTareaProcesamientoOperario}
+                warehouseId={warehouseId}
+                onProcesamientoTerminadoInventario={handleProcesamientoTerminadoInventarioMapa}
               />
             ) : null}
 
@@ -3543,6 +3790,7 @@ export default function BodegaDashboard() {
                 isJefe={isJefe}
                 inboundBoxes={inboundBoxes}
                 outboundBoxes={outboundBoxes}
+                warehouseId={warehouseId}
                 slots={slots}
                 alertasOperario={alertasOperario}
                 alertasOperarioSolved={alertasOperarioSolved}
@@ -3578,6 +3826,14 @@ export default function BodegaDashboard() {
                 llamadasJefe={llamadasJefe}
                 onUpdateLlamadasJefe={setLlamadasJefe}
                 clients={clients}
+                warehouseCodeCuenta={(currentWarehouse?.codeCuenta ?? "").toString()}
+                sessionUid={session?.uid}
+                sessionRole={role}
+                operariosBodega={operariosBodega}
+                tareasProcesamientoOperario={tareasProcesamientoOperario}
+                onPushTareaProcesamientoOperario={handlePushTareaProcesamientoOperario}
+                warehouseId={warehouseId}
+                onProcesamientoTerminadoInventario={handleProcesamientoTerminadoInventarioMapa}
               />
             ) : null}
 
@@ -3663,6 +3919,8 @@ export default function BodegaDashboard() {
                       onUpdateLlamadasJefe={setLlamadasJefe}
                       onPersistTemperatureForAlert={handlePersistTemperatureForAlert}
                       onOperarioResolveTemperatureAlert={handleOperarioResolveTemperatureAlert}
+                      tareasProcesamientoOperario={tareasProcesamientoOperario}
+                      onUpdateTareasProcesamientoOperario={setTareasProcesamientoOperario}
                     />
                   </div>
                 </div>
@@ -3687,6 +3945,10 @@ export default function BodegaDashboard() {
                   onUpdateLlamadasJefe={setLlamadasJefe}
                   onPersistTemperatureForAlert={handlePersistTemperatureForAlert}
                   onOperarioResolveTemperatureAlert={handleOperarioResolveTemperatureAlert}
+                  tareasProcesamientoOperario={tareasProcesamientoOperario}
+                  onUpdateTareasProcesamientoOperario={setTareasProcesamientoOperario}
+                  operarioSessionUid={session?.uid}
+                  onProcesamientoTerminadoDesdeOperario={handleProcesamientoTerminadoDesdeColaOperario}
                 />
               </section>
             ) : null}

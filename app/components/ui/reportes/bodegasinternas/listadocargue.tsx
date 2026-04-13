@@ -2,10 +2,12 @@
 
 import { useEffect, useMemo, useState } from "react";
 import {
+  subscribeHistoryState,
   subscribeWarehouseState,
   type CloudWarehouseState,
 } from "@/lib/bodegaCloudState";
 import {
+  buildIngresoRecordByAutoId,
   filasInventarioInternoFromSlots,
   type FilaInventarioInterno,
 } from "@/lib/bodegaInternalInventoryRows";
@@ -30,6 +32,7 @@ type Props = {
 
 export default function ListadoCargue({ warehouseId, onTotalChange }: Props) {
   const [cloud, setCloud] = useState<CloudWarehouseState | null>(null);
+  const [ingresoRows, setIngresoRows] = useState<Record<string, unknown>[]>([]);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
 
@@ -49,12 +52,32 @@ export default function ListadoCargue({ warehouseId, onTotalChange }: Props) {
   }, [warehouseId]);
 
   useEffect(() => {
+    const id = warehouseId?.trim();
+    if (!id) {
+      setIngresoRows([]);
+      return;
+    }
+    const unsub = subscribeHistoryState(id, (h) => {
+      setIngresoRows((h.ingresos ?? []) as Record<string, unknown>[]);
+    });
+    return () => unsub();
+  }, [warehouseId]);
+
+  useEffect(() => {
     setPage(1);
   }, [warehouseId]);
 
+  const ingresoRecordsByAutoId = useMemo(
+    () => buildIngresoRecordByAutoId(ingresoRows),
+    [ingresoRows],
+  );
+
   const filas = useMemo(
-    () => filasInventarioInternoFromSlots(cloud?.slots ?? []),
-    [cloud?.slots],
+    () =>
+      filasInventarioInternoFromSlots(cloud?.slots ?? [], {
+        ingresoRecordsByAutoId,
+      }),
+    [cloud?.slots, ingresoRecordsByAutoId],
   );
 
   const pageCount = Math.max(1, Math.ceil(filas.length / PAGE_SIZE));

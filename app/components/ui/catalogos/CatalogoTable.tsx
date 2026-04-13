@@ -4,12 +4,24 @@ import { Catalogo } from "@/app/types/catalogo";
 
 interface Props {
   productos: Catalogo[];
+  /** Para resolver títulos de «Incluido primario». */
+  productosCatalogo?: Catalogo[];
   onEdit: (producto: Catalogo) => void;
   onDelete: (id: string) => void;
-  onSort: (key: keyof Catalogo) => void; // Nueva prop para ordenamiento
+  onSort: (key: keyof Catalogo) => void;
 }
 
-export const CatalogoTable = ({ productos, onEdit, onDelete, onSort }: Props) => {
+function etiquetaIncluidoPrimario(p: Catalogo, catalogo?: Catalogo[]): string {
+  const id = p.includedPrimarioCatalogoId?.trim();
+  if (id && catalogo?.length) {
+    const t = catalogo.find((x) => x.id === id)?.title?.trim();
+    return t ? t : id;
+  }
+  if (p.includedPrimary) return "Sí (legacy)";
+  return "—";
+}
+
+export const CatalogoTable = ({ productos, productosCatalogo, onEdit, onDelete, onSort }: Props) => {
   
   // Helper para renderizar headers con ordenamiento
   const SortableHeader = ({ label, sortKey }: { label: string; sortKey?: keyof Catalogo }) => (
@@ -47,8 +59,9 @@ export const CatalogoTable = ({ productos, onEdit, onDelete, onSort }: Props) =>
               <SortableHeader label="Nombre Op 1" />
               <SortableHeader label="Valor Op 1" />
               <SortableHeader label="Vinculado" />
-              <SortableHeader label="Precio" sortKey="price" />
-              {/* ... Agrega los demás headers siguiendo el mismo patrón ... */}
+              <SortableHeader label="Costo" sortKey="costPerItem" />
+              <SortableHeader label="Impuesto" />
+              <SortableHeader label="Tracker inv." />
               <SortableHeader label="Stock" sortKey="inventoryQty" />
               
               {/* HEADER DE ACCIONES: Sticky a la derecha Y arriba */}
@@ -83,20 +96,22 @@ export const CatalogoTable = ({ productos, onEdit, onDelete, onSort }: Props) =>
                 <td className="p-4 bg-white group-hover:bg-violet-50/80 transition-colors">{p.optionName1}</td>
                 <td className="p-4 bg-white group-hover:bg-violet-50/80 transition-colors">{p.optionValue1}</td>
                 <td className="p-4 bg-white group-hover:bg-violet-50/80 transition-colors">{p.linkedOption1}</td>
-                <td className="p-4 font-bold text-gray-800 bg-white group-hover:bg-violet-50/80 transition-colors">${p.price}</td>
-                <td className="p-4 text-blue-600 bg-white group-hover:bg-violet-50/80 transition-colors">${p.internationalPrice}</td>
-                <td className="p-4 text-gray-400 line-through bg-white group-hover:bg-violet-50/80 transition-colors">${p.compareAtPrice}</td>
-                <td className="p-4 text-gray-400 line-through bg-white group-hover:bg-violet-50/80 transition-colors">${p.compareAtPriceIntl}</td>
-                <td className="p-4 text-red-500 bg-white group-hover:bg-violet-50/80 transition-colors">${p.costPerItem}</td>
+                <td className="p-4 text-red-500 bg-white group-hover:bg-violet-50/80 transition-colors">
+                  {p.costPerItem != null ? `$${p.costPerItem}` : "—"}
+                </td>
                 <td className="p-4 bg-white group-hover:bg-violet-50/80 transition-colors">{p.chargeTax ? "SÍ" : "NO"}</td>
                 <td className="p-4 bg-white group-hover:bg-violet-50/80 transition-colors">{p.inventoryTracker}</td>
                 <td className="p-4 font-bold bg-white group-hover:bg-violet-50/80 transition-colors">{p.inventoryQty}</td>
                 <td className="p-4 bg-white group-hover:bg-violet-50/80 transition-colors">{p.continueSelling ? "SÍ" : "NO"}</td>
                 <td className="p-4 bg-white group-hover:bg-violet-50/80 transition-colors">{p.weightValue}</td>
-                <td className="p-4 bg-white group-hover:bg-violet-50/80 transition-colors">{p.weightUnit}</td>
+                <td className="p-4 bg-white capitalize group-hover:bg-violet-50/80 transition-colors">
+                  {p.unidadVisualizacion ?? p.weightUnit ?? "—"}
+                </td>
                 <td className="p-4 bg-white group-hover:bg-violet-50/80 transition-colors">{p.requiresShipping ? "SÍ" : "NO"}</td>
                 <td className="p-4 bg-white group-hover:bg-violet-50/80 transition-colors">{p.logisticService}</td>
-                <td className="p-4 bg-white group-hover:bg-violet-50/80 transition-colors">{p.includedPrimary ? "SÍ" : "NO"}</td>
+                <td className="max-w-[200px] truncate bg-white p-4 group-hover:bg-violet-50/80 transition-colors" title={etiquetaIncluidoPrimario(p, productosCatalogo)}>
+                  {etiquetaIncluidoPrimario(p, productosCatalogo)}
+                </td>
                 <td className="p-4 bg-white group-hover:bg-violet-50/80 transition-colors">{p.includedInternational ? "SÍ" : "NO"}</td>
                 <td className="p-4 text-blue-500 truncate max-w-[150px] bg-white group-hover:bg-violet-50/80 transition-colors">{p.productImageUrl}</td>
                 <td className="p-4 bg-white group-hover:bg-violet-50/80 transition-colors">{p.imagePosition}</td>

@@ -169,10 +169,7 @@ export default function IngresosSection(props: Props) {
                 </span>
                 <div className="min-w-0">
                   <h2 className="text-lg font-semibold">Zona de ingreso</h2>
-                  <p className="text-xs text-slate-500">
-                    Cola de cajas ya registradas con <strong>Orden de ingreso</strong>. El jefe crea órdenes hacia
-                    bodega o salida.
-                  </p>
+                  
                 </div>
               </div>
               <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-600 shrink-0">
@@ -330,14 +327,9 @@ export default function IngresosSection(props: Props) {
                 </span>
                 <div className="min-w-0 pt-0.5">
                   <h2 className="text-lg font-semibold leading-tight">Orden de salida</h2>
-                  <p className="text-xs text-slate-500">Registrar salida de caja</p>
                 </div>
               </div>
-              <p className="text-sm leading-relaxed text-slate-500">
-                Cuando el <strong>operario</strong> ejecute una tarea «A salida», la caja aparecerá en esta
-                columna y en <strong>Zona de salida</strong>. Si no ves cajas, revisá el filtro de{" "}
-                <strong>Cliente</strong> (dejá «Todos» para ver toda la cola).
-              </p>
+              
             </div>
           )}
         </div>
@@ -352,10 +344,7 @@ export default function IngresosSection(props: Props) {
                 </span>
                 <div className="min-w-0">
                   <h2 className="text-lg font-semibold">Zona de salida</h2>
-                  <p className="text-xs text-slate-500">Cajas programadas para salir</p>
-                  <p className="mt-1 text-[11px] leading-relaxed text-slate-500">
-                    Vista de la cola de salida; el envío se confirma desde <strong>Orden de salida</strong>.
-                  </p>
+                  
                 </div>
               </div>
               <span className="rounded-full bg-pink-100 px-3 py-1 text-xs font-semibold text-pink-600 shrink-0">
