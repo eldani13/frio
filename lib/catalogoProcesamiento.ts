@@ -51,3 +51,14 @@ export function unidadesSecundarioPorRegla(
   if (!Number.isFinite(q) || q <= 0 || !Number.isFinite(a) || a <= 0 || !Number.isFinite(b) || b <= 0) return null;
   return (q / a) * b;
 }
+
+/** Máximo de unidades de secundario (entero) según stock de primario y una regla de referencia (a → b). */
+export function maxUnidadesSecundarioDesdeStock(
+  stockPrimario: number,
+  reglaCantidadPrimario?: number,
+  reglaUnidadesSecundario?: number,
+): number | null {
+  const u = unidadesSecundarioPorRegla(stockPrimario, reglaCantidadPrimario, reglaUnidadesSecundario);
+  if (u === null || !Number.isFinite(u)) return null;
+  return Math.max(0, Math.floor(u + 1e-9));
+}

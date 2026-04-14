@@ -98,8 +98,9 @@ function computeKgADescontar(row: SolicitudProcesamiento, slotRec: Record<string
 }
 
 /**
- * Al terminar una orden de procesamiento en bodega interna: descuenta kg del primario
- * en la primera posición que coincida por cliente + producto (catalogoProductId o nombre).
+ * Descuenta kg del **primario** en la primera posición de bodega que coincida (cliente + producto).
+ * Se usa cuando el material **sale de la bodega** hacia procesamiento: al pasar la solicitud a **En curso**
+ * (operario ya movilizó el stock). No debe llamarse de nuevo al pasar a **Terminado**.
  */
 export function deductSlotsAfterProcesamientoTerminado(
   slots: Slot[],

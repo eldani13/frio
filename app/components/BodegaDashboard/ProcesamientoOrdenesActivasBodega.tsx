@@ -21,7 +21,7 @@ function opcionesEstadoSelect(estadoActual: string): string[] {
   return [...PROCESAMIENTO_ESTADOS];
 }
 
-/** Solo el operario asignado puede elegir «En curso» desde «Iniciado». */
+/** Solo el responsable asignado (operario o procesador) puede elegir «En curso» desde «Iniciado». */
 function opcionesEstadoParaSesion(row: SolicitudProcesamiento, sessionUid?: string): string[] {
   const base = opcionesEstadoSelect(row.estado);
   const cur = normalizeProcesamientoEstado(row.estado);
@@ -72,19 +72,25 @@ export function ProcesamientoOrdenesActivasBodega({
 }: {
   clients: Client[];
   warehouseCodeCuenta: string;
-  /** Id de bodega interna (`warehouses`); para descontar kg al pasar a Terminado. */
+  /** Id de bodega interna (`warehouses`); para descontar kg del primario al pasar a **En curso**. */
   warehouseId?: string;
   slots?: Slot[];
   variant?: "default" | "compact";
   layout?: "table" | "cards";
   sessionUid?: string;
   sessionRole?: Role;
-  operariosBodega?: Array<{ id: string; name: string }>;
+  operariosBodega?: Array<{ id: string; name: string; roleLabel?: string }>;
   tareasProcesamientoOperario?: Array<Record<string, unknown>>;
   onPushTareaProcesamientoOperario?: (tarea: Record<string, unknown>) => void;
   onProcesamientoTerminadoInventario?: (
     nextSlots: Slot[],
-    meta: { row: SolicitudProcesamiento; deductedKg: number; warning?: string },
+    meta: {
+      row: SolicitudProcesamiento;
+      deductedKg: number;
+      warning?: string;
+      /** Si false, no se quita la tarea de la cola (solo se actualiza fase al pasar a En curso). */
+      quitarTareaDeCola?: boolean;
+    },
   ) => void | Promise<void>;
 }) {
   const [rows, setRows] = React.useState<SolicitudProcesamiento[]>([]);
@@ -92,9 +98,20 @@ export function ProcesamientoOrdenesActivasBodega({
   const [savingId, setSavingId] = React.useState<string | null>(null);
   const [detalle, setDetalle] = React.useState<SolicitudProcesamiento | null>(null);
   const [modalBusy, setModalBusy] = React.useState(false);
+  const [asignadoUid, setAsignadoUid] = React.useState("");
 
-  /** Un solo operario de bodega: se asigna a él directamente (sin selector). */
-  const operarioUnico = operariosBodega[0] ?? null;
+  React.useEffect(() => {
+    if (operariosBodega.length === 0) {
+      setAsignadoUid("");
+      return;
+    }
+    setAsignadoUid((prev) =>
+      prev && operariosBodega.some((o) => o.id === prev) ? prev : operariosBodega[0].id,
+    );
+  }, [operariosBodega]);
+
+  const responsableSeleccionado =
+    operariosBodega.find((o) => o.id === asignadoUid) ?? operariosBodega[0] ?? null;
 
   const clientIds = React.useMemo(() => {
     const code = String(warehouseCodeCuenta ?? "").trim();
@@ -142,8 +159,8 @@ export function ProcesamientoOrdenesActivasBodega({
     try {
       await SolicitudProcesamientoService.actualizarEstado(row.clientId, row.id, nextNorm);
       if (
-        nextNorm === "Terminado" &&
-        prevNorm === "En curso" &&
+        nextNorm === "En curso" &&
+        prevNorm === "Iniciado" &&
         warehouseId.trim() &&
         onProcesamientoTerminadoInventario
       ) {
@@ -152,6 +169,14 @@ export function ProcesamientoOrdenesActivasBodega({
           row,
           deductedKg: r.deductedKg,
           warning: r.warning,
+          quitarTareaDeCola: false,
+        });
+      }
+      if (nextNorm === "Terminado" && prevNorm === "En curso" && onProcesamientoTerminadoInventario) {
+        await onProcesamientoTerminadoInventario(slots, {
+          row,
+          deductedKg: 0,
+          quitarTareaDeCola: true,
         });
       }
     } catch (e) {
@@ -161,9 +186,9 @@ export function ProcesamientoOrdenesActivasBodega({
       setDetalle((d) => (d && d.clientId === row.clientId && d.id === row.id ? { ...d, estado: prev } : d));
       const code = e instanceof Error ? e.message : "";
       if (code === "solo_operario_asignado") {
-        setError("Solo el operario asignado puede pasar la orden a «En curso».");
+        setError("Solo el responsable asignado (operario o procesador) puede pasar la orden a «En curso».");
       } else if (code === "sin_operario_asignado") {
-        setError("Asigná un operario antes de pasar a «En curso».");
+        setError("Asigná un responsable en bodega antes de pasar a «En curso».");
       } else {
         setError("No se pudo actualizar el estado.");
       }
@@ -173,18 +198,22 @@ export function ProcesamientoOrdenesActivasBodega({
   };
 
   const asignarOperario = async () => {
-    if (!detalle || !operarioUnico || !onPushTareaProcesamientoOperario) return;
+    if (!detalle || !responsableSeleccionado || !onPushTareaProcesamientoOperario) return;
     setModalBusy(true);
     setError(null);
     try {
       await SolicitudProcesamientoService.asignarOperarioBodega(detalle.clientId, detalle.id, {
-        operarioUid: operarioUnico.id,
-        operarioNombre: operarioUnico.name,
+        operarioUid: responsableSeleccionado.id,
+        operarioNombre: responsableSeleccionado.name,
       });
       setRows((list) =>
         list.map((r) =>
           r.clientId === detalle.clientId && r.id === detalle.id
-            ? { ...r, operarioBodegaUid: operarioUnico.id, operarioBodegaNombre: operarioUnico.name }
+            ? {
+                ...r,
+                operarioBodegaUid: responsableSeleccionado.id,
+                operarioBodegaNombre: responsableSeleccionado.name,
+              }
             : r,
         ),
       );
@@ -192,8 +221,8 @@ export function ProcesamientoOrdenesActivasBodega({
         d && d.clientId === detalle.clientId && d.id === detalle.id
           ? {
               ...d,
-              operarioBodegaUid: operarioUnico.id,
-              operarioBodegaNombre: operarioUnico.name,
+              operarioBodegaUid: responsableSeleccionado.id,
+              operarioBodegaNombre: responsableSeleccionado.name,
             }
           : d,
       );
@@ -212,8 +241,8 @@ export function ProcesamientoOrdenesActivasBodega({
         cantidadPrimario: detalle.cantidadPrimario,
         unidadPrimarioVisualizacion: detalle.unidadPrimarioVisualizacion,
         estimadoUnidadesSecundario: detalle.estimadoUnidadesSecundario,
-        operarioUid: operarioUnico.id,
-        operarioNombre: operarioUnico.name,
+        operarioUid: responsableSeleccionado.id,
+        operarioNombre: responsableSeleccionado.name,
         faseCola: "asignado",
       });
     } catch {
@@ -333,17 +362,18 @@ export function ProcesamientoOrdenesActivasBodega({
             Creado por: {detalle.creadoPorNombre || "—"} · Fecha solicitud: {detalle.fecha || "—"}
           </p>
           <p className="mt-2 text-xs text-slate-600">
-            Operario bodega:{" "}
+            Responsable en bodega:{" "}
             <span className="font-medium text-slate-800">
               {detalle.operarioBodegaNombre?.trim() || detalle.operarioBodegaUid || "Sin asignar"}
             </span>
           </p>
           {puedeAsignar ? (
             <div className="mt-5 space-y-3 border-t border-slate-100 pt-4">
-              <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Asignar operario</p>
+              <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Asignar responsable</p>
               <p className="text-[11px] text-slate-500">
-                Un clic: queda asignado al operario de la bodega y pasa a su cola. Solo él puede llevar la orden de
-                «Iniciado» a «En curso».
+                Elegí operario u operador de bodega: la orden pasa a su cola para el movimiento en mapa; solo esa
+                persona puede llevarla de «Iniciado» a «En curso». El procesador se asigna después desde el botón
+                Procesamiento del jefe.
               </p>
               {(() => {
                 const yaFs = Boolean(String(detalle.operarioBodegaUid ?? "").trim());
@@ -354,21 +384,37 @@ export function ProcesamientoOrdenesActivasBodega({
                 const asignado = yaFs || yaCola;
                 const iniciado = normalizeProcesamientoEstado(detalle.estado) === "Iniciado";
                 const puedePulsar =
-                  Boolean(operarioUnico) &&
+                  Boolean(responsableSeleccionado) &&
                   iniciado &&
                   !asignado &&
                   !modalBusy &&
                   Boolean(onPushTareaProcesamientoOperario);
                 return (
                   <>
-                    {operarioUnico ? (
-                      <p className="text-sm text-slate-700">
-                        Se asigna a: <span className="font-semibold text-slate-900">{operarioUnico.name}</span>
-                      </p>
+                    {operariosBodega.length > 0 ? (
+                      <div className="space-y-2">
+                        <label className="block text-[11px] font-semibold text-slate-600" htmlFor="proc-asignar-a">
+                          Asignar a
+                        </label>
+                        <select
+                          id="proc-asignar-a"
+                          className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-900 shadow-sm focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-400/40"
+                          value={asignadoUid}
+                          onChange={(e) => setAsignadoUid(e.target.value)}
+                          disabled={asignado || modalBusy}
+                        >
+                          {operariosBodega.map((o) => (
+                            <option key={o.id} value={o.id}>
+                              {(o.name || "Sin nombre").trim()}
+                              {o.roleLabel ? ` · ${o.roleLabel}` : ""}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
                     ) : (
                       <p className="rounded-lg border border-amber-100 bg-amber-50/90 px-3 py-2 text-[11px] text-amber-900">
-                        No hay ningún usuario con rol <strong>operario</strong> (o <strong>operador</strong> de bodega)
-                        activo en el sistema. Creá uno en Configuración o revisá el rol en su perfil.
+                        No hay usuarios con rol <strong>operario</strong> u <strong>operador</strong> (bodega) activos.
+                        Creá uno en Configuración.
                       </p>
                     )}
                     <button
@@ -376,11 +422,11 @@ export function ProcesamientoOrdenesActivasBodega({
                       title={
                         asignado
                           ? "Ya asignado"
-                          : !operarioUnico
-                            ? "Sin operario en el sistema"
+                          : !responsableSeleccionado
+                            ? "Sin responsable en el sistema"
                             : !iniciado
                               ? "Solo en estado Iniciado"
-                              : "Asignar al operario de la bodega"
+                              : "Enviar a la cola del responsable"
                       }
                       disabled={!puedePulsar}
                       onMouseDown={(e) => {
@@ -434,7 +480,8 @@ export function ProcesamientoOrdenesActivasBodega({
           <div className="min-w-0 flex-1">
             <h3 className="text-sm font-bold tracking-tight text-slate-900">Procesamiento</h3>
             <p className="text-[11px] leading-snug text-slate-600">
-              Iniciado y En curso. Tocá una tarjeta para ver el detalle y asignar al operario de bodega.
+              Iniciado y En curso. Tocá una tarjeta para ver el detalle y asignar al operario; el procesador, desde
+              Procesamiento en la barra del jefe.
             </p>
           </div>
         </div>
@@ -511,8 +558,9 @@ export function ProcesamientoOrdenesActivasBodega({
     <div className={pad}>
       <p className="mb-3 text-xs leading-relaxed text-slate-600">
         Solo se listan pedidos en estado <strong>Iniciado</strong> o <strong>En curso</strong>. Las órdenes en{" "}
-        <strong>Terminado</strong> no aparecen aquí. «En curso» solo lo puede elegir el operario asignado desde{" "}
-        <strong>Iniciado</strong>.
+        <strong>Terminado</strong> no aparecen aquí. Al pasar a <strong>En curso</strong> se descuenta el primario en
+        el mapa de bodega (material ya en zona de procesamiento). «En curso» solo lo puede elegir quien tenga la orden
+        asignada desde <strong>Iniciado</strong>.
       </p>
       {alerts}
       {codeOk && clientIds.length > 0 ? (

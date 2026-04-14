@@ -1,5 +1,6 @@
 import type { Slot } from "../app/interfaces/bodega";
 import type { Catalogo } from "../app/types/catalogo";
+import { unidadVisualizacionDe } from "./catalogoProcesamiento";
 import { coercePiezasFromUnknown, kgFromFirestoreSlotRecord } from "./coerceBodegaKg";
 
 function norm(s: string): string {
@@ -39,6 +40,36 @@ export type StockPrimarioBodegaResult = {
   /** Cantidad de posiciones ocupadas que sumaron al total. */
   cajasCoincidentes: number;
 };
+
+export type StockPrimarioPreferKgResult = StockPrimarioBodegaResult & {
+  /** Unidad con la que se interpretó `total` para mostrar reglas / regla de tres. */
+  unidadUsada: "peso" | "cantidad";
+};
+
+/**
+ * Si el catálogo marca el primario en «cantidad» pero las cajas del mapa traen kg (`quantityKg`),
+ * devuelve la **suma de kg** (no «1 caja»). Así la regla de conversión refleja el inventario real.
+ * Si no hay kg en las cajas coincidentes, se usa la unidad de visualización del catálogo.
+ */
+export function stockPrimarioDesdeSlotsPreferirKgCuandoExisten(
+  slots: Slot[],
+  clientId: string,
+  primario: Catalogo,
+): StockPrimarioPreferKgResult {
+  const list = slotsClienteYProducto(slots, clientId, primario);
+  const unidadCat = unidadVisualizacionDe(primario);
+  if (!list.length) {
+    return { total: 0, cajasCoincidentes: 0, unidadUsada: unidadCat };
+  }
+
+  const porPeso = stockPrimarioDesdeSlotsBodega(slots, clientId, primario, "peso");
+  if (porPeso.total > 0) {
+    return { ...porPeso, unidadUsada: "peso" };
+  }
+
+  const porCat = stockPrimarioDesdeSlotsBodega(slots, clientId, primario, unidadCat);
+  return { ...porCat, unidadUsada: unidadCat };
+}
 
 /**
  * Stock disponible en el mapa de la bodega para un primario y cuenta (`slot.client` = `clientId` de Firestore).

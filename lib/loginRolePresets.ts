@@ -12,6 +12,7 @@
 export type LoginPresetKey =
   | "custodio"
   | "operario"
+  | "procesador"
   | "jefe"
   | "administrador"
   | "cuenta"
@@ -23,6 +24,7 @@ type Credentials = { email: string; password: string };
 const ORDER: Array<{ key: LoginPresetKey; label: string }> = [
   { key: "custodio", label: "Custodio" },
   { key: "operario", label: "Operario" },
+  { key: "procesador", label: "Procesador" },
   { key: "jefe", label: "Jefe" },
   { key: "administrador", label: "Administrador" },
   { key: "cuenta", label: "Cuenta" },
@@ -34,6 +36,7 @@ const ORDER: Array<{ key: LoginPresetKey; label: string }> = [
 const DEFAULTS: Record<LoginPresetKey, Credentials> = {
   custodio: { email: "custodio@custodio.com", password: "custodio123" },
   operario: { email: "operario@operario.com", password: "operario123" },
+  procesador: { email: "procesador@procesador.com", password: "procesador123" },
   jefe: { email: "jefe@jefe.com", password: "jefe123" },
   administrador: { email: "admin@admin.com", password: "admin123" },
   cuenta: { email: "adminmit@mit.com", password: "adminmit123" },
@@ -44,6 +47,7 @@ const DEFAULTS: Record<LoginPresetKey, Credentials> = {
 const PRESET_KEYS = new Set<LoginPresetKey>([
   "custodio",
   "operario",
+  "procesador",
   "jefe",
   "administrador",
   "cuenta",

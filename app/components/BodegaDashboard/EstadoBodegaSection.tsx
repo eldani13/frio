@@ -27,13 +27,18 @@ type Props = {
   warehouseCodeCuenta?: string;
   sessionUid?: string;
   sessionRole?: Role;
-  operariosBodega?: Array<{ id: string; name: string }>;
+  operariosBodega?: Array<{ id: string; name: string; roleLabel?: string }>;
   tareasProcesamientoOperario?: Array<Record<string, unknown>>;
   onPushTareaProcesamientoOperario?: (tarea: Record<string, unknown>) => void;
   warehouseId?: string;
   onProcesamientoTerminadoInventario?: (
     nextSlots: Slot[],
-    meta: { row: SolicitudProcesamiento; deductedKg: number; warning?: string },
+    meta: {
+      row: SolicitudProcesamiento;
+      deductedKg: number;
+      warning?: string;
+      quitarTareaDeCola?: boolean;
+    },
   ) => void | Promise<void>;
 };
 

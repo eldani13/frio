@@ -20,12 +20,19 @@ export type Slot = {
 	/** Misma caja que en ingreso/salida: trazabilidad hasta despacho. */
 	ordenCompraId?: string;
 	ordenCompraClienteId?: string;
+	/** Ubicación desde procesamiento: nombre del producto resultado (secundario). */
+	procesamientoSecundarioTitulo?: string;
+	/** Ubicación desde procesamiento: cantidad estimada en unidades del secundario (p. ej. lonchas). */
+	procesamientoUnidadesSecundario?: number;
+	/** Id Firestore de la solicitud de procesamiento (para re-enlazar estimado si faltó en el slot). */
+	procesamientoSolicitudId?: string;
 };
 
 export type Role =
 	| "custodio"
 	| "administrador"
 	| "operario"
+	| "procesador"
 	| "jefe"
 	| "cliente"
 	| "configurador"
@@ -74,7 +81,21 @@ export type Box = {
 
 export type OrderType = "a_bodega" | "a_salida" | "revisar";
 
-export type OrderSource = "ingresos" | "bodega" | "salida";
+export type OrderSource = "ingresos" | "bodega" | "salida" | "procesamiento";
+
+/** Metadatos cuando el origen del traslado es una orden de procesamiento ya **Terminada** (devolución al mapa). */
+export type ProcesamientoOrigenOrden = {
+	cuentaClientId: string;
+	solicitudId: string;
+	numero: string;
+	productoPrimarioTitulo: string;
+	productoSecundarioTitulo: string;
+	productoPrimarioId?: string;
+	cantidadPrimario: number;
+	unidadPrimarioVisualizacion?: "peso" | "cantidad";
+	/** Estimación al crear la solicitud (regla de tres hacia el secundario). */
+	estimadoUnidadesSecundario?: number | null;
+};
 
 export type BodegaOrder = {
 	id: string;
@@ -90,6 +111,7 @@ export type BodegaOrder = {
 	client?: string;
 	autoId?: string;
 	boxName?: string;
+	procesamientoOrigen?: ProcesamientoOrigenOrden;
 };
 
 export type BodegaStats = {

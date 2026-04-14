@@ -9,7 +9,9 @@ import DespachadosSection from "./BodegaDashboard/DespachadosSection";
 import ReportesSection from "./BodegaDashboard/ReportesSection";
 import CustodioOrdenesCompraTab from "./BodegaDashboard/CustodioOrdenesCompraTab";
 import { OrdenCompraService } from "@/app/services/ordenCompraService";
+import { SolicitudProcesamientoService } from "@/app/services/solicitudProcesamientoService";
 import type { SolicitudProcesamiento } from "@/app/types/solicitudProcesamiento";
+import { normalizeProcesamientoEstado } from "@/app/types/solicitudProcesamiento";
 import {
   deductSlotsAfterProcesamientoTerminado,
   tareaColaOperarioToSolicitudInventario,
@@ -55,6 +57,7 @@ import type {
   Box,
   OrderSource,
   OrderType,
+  ProcesamientoOrigenOrden,
   Role,
   Slot,
 } from "../interfaces/bodega";
@@ -69,6 +72,7 @@ import {
   subscribeWarehouseState,
 } from "../../lib/bodegaCloudState";
 import {
+  coerceKgFromUnknown,
   kgFromFirestoreSlotRecord,
   slotTracePartialFromRecord,
 } from "../../lib/coerceBodegaKg";
@@ -115,6 +119,14 @@ function coerceTemperatureFromCloud(value: unknown): number | null {
     return Number.isFinite(t) ? t : null;
   }
   return null;
+}
+
+function etiquetaRolColaProcesamiento(r: Role | string | undefined): string {
+  const key = String(r ?? "").toLowerCase().trim();
+  if (key === "procesador") return "Procesador";
+  if (key === "operario") return "Operario";
+  if (key === "operador") return "Operador bodega";
+  return key ? String(r) : "";
 }
 
 type AlertReason = "no_tuve_tiempo" | "no_quise" | "no_pude";
@@ -189,6 +201,9 @@ const CLEARED_BODEGA_SLOT_PATCH: Partial<Slot> = {
   caducidad: undefined,
   fechaIngreso: undefined,
   llaveUnica: undefined,
+  procesamientoSecundarioTitulo: undefined,
+  procesamientoUnidadesSecundario: undefined,
+  procesamientoSolicitudId: undefined,
 };
 
 const padNumber = (value: number, length: number) =>
@@ -214,6 +229,7 @@ const isValidRole = (value: unknown): value is Role =>
   value === "custodio" ||
   value === "administrador" ||
   value === "operario" ||
+  value === "procesador" ||
   value === "jefe" ||
   value === "cliente" ||
   value === "configurador" ||
@@ -258,6 +274,17 @@ const normalizeSlots = (value: unknown, expectedSize = DEFAULT_TOTAL_SLOTS): Slo
           : "";
     const quantityKg = kgFromFirestoreSlotRecord(record);
     const traceFromRecord = slotTracePartialFromRecord(record) as Partial<Slot>;
+    const procSecTituloRaw = record.procesamientoSecundarioTitulo;
+    const procSecTitulo =
+      typeof procSecTituloRaw === "string" && procSecTituloRaw.trim()
+        ? procSecTituloRaw.trim().slice(0, 240)
+        : undefined;
+    const procSecU = coerceKgFromUnknown(record.procesamientoUnidadesSecundario);
+    const procSecUnits =
+      procSecU !== undefined && Number.isFinite(procSecU) && procSecU > 0 ? procSecU : undefined;
+    const procSolRaw = record.procesamientoSolicitudId;
+    const procSolId =
+      typeof procSolRaw === "string" && procSolRaw.trim() ? procSolRaw.trim() : undefined;
     const ordenCompraId =
       typeof record.ordenCompraId === "string" && record.ordenCompraId.trim()
         ? record.ordenCompraId.trim()
@@ -275,6 +302,9 @@ const normalizeSlots = (value: unknown, expectedSize = DEFAULT_TOTAL_SLOTS): Slo
       client: normalizedClient,
       ...(quantityKg !== undefined ? { quantityKg } : {}),
       ...traceFromRecord,
+      ...(procSecTitulo ? { procesamientoSecundarioTitulo: procSecTitulo } : {}),
+      ...(procSecUnits !== undefined ? { procesamientoUnidadesSecundario: procSecUnits } : {}),
+      ...(procSolId ? { procesamientoSolicitudId: procSolId } : {}),
       ...(ordenCompraId ? { ordenCompraId } : {}),
       ...(ordenCompraClienteId ? { ordenCompraClienteId } : {}),
     });
@@ -416,20 +446,68 @@ const normalizeOrders = (value: unknown): BodegaOrder[] | null => {
       continue;
     }
 
+    const sz = record.sourceZone;
     const sourceZone: OrderSource =
-      record.sourceZone === "bodega"
+      sz === "bodega"
         ? "bodega"
-        : record.sourceZone === "salida"
+        : sz === "salida"
           ? "salida"
-          : "ingresos";
-    const sourcePosition =
-      typeof record.sourcePosition === "number"
-        ? record.sourcePosition
-        : typeof record.boxPosition === "number"
-          ? record.boxPosition
-          : null;
-    if (sourcePosition === null) {
-      continue;
+          : sz === "procesamiento"
+            ? "procesamiento"
+            : "ingresos";
+
+    let procesamientoOrigen: ProcesamientoOrigenOrden | undefined;
+    let sourcePosition: number | null = null;
+
+    if (sourceZone === "procesamiento") {
+      const po = record.procesamientoOrigen;
+      if (typeof po !== "object" || po === null) {
+        continue;
+      }
+      const pr = po as Record<string, unknown>;
+      const cuentaClientId = typeof pr.cuentaClientId === "string" ? pr.cuentaClientId.trim() : "";
+      const solicitudId = typeof pr.solicitudId === "string" ? pr.solicitudId.trim() : "";
+      if (!cuentaClientId || !solicitudId) {
+        continue;
+      }
+      const uv = pr.unidadPrimarioVisualizacion;
+      procesamientoOrigen = {
+        cuentaClientId,
+        solicitudId,
+        numero: typeof pr.numero === "string" ? pr.numero : "",
+        productoPrimarioTitulo:
+          typeof pr.productoPrimarioTitulo === "string" ? pr.productoPrimarioTitulo : "",
+        productoSecundarioTitulo:
+          typeof pr.productoSecundarioTitulo === "string" ? pr.productoSecundarioTitulo : "",
+        productoPrimarioId: typeof pr.productoPrimarioId === "string" ? pr.productoPrimarioId : undefined,
+        cantidadPrimario:
+          typeof pr.cantidadPrimario === "number" && Number.isFinite(pr.cantidadPrimario)
+            ? pr.cantidadPrimario
+            : 0,
+        unidadPrimarioVisualizacion:
+          uv === "peso" || uv === "cantidad" ? uv : undefined,
+        estimadoUnidadesSecundario:
+          typeof pr.estimadoUnidadesSecundario === "number" &&
+          Number.isFinite(pr.estimadoUnidadesSecundario)
+            ? pr.estimadoUnidadesSecundario
+            : pr.estimadoUnidadesSecundario === null
+              ? null
+              : undefined,
+      };
+      sourcePosition =
+        typeof record.sourcePosition === "number" && Number.isFinite(record.sourcePosition)
+          ? record.sourcePosition
+          : 0;
+    } else {
+      sourcePosition =
+        typeof record.sourcePosition === "number"
+          ? record.sourcePosition
+          : typeof record.boxPosition === "number"
+            ? record.boxPosition
+            : null;
+      if (sourcePosition === null) {
+        continue;
+      }
     }
 
     const targetPosition =
@@ -459,6 +537,7 @@ const normalizeOrders = (value: unknown): BodegaOrder[] | null => {
       client: typeof record.client === "string" ? record.client : undefined,
       autoId: typeof record.autoId === "string" ? record.autoId : undefined,
       boxName: typeof record.boxName === "string" ? record.boxName : undefined,
+      ...(procesamientoOrigen ? { procesamientoOrigen } : {}),
     });
   }
 
@@ -1703,7 +1782,13 @@ export default function BodegaDashboard() {
   const pendingSourceKeys = useMemo(() => {
     const keys = new Set<string>();
     orders.forEach((order) => {
-      keys.add(`${order.sourceZone}:${order.sourcePosition}`);
+      if (order.sourceZone === "procesamiento" && order.procesamientoOrigen) {
+        keys.add(
+          `procesamiento:${order.procesamientoOrigen.cuentaClientId}:${order.procesamientoOrigen.solicitudId}`,
+        );
+      } else {
+        keys.add(`${order.sourceZone}:${order.sourcePosition}`);
+      }
     });
     return keys;
   }, [orders]);
@@ -1717,6 +1802,53 @@ export default function BodegaDashboard() {
     () => bodegaBoxes.filter((box) => !pendingSourceKeys.has(`bodega:${box.position}`)),
     [bodegaBoxes, pendingSourceKeys],
   );
+
+  const warehouseCodeCuentaStr = String(currentWarehouse?.codeCuenta ?? "").trim();
+
+  const clientIdsParaSolicitudesBodega = useMemo(() => {
+    if (!warehouseCodeCuentaStr) return [];
+    return clients
+      .filter((c) => !c.disabled && String(c.code ?? "").trim() === warehouseCodeCuentaStr)
+      .map((c) => c.id.trim())
+      .filter(Boolean);
+  }, [clients, warehouseCodeCuentaStr]);
+
+  const [solicitudesProcSubscriptionRows, setSolicitudesProcSubscriptionRows] = useState<
+    SolicitudProcesamiento[]
+  >([]);
+
+  useEffect(() => {
+    if (isExternalWarehouse || !warehouseCodeCuentaStr || clientIdsParaSolicitudesBodega.length === 0) {
+      setSolicitudesProcSubscriptionRows([]);
+      return;
+    }
+    return SolicitudProcesamientoService.subscribeParaBodegaInterna(
+      clientIdsParaSolicitudesBodega,
+      warehouseCodeCuentaStr,
+      setSolicitudesProcSubscriptionRows,
+      () => {},
+    );
+  }, [isExternalWarehouse, warehouseCodeCuentaStr, clientIdsParaSolicitudesBodega]);
+
+  const solicitudesProcTerminadas = useMemo(
+    () =>
+      solicitudesProcSubscriptionRows.filter(
+        (r) => normalizeProcesamientoEstado(r.estado) === "Terminado",
+      ),
+    [solicitudesProcSubscriptionRows],
+  );
+
+  const solicitudesProcesamientoTerminadasDisponibles = useMemo(() => {
+    const pend = new Set(
+      orders
+        .filter((o) => o.type === "a_bodega" && o.sourceZone === "procesamiento" && o.procesamientoOrigen)
+        .map(
+          (o) =>
+            `${o.procesamientoOrigen!.cuentaClientId}::${o.procesamientoOrigen!.solicitudId}`,
+        ),
+    );
+    return solicitudesProcTerminadas.filter((s) => !pend.has(`${s.clientId}::${s.id}`));
+  }, [solicitudesProcTerminadas, orders]);
 
   const reviewBodegaList = useMemo(() => availableBodegaForOrders, [availableBodegaForOrders]);
 
@@ -1750,11 +1882,16 @@ export default function BodegaDashboard() {
         ? "Bodega"
         : order.sourceZone === "salida"
           ? "Salida"
-          : "Ingreso";
+          : order.sourceZone === "procesamiento"
+            ? "Procesamiento"
+            : "Ingreso";
     if (order.type === "revisar") {
       return `Revisar ${sourceLabel} ${order.sourcePosition}`;
     }
     if (order.type === "a_bodega") {
+      if (order.sourceZone === "procesamiento" && order.procesamientoOrigen) {
+        return `Procesamiento ${order.procesamientoOrigen.numero} → bodega ${target}`;
+      }
       return `${sourceLabel} ${order.sourcePosition} · Destino bodega ${target}`;
     }
     return `${sourceLabel} ${order.sourcePosition} · Destino salida ${target}`;
@@ -2154,6 +2291,9 @@ export default function BodegaDashboard() {
   const isOperario =
     role === "operario" ||
     (role !== "operadorCuentas" && String(session?.role ?? "").toLowerCase().trim() === "operador");
+  const isProcesador = role === "procesador";
+  /** Misma vista de bodega / solicitudes que el operario; el procesador solo ejecuta tareas de procesamiento asignadas. */
+  const isColaboradorBodega = isOperario || isProcesador;
   const isCustodio = role === "custodio";
   const isJefe = role === "jefe";
   const isCliente = role === "cliente";
@@ -2164,7 +2304,7 @@ export default function BodegaDashboard() {
   const effectiveClientId = isCuentaUsuario ? clientFilterId || clientId || "cliente1" : clientId;
   const canManageAlerts = isJefe;
 
-  const canSeeBodega = isAdmin || isOperario;
+  const canSeeBodega = isAdmin || isColaboradorBodega;
   const canUseIngresoForm = isCustodio;
   const canUseOrderForm = isJefe;
   const canUseSearch = isAdmin;
@@ -2251,27 +2391,42 @@ export default function BodegaDashboard() {
     [clients],
   );
 
-  /** Operario de bodega: rol `operario` o alias legacy `operador` (no es `operadorCuentas`). */
+  /**
+   * Quienes reciben la orden en **Iniciado** para el movimiento en bodega (hacia zona de procesamiento):
+   * solo `operario` o legacy `operador` de bodega. El **procesador** se asigna aparte (modal Procesamiento del jefe).
+   */
   const operariosBodega = useMemo(() => {
     return users
       .filter((u) => {
         if (u.disabled) return false;
-        const r = String(u.role ?? "").toLowerCase().trim();
-        if (r === "operario") return true;
         if (u.role === "operadorCuentas") return false;
-        return r === "operador";
+        const r = String(u.role ?? "").toLowerCase().trim();
+        return r === "operario" || r === "operador";
       })
+      .map((u) => ({
+        id: u.id,
+        name: u.name,
+        roleLabel: etiquetaRolColaProcesamiento(u.role),
+      }));
+  }, [users]);
+
+  const procesadoresBodega = useMemo(() => {
+    return users
+      .filter((u) => !u.disabled && String(u.role ?? "").toLowerCase().trim() === "procesador")
       .map((u) => ({ id: u.id, name: u.name }));
   }, [users]);
 
   const handlePushTareaProcesamientoOperario = useCallback((tarea: Record<string, unknown>) => {
-    const cid = String(tarea.clientId ?? "");
-    const sid = String(tarea.solicitudId ?? "");
+    const cid = String(tarea.clientId ?? "").trim();
+    const sid = String(tarea.solicitudId ?? "").trim();
     setTareasProcesamientoOperario((prev) => {
-      if (prev.some((x) => String(x.clientId ?? "") === cid && String(x.solicitudId ?? "") === sid)) {
-        return prev;
-      }
-      return [...prev, tarea];
+      const idx = prev.findIndex(
+        (x) => String(x.clientId ?? "").trim() === cid && String(x.solicitudId ?? "").trim() === sid,
+      );
+      if (idx === -1) return [...prev, tarea];
+      const next = [...prev];
+      next[idx] = { ...prev[idx], ...tarea };
+      return next;
     });
   }, []);
 
@@ -2482,15 +2637,49 @@ export default function BodegaDashboard() {
     sourceZone: OrderSource;
     sourcePosition: number;
     targetPosition?: number;
+    procesamientoOrigen?: ProcesamientoOrigenOrden;
   }) => {
-    const { destination, sourceZone, sourcePosition, targetPosition } = params;
-    const effectiveSourceZone = destination === "a_salida" ? "bodega" : sourceZone;
-    const effectiveSourcePosition = sourcePosition;
+    const { destination, sourceZone, sourcePosition, targetPosition, procesamientoOrigen } = params;
 
     if (role !== "jefe") {
       setMessage("Solo el jefe crea ordenes.");
       return;
     }
+
+    if (destination === "a_bodega" && sourceZone === "procesamiento" && procesamientoOrigen) {
+      if (!targetPosition || !availableBodegaTargets.includes(targetPosition)) {
+        setMessage("Selecciona una posicion libre en bodega.");
+        return;
+      }
+      if (warehouseCapacity > 0 && targetPosition > warehouseCapacity) {
+        setMessage("La posicion excede la capacidad de la bodega.");
+        return;
+      }
+      const newOrderProc: BodegaOrder = {
+        id: createOrderId(),
+        type: "a_bodega",
+        sourcePosition: 0,
+        sourceZone: "procesamiento",
+        targetPosition,
+        createdAt: new Date().toLocaleString("es-CO"),
+        createdAtMs: Date.now(),
+        createdBy: role,
+        client: procesamientoOrigen.cuentaClientId,
+        autoId: `PROC-${procesamientoOrigen.numero}`,
+        boxName: `${procesamientoOrigen.productoPrimarioTitulo} → ${procesamientoOrigen.productoSecundarioTitulo}`.slice(
+          0,
+          240,
+        ),
+        procesamientoOrigen,
+      };
+      setOrders((prev) => [newOrderProc, ...prev]);
+      setMessage("Orden creada correctamente.");
+      return;
+    }
+
+    const effectiveSourceZone = destination === "a_salida" ? "bodega" : sourceZone;
+    const effectiveSourcePosition = sourcePosition;
+
     const sourceList =
       effectiveSourceZone === "bodega" ? availableBodegaForOrders : availableInboundForOrders;
     if (sourceList.length === 0) {
@@ -2648,21 +2837,41 @@ export default function BodegaDashboard() {
   );
 
   const handleProcesamientoTerminadoInventarioMapa = useCallback(
-    async (nextSlots: Slot[], meta: { row: SolicitudProcesamiento; deductedKg: number; warning?: string }) => {
+    async (
+      nextSlots: Slot[],
+      meta: {
+        row: SolicitudProcesamiento;
+        deductedKg: number;
+        warning?: string;
+        quitarTareaDeCola?: boolean;
+      },
+    ) => {
       const cid = meta.row.clientId.trim();
       const sid = meta.row.id.trim();
-      const nextTareas = tareasProcesamientoOperario.filter(
-        (t) => !(String(t.clientId ?? "").trim() === cid && String(t.solicitudId ?? "").trim() === sid),
-      );
+      const quitar = meta.quitarTareaDeCola !== false;
+      const nextTareas = quitar
+        ? tareasProcesamientoOperario.filter(
+            (t) => !(String(t.clientId ?? "").trim() === cid && String(t.solicitudId ?? "").trim() === sid),
+          )
+        : tareasProcesamientoOperario.map((t) =>
+            String(t.clientId ?? "").trim() === cid && String(t.solicitudId ?? "").trim() === sid
+              ? { ...t, faseCola: "en_curso" }
+              : t,
+          );
       setSlots(nextSlots);
       setTareasProcesamientoOperario(nextTareas);
-      setMessage(
-        meta.warning
-          ? `Orden ${meta.row.numero} terminada. ${meta.warning}`
-          : meta.deductedKg > 0
-            ? `Orden ${meta.row.numero} terminada. Descontados ${meta.deductedKg.toLocaleString("es-CO", { maximumFractionDigits: 4 })} kg en bodega.`
-            : `Orden ${meta.row.numero} terminada.`,
-      );
+      const num = meta.row.numero;
+      if (quitar) {
+        setMessage(`Orden ${num} terminada.`);
+      } else {
+        setMessage(
+          meta.warning
+            ? `Orden ${num} en curso (material retirado de bodega). ${meta.warning}`
+            : meta.deductedKg > 0
+              ? `Orden ${num} en curso. Descontados ${meta.deductedKg.toLocaleString("es-CO", { maximumFractionDigits: 4 })} kg en bodega.`
+              : `Orden ${num} en curso.`,
+        );
+      }
       persistWarehouseStateNow({
         slots: nextSlots,
         inboundBoxes,
@@ -2696,23 +2905,18 @@ export default function BodegaDashboard() {
     ],
   );
 
-  const handleProcesamientoTerminadoDesdeColaOperario = useCallback(
-    async (tarea: Record<string, unknown>) => {
+  const handleProcesamientoEnCursoDesdeColaOperario = useCallback(
+    async (tarea: Record<string, unknown>, nextTareas: Array<Record<string, unknown>>) => {
       const like = tareaColaOperarioToSolicitudInventario(tarea);
       const r = deductSlotsAfterProcesamientoTerminado(slots, like, warehouseId);
-      const cid = String(tarea.clientId ?? "").trim();
-      const sid = String(tarea.solicitudId ?? "").trim();
-      const nextTareas = tareasProcesamientoOperario.filter(
-        (t) => !(String(t.clientId ?? "").trim() === cid && String(t.solicitudId ?? "").trim() === sid),
-      );
       setSlots(r.slots);
       setTareasProcesamientoOperario(nextTareas);
       setMessage(
         r.warning
-          ? `Orden ${like.numero} terminada. ${r.warning}`
+          ? `Orden ${like.numero} en curso (material retirado de bodega). ${r.warning}`
           : r.deductedKg > 0
-            ? `Orden ${like.numero} terminada. Descontados ${r.deductedKg.toLocaleString("es-CO", { maximumFractionDigits: 4 })} kg en bodega.`
-            : `Orden ${like.numero} terminada.`,
+            ? `Orden ${like.numero} en curso. Descontados ${r.deductedKg.toLocaleString("es-CO", { maximumFractionDigits: 4 })} kg en bodega.`
+            : `Orden ${like.numero} en curso.`,
       );
       persistWarehouseStateNow({
         slots: r.slots,
@@ -2733,6 +2937,49 @@ export default function BodegaDashboard() {
     [
       slots,
       warehouseId,
+      persistWarehouseStateNow,
+      inboundBoxes,
+      outboundBoxes,
+      dispatchedBoxes,
+      orders,
+      stats,
+      warehouseName,
+      alerts,
+      assignedAlerts,
+      alertasOperario,
+      alertasOperarioSolved,
+      llamadasJefe,
+    ],
+  );
+
+  const handleProcesamientoTerminadoDesdeColaOperario = useCallback(
+    async (tarea: Record<string, unknown>) => {
+      const like = tareaColaOperarioToSolicitudInventario(tarea);
+      const cid = String(tarea.clientId ?? "").trim();
+      const sid = String(tarea.solicitudId ?? "").trim();
+      const nextTareas = tareasProcesamientoOperario.filter(
+        (t) => !(String(t.clientId ?? "").trim() === cid && String(t.solicitudId ?? "").trim() === sid),
+      );
+      setTareasProcesamientoOperario(nextTareas);
+      setMessage(`Orden ${like.numero} terminada.`);
+      persistWarehouseStateNow({
+        slots,
+        inboundBoxes,
+        outboundBoxes,
+        dispatchedBoxes,
+        orders,
+        stats,
+        warehouseName,
+        alerts,
+        assignedAlerts,
+        alertasOperario,
+        alertasOperarioSolved,
+        tareasProcesamientoOperario: nextTareas,
+        llamadasJefe,
+      });
+    },
+    [
+      slots,
       tareasProcesamientoOperario,
       persistWarehouseStateNow,
       inboundBoxes,
@@ -2756,7 +3003,7 @@ export default function BodegaDashboard() {
       return;
     }
 
-    if (role !== "operario") {
+    if (!isOperario) {
       setMessage("Solo el operario ejecuta ordenes.");
       return;
     }
@@ -2772,6 +3019,7 @@ export default function BodegaDashboard() {
     };
 
     const sourceIsBodega = order.sourceZone === "bodega";
+    const sourceIsProcesamiento = order.sourceZone === "procesamiento";
     const boxFromIngreso = inboundBoxes.find((item) => item.position === order.sourcePosition);
     const boxFromBodega = slots.find((item) => item.position === order.sourcePosition);
     const boxFromSalida = outboundBoxes.find((item) => item.position === order.sourcePosition);
@@ -2821,6 +3069,79 @@ export default function BodegaDashboard() {
         setMessage("La posicion de bodega ya esta ocupada.");
         return;
       }
+
+      if (sourceIsProcesamiento) {
+        const meta = order.procesamientoOrigen;
+        if (!meta) {
+          setMessage("Orden invalida: falta dato de procesamiento.");
+          return;
+        }
+        const qty = Math.max(0, Number(meta.cantidadPrimario) || 0);
+        if (qty <= 0) {
+          setMessage("La orden no tiene cantidad valida para ubicar en bodega.");
+          return;
+        }
+        const isPeso = meta.unidadPrimarioVisualizacion === "peso";
+        const filled: Record<string, unknown> = {
+          autoId: (order.autoId && order.autoId.trim()) || `PROC-${meta.numero}`,
+          name:
+            (order.boxName && order.boxName.trim()) ||
+            `${meta.productoPrimarioTitulo} → ${meta.productoSecundarioTitulo}`.slice(0, 200),
+          temperature: 0,
+          client: (order.client && order.client.trim()) || meta.cuentaClientId,
+        };
+        if (isPeso) {
+          filled.quantityKg = qty;
+        } else {
+          filled.piezas = Math.max(1, Math.round(qty));
+        }
+        const secTit = (meta.productoSecundarioTitulo || "").trim();
+        if (secTit) {
+          filled.procesamientoSecundarioTitulo = secTit.slice(0, 240);
+        }
+        const solId = (meta.solicitudId || "").trim();
+        if (solId) {
+          filled.procesamientoSolicitudId = solId.slice(0, 120);
+        }
+        let est = meta.estimadoUnidadesSecundario;
+        if (!(typeof est === "number" && Number.isFinite(est) && est > 0)) {
+          const row = solicitudesProcSubscriptionRows.find(
+            (s) =>
+              s.clientId.trim() === meta.cuentaClientId.trim() && s.id.trim() === solId,
+          );
+          const rEst = row?.estimadoUnidadesSecundario;
+          if (typeof rEst === "number" && Number.isFinite(rEst) && rEst > 0) {
+            est = rEst;
+          }
+        }
+        if (typeof est === "number" && Number.isFinite(est) && est > 0) {
+          filled.procesamientoUnidadesSecundario = est;
+        }
+        if (meta.productoPrimarioId?.trim()) {
+          filled.catalogoProductId = meta.productoPrimarioId.trim();
+        }
+        const nextSlotsProc = slots.map((item) =>
+          item.position === target ? { ...item, ...(filled as Partial<Slot>) } : item,
+        );
+        const nextStatsProc = { ...stats, movimientosBodega: stats.movimientosBodega + 1 };
+        const nextOrdersProc = orders.filter((item) => item.id !== orderId);
+        persistWarehouseStateNow({
+          slots: nextSlotsProc,
+          inboundBoxes,
+          outboundBoxes,
+          dispatchedBoxes,
+          orders: nextOrdersProc,
+          stats: nextStatsProc,
+          ...meta,
+        });
+        setSlots(nextSlotsProc);
+        setOrders(nextOrdersProc);
+        setStats(nextStatsProc);
+        addMovimientoBodega({ ...order, completadoAtMs: Date.now() });
+        setMessage("Producto de procesamiento ubicado en bodega.");
+        return;
+      }
+
       if (!sourceIsBodega) {
         if (order.sourceZone === "ingresos" && !boxFromIngreso) {
           setMessage("La caja ya no esta en ingresos.");
@@ -2868,6 +3189,10 @@ export default function BodegaDashboard() {
       const ocToSlot = readOrdenCompraRefs(sourceBox as Box | Slot);
 
       const srcRec = sourceBox as unknown as Record<string, unknown>;
+      const srcSlot = sourceBox as Slot;
+      const procTituloMove = srcSlot.procesamientoSecundarioTitulo?.trim();
+      const procUnidadesMove = srcSlot.procesamientoUnidadesSecundario;
+      const procSolMove = srcSlot.procesamientoSolicitudId?.trim();
       const filledSlotPayload = {
         autoId: boxAutoId,
         name: boxName,
@@ -2875,6 +3200,17 @@ export default function BodegaDashboard() {
         client: boxClient,
         ...(qtyToSlot !== undefined ? { quantityKg: qtyToSlot } : { quantityKg: undefined }),
         ...(slotTracePartialFromRecord(srcRec) as Partial<Slot>),
+        ...(procTituloMove
+          ? { procesamientoSecundarioTitulo: procTituloMove.slice(0, 240) }
+          : { procesamientoSecundarioTitulo: undefined }),
+        ...(typeof procUnidadesMove === "number" &&
+        Number.isFinite(procUnidadesMove) &&
+        procUnidadesMove > 0
+          ? { procesamientoUnidadesSecundario: procUnidadesMove }
+          : { procesamientoUnidadesSecundario: undefined }),
+        ...(procSolMove
+          ? { procesamientoSolicitudId: procSolMove.slice(0, 120) }
+          : { procesamientoSolicitudId: undefined }),
         ...(ocToSlot
           ? {
             ordenCompraId: ocToSlot.ordenCompraId,
@@ -3149,7 +3485,7 @@ export default function BodegaDashboard() {
   );
 
   const handleReportOrder = (orderId: string) => {
-    if (role !== "operario") {
+    if (!isOperario) {
       setMessage("Solo el operario puede reportar fallos.");
       return;
     }
@@ -3204,7 +3540,7 @@ export default function BodegaDashboard() {
   };
 
   const handleExecuteAssignedAlert = (alert: AlertItem) => {
-    if (role !== "operario") {
+    if (!isOperario) {
       setMessage("Solo el operario ejecuta alertas asignadas.");
       return;
     }
@@ -3396,7 +3732,7 @@ export default function BodegaDashboard() {
         {
           key: "solicitudes",
           label: "Solicitudes pendientes",
-          visible: isOperario,
+          visible: isColaboradorBodega,
         },
         {
           key: "configuracion",
@@ -3406,7 +3742,7 @@ export default function BodegaDashboard() {
         { key: "alertas", label: "Gestion de alertas", visible: false },
         { key: "reportes", label: "Reportes", visible: isAdmin || isCuentaUsuario },
       ].filter((tab) => tab.visible),
-    [isAdmin, isCuentaUsuario, isCustodio, isOperario, isJefe, canUseOrderForm, isConfigurator],
+    [isAdmin, isCuentaUsuario, isCustodio, isColaboradorBodega, isJefe, canUseOrderForm, isConfigurator],
   );
 
   useEffect(() => {
@@ -3617,8 +3953,8 @@ export default function BodegaDashboard() {
           warehouseName={warehouseName}
           warehouses={warehouses}
           onSelectWarehouse={handleSelectWarehouse}
-          showIntro={!isOperario}
-          showMeta={!isOperario}
+          showIntro={!isColaboradorBodega}
+          showMeta={!isColaboradorBodega}
           canSearch={canUseSearch}
           searchValue={searchId}
           onSearchChange={setSearchId}
@@ -3830,10 +4166,12 @@ export default function BodegaDashboard() {
                 sessionUid={session?.uid}
                 sessionRole={role}
                 operariosBodega={operariosBodega}
+                procesadoresBodega={procesadoresBodega}
                 tareasProcesamientoOperario={tareasProcesamientoOperario}
                 onPushTareaProcesamientoOperario={handlePushTareaProcesamientoOperario}
-                warehouseId={warehouseId}
                 onProcesamientoTerminadoInventario={handleProcesamientoTerminadoInventarioMapa}
+                solicitudesProcesamientoTerminadasDisponibles={solicitudesProcesamientoTerminadasDisponibles}
+                solicitudesProcesamientoTerminadas={solicitudesProcTerminadas}
               />
             ) : null}
 
@@ -3927,11 +4265,15 @@ export default function BodegaDashboard() {
               </section>
             ) : null}
 
-            {activeTab === "solicitudes" && isOperario ? (
+            {activeTab === "solicitudes" && isColaboradorBodega ? (
               <section className="grid gap-4">
                 <RequestsQueue
                   requests={orders}
-                  canExecute
+                  canExecute={isOperario}
+                  canExecuteWorkOrders={isOperario}
+                  canExecuteProcesamientoTasks={isOperario || isProcesador}
+                  showTemperaturaAlertasAsignadas={isOperario}
+                  llamadaDesdeRol={isProcesador ? "procesador" : "operario"}
                   onExecute={executeOrder}
                   onReport={handleReportOrder}
                   slots={slots}
@@ -3948,6 +4290,7 @@ export default function BodegaDashboard() {
                   tareasProcesamientoOperario={tareasProcesamientoOperario}
                   onUpdateTareasProcesamientoOperario={setTareasProcesamientoOperario}
                   operarioSessionUid={session?.uid}
+                  onProcesamientoEnCursoDesdeOperario={handleProcesamientoEnCursoDesdeColaOperario}
                   onProcesamientoTerminadoDesdeOperario={handleProcesamientoTerminadoDesdeColaOperario}
                 />
               </section>

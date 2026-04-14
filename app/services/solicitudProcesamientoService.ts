@@ -230,7 +230,11 @@ export const SolicitudProcesamientoService = {
     const snap = await getDoc(ref);
     if (!snap.exists()) throw new Error("no_existe");
     const cur = mapDoc(cid, sid, snap.data() as Record<string, unknown>);
-    if (cur.estado !== "Iniciado") throw new Error("solo_estado_iniciado");
+    const estadoNorm = normalizeProcesamientoEstado(cur.estado);
+    /** Iniciado: primera asignación. En curso: reasignar al procesador (u otro) sin cambiar estado. */
+    if (estadoNorm !== "Iniciado" && estadoNorm !== "En curso") {
+      throw new Error("estado_no_permite_reasignacion");
+    }
     await updateDoc(ref, { operarioBodegaUid: uid, operarioBodegaNombre: nombre || uid });
   },
 };

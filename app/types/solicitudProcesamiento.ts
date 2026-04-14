@@ -33,7 +33,7 @@ export type SolicitudProcesamiento = {
   fecha: string;
   estado: ProcesamientoEstado;
   createdAt?: Timestamp | null;
-  /** Operario de bodega asignado por jefe/admin (solo él puede pasar Iniciado → En curso). */
+  /** Operario o procesador de bodega asignado por jefe/admin (solo esa persona puede pasar Iniciado → En curso). */
   operarioBodegaUid?: string;
   operarioBodegaNombre?: string;
 };

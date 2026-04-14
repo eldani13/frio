@@ -13,10 +13,17 @@ import {
 } from "react-icons/fi";
 
 import React, { useState, useMemo } from "react";
-import { clientLabelFromList, formatBoxQuantityKg } from "@/app/lib/bodegaDisplay";
+import {
+  clientLabelFromList,
+  formatSlotCantidadDisplay,
+  secondaryTitleFromSlot,
+  slotLooksLikeProcesamiento,
+  type SlotCantidadContext,
+} from "@/app/lib/bodegaDisplay";
 import type { Client, Role, Slot } from "@/app/interfaces/bodega";
 import type { SolicitudProcesamiento } from "@/app/types/solicitudProcesamiento";
 import { ProcesamientoOrdenesActivasBodega } from "@/app/components/BodegaDashboard/ProcesamientoOrdenesActivasBodega";
+import { AsignarProcesadorProcesamientoModal } from "@/app/components/BodegaDashboard/AsignarProcesadorProcesamientoModal";
 import EntradaAlertButton from "../common/EntradaAlertButton";
 import { RiUserReceivedLine } from "react-icons/ri";
 import { temperatureStringFromAnalyzeResponse } from "@/app/lib/imageAnalyzeApi";
@@ -242,14 +249,25 @@ export default function OrdenesJefeSection(props: {
   warehouseCodeCuenta?: string;
   sessionUid?: string;
   sessionRole?: Role;
-  operariosBodega?: Array<{ id: string; name: string }>;
+  operariosBodega?: Array<{ id: string; name: string; roleLabel?: string }>;
+  /** Solo rol `procesador` — para el modal «Procesamiento» del mapa del jefe. */
+  procesadoresBodega?: Array<{ id: string; name: string }>;
   tareasProcesamientoOperario?: Array<Record<string, unknown>>;
   onPushTareaProcesamientoOperario?: (tarea: Record<string, unknown>) => void;
   warehouseId?: string;
   onProcesamientoTerminadoInventario?: (
     nextSlots: Slot[],
-    meta: { row: SolicitudProcesamiento; deductedKg: number; warning?: string },
+    meta: {
+      row: SolicitudProcesamiento;
+      deductedKg: number;
+      warning?: string;
+      quitarTareaDeCola?: boolean;
+    },
   ) => void | Promise<void>;
+  /** Órdenes de procesamiento en **Terminado** (disponibles para devolver al mapa vía traslado). */
+  solicitudesProcesamientoTerminadasDisponibles?: SolicitudProcesamiento[];
+  /** Todas las solicitudes terminadas (suscripción); sirve para mostrar unidades secundario en el mapa aunque no estén persistidas en el slot. */
+  solicitudesProcesamientoTerminadas?: SolicitudProcesamiento[];
 }) {
   const ITEMS_PER_PAGE = 4;
   const [entradaPage, setEntradaPage] = useState(0);
@@ -297,17 +315,51 @@ export default function OrdenesJefeSection(props: {
     sessionUid,
     sessionRole,
     operariosBodega = [],
+    procesadoresBodega = [],
     tareasProcesamientoOperario = [],
     onPushTareaProcesamientoOperario,
     warehouseId = "",
     onProcesamientoTerminadoInventario,
+    solicitudesProcesamientoTerminadasDisponibles = [],
+    solicitudesProcesamientoTerminadas = [],
   } = props;
+
+  const slotCantidadProcesamientoCtx = useMemo((): SlotCantidadContext | undefined => {
+    if (!solicitudesProcesamientoTerminadas.length) return undefined;
+    return { solicitudesTerminadas: solicitudesProcesamientoTerminadas };
+  }, [solicitudesProcesamientoTerminadas]);
 
   // Mark optional handler as intentionally unused in this view
   void handleCreateOrderSalida;
 
   // Estado para loading del modal de editar temperatura
   const [editTempLoading, setEditTempLoading] = React.useState(false);
+  const [trasladoBodegaOrigenTipo, setTrasladoBodegaOrigenTipo] = useState<"bodega" | "procesamiento">(
+    "bodega",
+  );
+  const [trasladoProcesamientoKey, setTrasladoProcesamientoKey] = useState("");
+
+  React.useEffect(() => {
+    if (orderModalType === "bodega") {
+      setTrasladoBodegaOrigenTipo("bodega");
+      setTrasladoProcesamientoKey("");
+    }
+  }, [orderModalType]);
+
+  React.useEffect(() => {
+    if (orderModalType !== "bodega" || trasladoBodegaOrigenTipo !== "procesamiento") return;
+    const first = solicitudesProcesamientoTerminadasDisponibles[0];
+    if (!first) {
+      setTrasladoProcesamientoKey("");
+      return;
+    }
+    const k = `${first.clientId}::${first.id}`;
+    setTrasladoProcesamientoKey((prev) =>
+      solicitudesProcesamientoTerminadasDisponibles.some((s) => `${s.clientId}::${s.id}` === prev)
+        ? prev
+        : k,
+    );
+  }, [orderModalType, trasladoBodegaOrigenTipo, solicitudesProcesamientoTerminadasDisponibles]);
 
   type ZoneKey = "entrada" | "bodega" | "salida";
   type ModalKind = "alertas" | "tareas";
@@ -418,6 +470,7 @@ export default function OrdenesJefeSection(props: {
 
   // Estado para mostrar el modal de llamados
   const [showLlamadosModal, setShowLlamadosModal] = React.useState(false);
+  const [modalAsignarProcesadorOpen, setModalAsignarProcesadorOpen] = useState(false);
 
   return (
     <section className="grid gap-4 lg:grid-cols-2 xl:grid-cols-4">
@@ -466,17 +519,17 @@ export default function OrdenesJefeSection(props: {
                 Consultar inventario
               </span>
             </button>
-            {/* Procesamiento (acción pendiente de implementar) */}
+            {/* Procesamiento: asignar órdenes en curso al rol procesador */}
             <button
               type="button"
               className="flex flex-col items-start rounded-xl p-3 shadow-sm bg-white text-slate-900 h-20 border border-slate-200 group transition hover:bg-slate-50"
-              onClick={() => {}}
+              onClick={() => setModalAsignarProcesadorOpen(true)}
             >
               <div className="flex items-center gap-1 mb-1">
                 <FiCpu className="w-5 h-5 text-slate-500" />
                 <span className="text-base font-semibold">Procesamiento</span>
               </div>
-              <span className="text-[11px] text-slate-500">Próximamente</span>
+              <span className="text-[11px] text-slate-500">Asignar al procesador</span>
             </button>
             {/* Crear Salida */}
             <button
@@ -558,10 +611,22 @@ export default function OrdenesJefeSection(props: {
                         {clientLabelFromList(selectedBoxModal.client || "", clients)}
                       </span>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
                       <span className="font-semibold text-slate-600">Cantidad:</span>
-                      <span>{formatBoxQuantityKg(selectedBoxModal.quantityKg)}</span>
+                      <span>
+                        {formatSlotCantidadDisplay(selectedBoxModal, slotCantidadProcesamientoCtx)}
+                      </span>
                     </div>
+                    {slotLooksLikeProcesamiento(selectedBoxModal) ? (
+                      <div className="flex flex-wrap items-start gap-2">
+                        <span className="font-semibold text-slate-600 shrink-0">
+                          Producto secundario (procesado):
+                        </span>
+                        <span className="break-words text-left">
+                          {secondaryTitleFromSlot(selectedBoxModal) || "—"}
+                        </span>
+                      </div>
+                    ) : null}
                     <div className="flex items-center gap-2">
                       <span className="font-semibold text-slate-600">Posición:</span>
                       <span>{selectedBoxModal.position}</span>
@@ -983,7 +1048,9 @@ export default function OrdenesJefeSection(props: {
                         </div>
                         <div>Id: {box.autoId}</div>
                         <div>Cliente: {clientLabelFromList(box.client || "", clients)}</div>
-                        <div>Cantidad: {formatBoxQuantityKg(box.quantityKg)}</div>
+                        <div>
+                          Cantidad: {formatSlotCantidadDisplay(box, slotCantidadProcesamientoCtx)}
+                        </div>
                         <div>
                           Temp:{" "}
                           {typeof box.temperature === "number"
@@ -1436,7 +1503,9 @@ export default function OrdenesJefeSection(props: {
                         </div>
                         <div>Id: {box.autoId}</div>
                         <div>Cliente: {clientLabelFromList(box.client || "", clients)}</div>
-                        <div>Cantidad: {formatBoxQuantityKg(box.quantityKg)}</div>
+                        <div>
+                          Cantidad: {formatSlotCantidadDisplay(box, slotCantidadProcesamientoCtx)}
+                        </div>
                         <div>
                           Temp:{" "}
                           {typeof box.temperature === "number"
@@ -1594,17 +1663,55 @@ export default function OrdenesJefeSection(props: {
               <button
                 type="button"
                 disabled={
-                  availableBodegaForOrders.length === 0 ||
-                  availableBodegaTargets.length === 0
+                  availableBodegaTargets.length === 0 ||
+                  (trasladoBodegaOrigenTipo === "bodega" && availableBodegaForOrders.length === 0) ||
+                  (trasladoBodegaOrigenTipo === "procesamiento" &&
+                    (solicitudesProcesamientoTerminadasDisponibles.length === 0 ||
+                      !trasladoProcesamientoKey))
                 }
-                onClick={() =>
-                  handleCreateOrder({
-                    destination: "a_bodega",
-                    sourceZone: "bodega",
-                    sourcePosition: bodegaOrderSourcePosition,
-                    targetPosition: bodegaOrderTargetPosition,
-                  })
-                }
+                onClick={() => {
+                  if (trasladoBodegaOrigenTipo === "bodega") {
+                    handleCreateOrder({
+                      destination: "a_bodega",
+                      sourceZone: "bodega",
+                      sourcePosition: bodegaOrderSourcePosition,
+                      targetPosition: bodegaOrderTargetPosition,
+                    });
+                  } else {
+                    const parts = trasladoProcesamientoKey.split("::");
+                    const cid = parts[0]?.trim() ?? "";
+                    const sid = parts[1]?.trim() ?? "";
+                    const row = solicitudesProcesamientoTerminadasDisponibles.find(
+                      (s) => s.clientId === cid && s.id === sid,
+                    );
+                    if (!row) return;
+                    const uv = row.unidadPrimarioVisualizacion;
+                    handleCreateOrder({
+                      destination: "a_bodega",
+                      sourceZone: "procesamiento",
+                      sourcePosition: 0,
+                      targetPosition: bodegaOrderTargetPosition,
+                      procesamientoOrigen: {
+                        cuentaClientId: row.clientId,
+                        solicitudId: row.id,
+                        numero: row.numero,
+                        productoPrimarioTitulo: row.productoPrimarioTitulo,
+                        productoSecundarioTitulo: row.productoSecundarioTitulo,
+                        productoPrimarioId: row.productoPrimarioId,
+                        cantidadPrimario: row.cantidadPrimario,
+                        unidadPrimarioVisualizacion:
+                          uv === "peso" || uv === "cantidad" ? uv : undefined,
+                        estimadoUnidadesSecundario:
+                          typeof row.estimadoUnidadesSecundario === "number" &&
+                          Number.isFinite(row.estimadoUnidadesSecundario)
+                            ? row.estimadoUnidadesSecundario
+                            : row.estimadoUnidadesSecundario === null
+                              ? null
+                              : undefined,
+                      },
+                    });
+                  }
+                }}
                 className={`inline-flex w-full items-center justify-center gap-2 rounded-xl px-5 py-2.5 text-sm font-bold text-white shadow-md transition focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-2 sm:w-auto disabled:pointer-events-none disabled:opacity-45 ${jefeModalAccentClass.blue.primary} ${jefeModalAccentClass.blue.primaryHover}`}
               >
                 Crear orden
@@ -1622,37 +1729,90 @@ export default function OrdenesJefeSection(props: {
             </select>
           </JefeModalField>
           <JefeModalField label="Origen" icon={<FiBox className="h-4 w-4" />}>
-            <input value="Bodega" readOnly className={jefeReadonlyClass} tabIndex={-1} />
-          </JefeModalField>
-          <JefeModalField
-            label="Caja en bodega"
-            icon={<FiPackage className="h-4 w-4" />}
-            hint="Cajas ocupadas en el mapa que aún no tienen orden de traslado pendiente."
-          >
             <select
-              value={bodegaOrderSourcePosition}
-              onChange={(event) =>
-                setBodegaOrderSourcePosition(Number(event.target.value))
+              value={trasladoBodegaOrigenTipo}
+              onChange={(e) =>
+                setTrasladoBodegaOrigenTipo(e.target.value === "procesamiento" ? "procesamiento" : "bodega")
               }
-              disabled={availableBodegaForOrders.length === 0}
-              className={`${jefeSelectClass} ${jefeModalAccentClass.blue.selectFocus} disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400`}
+              className={`${jefeSelectClass} ${jefeModalAccentClass.blue.selectFocus}`}
             >
-              {availableBodegaForOrders.length === 0 ? (
-                <option value={1}>Sin cajas en bodega</option>
-              ) : (
-                sortByPosition(availableBodegaForOrders).map((box) => (
-                  <option key={box.position} value={box.position}>
-                    {`Casillero ${box.position} — ${box.name} (${box.autoId}) · ${box.client || "—"}`}
-                  </option>
-                ))
-              )}
+              <option value="bodega">Bodega (casillero ocupado)</option>
+              <option value="procesamiento">Procesamiento (solo órdenes terminadas)</option>
             </select>
-            {availableBodegaForOrders.length === 0 ? (
-              <JefeModalEmptyHint>
-                No hay cajas disponibles para trasladar. Verificá el mapa o si ya hay órdenes pendientes.
-              </JefeModalEmptyHint>
-            ) : null}
           </JefeModalField>
+          {trasladoBodegaOrigenTipo === "bodega" ? (
+            <JefeModalField
+              label="Caja en bodega"
+              icon={<FiPackage className="h-4 w-4" />}
+              hint="Cajas ocupadas en el mapa que aún no tienen orden de traslado pendiente."
+            >
+              <select
+                value={bodegaOrderSourcePosition}
+                onChange={(event) =>
+                  setBodegaOrderSourcePosition(Number(event.target.value))
+                }
+                disabled={availableBodegaForOrders.length === 0}
+                className={`${jefeSelectClass} ${jefeModalAccentClass.blue.selectFocus} disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400`}
+              >
+                {availableBodegaForOrders.length === 0 ? (
+                  <option value={1}>Sin cajas en bodega</option>
+                ) : (
+                  sortByPosition(availableBodegaForOrders).map((box) => (
+                    <option key={box.position} value={box.position}>
+                      {`Casillero ${box.position} — ${box.name} (${box.autoId}) · ${box.client || "—"}`}
+                    </option>
+                  ))
+                )}
+              </select>
+              {availableBodegaForOrders.length === 0 ? (
+                <JefeModalEmptyHint>
+                  No hay cajas disponibles para trasladar. Verificá el mapa o si ya hay órdenes pendientes.
+                </JefeModalEmptyHint>
+              ) : null}
+            </JefeModalField>
+          ) : (
+            <JefeModalField
+              label="Orden terminada (procesamiento)"
+              icon={<FiCpu className="h-4 w-4" />}
+              hint="Solo aparecen solicitudes en estado Terminado y sin orden de devolución al mapa pendiente."
+            >
+              <select
+                value={trasladoProcesamientoKey}
+                onChange={(e) => setTrasladoProcesamientoKey(e.target.value)}
+                disabled={solicitudesProcesamientoTerminadasDisponibles.length === 0}
+                className={`${jefeSelectClass} ${jefeModalAccentClass.blue.selectFocus} disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400`}
+              >
+                {solicitudesProcesamientoTerminadasDisponibles.length === 0 ? (
+                  <option value="">Sin órdenes terminadas disponibles</option>
+                ) : (
+                  solicitudesProcesamientoTerminadasDisponibles.map((row) => {
+                    const key = `${row.clientId}::${row.id}`;
+                    const u =
+                      row.unidadPrimarioVisualizacion === "peso"
+                        ? "Peso"
+                        : row.unidadPrimarioVisualizacion === "cantidad"
+                          ? "Cant."
+                          : "";
+                    const qty = Number(row.cantidadPrimario) || 0;
+                    const qtyStr = Number.isInteger(qty)
+                      ? String(qty)
+                      : qty.toLocaleString("es-CO", { maximumFractionDigits: 4 });
+                    return (
+                      <option key={key} value={key}>
+                        {`${row.numero} — ${qtyStr}${u ? ` · ${u}` : ""} · ${row.productoPrimarioTitulo.slice(0, 48)}${row.productoPrimarioTitulo.length > 48 ? "…" : ""}`}
+                      </option>
+                    );
+                  })
+                )}
+              </select>
+              {solicitudesProcesamientoTerminadasDisponibles.length === 0 ? (
+                <JefeModalEmptyHint>
+                  No hay órdenes de procesamiento terminadas para devolver, o ya tienen una orden de traslado
+                  pendiente.
+                </JefeModalEmptyHint>
+              ) : null}
+            </JefeModalField>
+          )}
           <JefeModalField label="Nueva posición" icon={<FiGrid className="h-4 w-4" />}>
             <select
               value={bodegaOrderTargetPosition}
@@ -1834,6 +1994,14 @@ export default function OrdenesJefeSection(props: {
           </JefeModalField>
         </JefeOrderModalShell>
       )}
+      <AsignarProcesadorProcesamientoModal
+        isOpen={modalAsignarProcesadorOpen}
+        onClose={() => setModalAsignarProcesadorOpen(false)}
+        clients={clients}
+        warehouseCodeCuenta={warehouseCodeCuenta}
+        procesadoresBodega={procesadoresBodega}
+        onPushTareaProcesamientoOperario={onPushTareaProcesamientoOperario}
+      />
     </section>
   );
 }

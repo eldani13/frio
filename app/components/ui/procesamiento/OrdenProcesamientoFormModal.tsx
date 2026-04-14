@@ -12,7 +12,7 @@ import {
   unidadesSecundarioPorRegla,
 } from "@/lib/catalogoProcesamiento";
 import { subscribeWarehouseState } from "@/lib/bodegaCloudState";
-import { stockPrimarioDesdeSlotsBodega } from "@/lib/stockPrimarioBodega";
+import { stockPrimarioDesdeSlotsPreferirKgCuandoExisten } from "@/lib/stockPrimarioBodega";
 
 export interface OrdenProcesamientoDraft {
   productoPrimarioId: string;
@@ -168,16 +168,15 @@ export function OrdenProcesamientoFormModal({
     [secundariosDelPrimario, secundarioId],
   );
 
-  const unidadPrim = primario ? unidadVisualizacionDe(primario) : "cantidad";
-
   const stockDesdeMapa = useMemo(() => {
     if (!primario?.id || !clientIdFirestore.trim()) {
-      return { total: 0, cajasCoincidentes: 0 };
+      return { total: 0, cajasCoincidentes: 0, unidadUsada: "cantidad" as const };
     }
-    return stockPrimarioDesdeSlotsBodega(slotsBodega, clientIdFirestore, primario, unidadPrim);
-  }, [slotsBodega, clientIdFirestore, primario, unidadPrim]);
+    return stockPrimarioDesdeSlotsPreferirKgCuandoExisten(slotsBodega, clientIdFirestore, primario);
+  }, [slotsBodega, clientIdFirestore, primario]);
 
   const stockPrim = stockDesdeMapa.total;
+  const unidadPrim = primario ? stockDesdeMapa.unidadUsada : "cantidad";
 
   const maxCantidad = useMemo(() => {
     if (!Number.isFinite(stockPrim) || stockPrim <= 0) return 0;
@@ -272,7 +271,7 @@ export function OrdenProcesamientoFormModal({
             productoSecundarioId: secundario.id,
             productoSecundarioTitulo: (secundario.title || "").trim() || "Sin título",
             cantidadPrimario: unidadPrim === "cantidad" ? Math.round(q) : q,
-            unidadPrimarioVisualizacion: unidadVisualizacionDe(primario),
+            unidadPrimarioVisualizacion: unidadPrim,
             codeCuenta: codeCuentaDestino,
             warehouseId: warehouseFirestoreId || undefined,
             estimadoUnidadesSecundario: est,

@@ -171,6 +171,7 @@ export default function ConfiguratorPanel({
     configurador: "",
     administrador: "bodega",
     operario: "bodega",
+    procesador: "bodega",
     jefe: "bodega",
     cliente: "",
     custodio: "bodega",
@@ -181,6 +182,7 @@ export default function ConfiguratorPanel({
     custodio: "custodio",
     administrador: "administrador",
     operario: "operario",
+    procesador: "procesador",
     jefe: "jefe",
     cliente: "administrador de cuentas",
     configurador: "configurador",
@@ -1207,7 +1209,7 @@ export default function ConfiguratorPanel({
                   className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none"
                   disabled={userSaving || usersLoading}
                 >
-                  {["custodio", "administrador", "operario", "jefe", "cliente", "configurador"].map((role) => (
+                  {["custodio", "administrador", "operario", "procesador", "jefe", "cliente", "configurador"].map((role) => (
                     <option key={role} value={role}>{roleLabels[role as Role] ?? role}</option>
                   ))}
                 </select>
@@ -1624,7 +1626,7 @@ export default function ConfiguratorPanel({
                   className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none"
                   disabled={editUserSaving || usersLoading}
                 >
-                  {["custodio", "administrador", "operario", "jefe", "cliente", "configurador"].map((role) => (
+                  {["custodio", "administrador", "operario", "procesador", "jefe", "cliente", "configurador"].map((role) => (
                     <option key={role} value={role}>{roleLabels[role as Role] ?? role}</option>
                   ))}
                 </select>

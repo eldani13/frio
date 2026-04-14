@@ -22,6 +22,7 @@ function normId(s: string) {
 function zoneShort(z: OrderSource): string {
   if (z === "bodega") return "Bodega";
   if (z === "salida") return "Salida";
+  if (z === "procesamiento") return "Procesamiento";
   return "Ingreso";
 }
 

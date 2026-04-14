@@ -36,7 +36,9 @@ export default function Header({
       ? "Operador de cuentas"
       : role === "cliente"
         ? "Administrador de cuenta"
-        : role;
+        : role === "procesador"
+          ? "Procesador"
+          : role;
 
   return (
     <header className="w-full bg-white shadow-md border-b border-slate-200">

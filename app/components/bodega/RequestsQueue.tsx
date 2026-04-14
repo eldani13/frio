@@ -26,7 +26,7 @@ const TYPE_LABELS: Record<OrderType, string> = {
 };
 
 const STATUS_STYLES: Record<
-  "ingreso" | "bodega" | "salida" | "revisar",
+  "ingreso" | "bodega" | "salida" | "revisar" | "procesamiento",
   { bg: string; border: string; text: string; icon: string; label: string }
 > = {
   ingreso: {
@@ -56,6 +56,13 @@ const STATUS_STYLES: Record<
     text: "text-yellow-700",
     icon: "text-yellow-500",
     label: "text-yellow-600",
+  },
+  procesamiento: {
+    bg: "bg-violet-50",
+    border: "border-violet-200",
+    text: "text-violet-800",
+    icon: "text-violet-600",
+    label: "text-violet-600",
   },
 };
 
@@ -95,6 +102,19 @@ function liveTempAssignedAlert(
   return coerceTempLocal(b?.temperature);
 }
 
+function formatCantidadProcesamientoCola(n: unknown): string {
+  const v = Number(n);
+  if (!Number.isFinite(v)) return "—";
+  return Number.isInteger(v) ? String(v) : v.toLocaleString("es-CO", { maximumFractionDigits: 4 });
+}
+
+function etiquetaUnidadProcesamientoCola(t: Record<string, unknown>): string {
+  const u = t.unidadPrimarioVisualizacion;
+  if (u === "peso") return "Peso";
+  if (u === "cantidad") return "Cantidad";
+  return "—";
+}
+
 type ReviewDetail = {
   zone: OrderSource;
   position: number;
@@ -109,6 +129,10 @@ export default function RequestsQueue(props: RequestsQueueProps) {
   const {
     requests,
     canExecute,
+    canExecuteWorkOrders: canExecuteWorkOrdersProp,
+    canExecuteProcesamientoTasks: canExecuteProcesamientoTasksProp,
+    showTemperaturaAlertasAsignadas: showTemperaturaAlertasAsignadasProp,
+    llamadaDesdeRol = "operario",
     onExecute,
     onReport: _onReport,
     slots = [],
@@ -125,8 +149,13 @@ export default function RequestsQueue(props: RequestsQueueProps) {
     tareasProcesamientoOperario = [],
     onUpdateTareasProcesamientoOperario,
     operarioSessionUid,
+    onProcesamientoEnCursoDesdeOperario,
     onProcesamientoTerminadoDesdeOperario,
   } = props;
+
+  const canExecuteWorkOrders = canExecuteWorkOrdersProp ?? canExecute;
+  const canExecuteProcesamientoTasks = canExecuteProcesamientoTasksProp ?? canExecute;
+  const showTemperaturaAlertasAsignadas = showTemperaturaAlertasAsignadasProp ?? canExecute;
 
   // Optional callbacks may be provided from parent, keep refs without invoking
   void _onReport;
@@ -173,6 +202,7 @@ export default function RequestsQueue(props: RequestsQueueProps) {
    * `sourceIndex` = índice en `alertasOperario` (para resolver / persistir).
    */
   const alertasOperarioVisibles = useMemo(() => {
+    if (!showTemperaturaAlertasAsignadas) return [];
     const out: Array<{
       alerta: (typeof alertasOperario)[number];
       sourceIndex: number;
@@ -185,24 +215,37 @@ export default function RequestsQueue(props: RequestsQueueProps) {
       out.push({ alerta, sourceIndex });
     });
     return out;
-  }, [alertasOperario, slots, inboundBoxes, outboundBoxes]);
+  }, [alertasOperario, slots, inboundBoxes, outboundBoxes, showTemperaturaAlertasAsignadas]);
 
   const tareasProcesamientoOperarioVisibles = useMemo(() => {
-    if (!canExecute) return [];
+    if (!canExecuteProcesamientoTasks) return [];
     const uid = String(operarioSessionUid ?? "").trim();
     if (!uid) return [];
-    return tareasProcesamientoOperario.filter(
-      (t) => String(t.operarioUid ?? "").trim() === uid,
-    );
-  }, [canExecute, operarioSessionUid, tareasProcesamientoOperario]);
+    let list = tareasProcesamientoOperario.filter((t) => String(t.operarioUid ?? "").trim() === uid);
+    /** El operario solo mueve stock y pasa a «En curso»; lo en curso queda para el procesador (o hasta que el jefe reasigne). */
+    if (llamadaDesdeRol === "operario") {
+      list = list.filter((t) => String(t.faseCola ?? "asignado").trim() !== "en_curso");
+    }
+    return list;
+  }, [canExecuteProcesamientoTasks, operarioSessionUid, tareasProcesamientoOperario, llamadaDesdeRol]);
 
   const totalAsignacionesOperario =
     alertasOperarioVisibles.length + tareasProcesamientoOperarioVisibles.length;
 
+  const nextProcTarea = tareasProcesamientoOperarioVisibles[0];
+
+  const esVistaSoloProcesador = !canExecuteWorkOrders && canExecuteProcesamientoTasks;
+  const deshabilitarBandejaYllamarProcesador =
+    esVistaSoloProcesador && tareasProcesamientoOperarioVisibles.length > 0;
+
   const bandejaLabel =
-    canExecute && tareasProcesamientoOperarioVisibles.length > 0
-      ? "Alertas y tareas"
-      : "Alertas";
+    canExecuteProcesamientoTasks && tareasProcesamientoOperarioVisibles.length > 0
+      ? showTemperaturaAlertasAsignadas
+        ? "Alertas y tareas"
+        : "Tareas de procesamiento"
+      : showTemperaturaAlertasAsignadas
+        ? "Alertas"
+        : "Tareas";
 
   const handlePasarProcesamientoEnCurso = async (tarea: Record<string, unknown>) => {
     if (!onUpdateTareasProcesamientoOperario) return;
@@ -213,13 +256,16 @@ export default function RequestsQueue(props: RequestsQueueProps) {
     setProcBusyKey(key);
     try {
       await SolicitudProcesamientoService.actualizarEstado(clientId, solicitudId, "En curso");
-      onUpdateTareasProcesamientoOperario(
-        tareasProcesamientoOperario.map((x) =>
-          String(x.clientId ?? "").trim() === clientId && String(x.solicitudId ?? "").trim() === solicitudId
-            ? { ...x, faseCola: "en_curso" }
-            : x,
-        ),
+      const nextTareas = tareasProcesamientoOperario.map((x) =>
+        String(x.clientId ?? "").trim() === clientId && String(x.solicitudId ?? "").trim() === solicitudId
+          ? { ...x, faseCola: "en_curso" }
+          : x,
       );
+      if (onProcesamientoEnCursoDesdeOperario) {
+        await onProcesamientoEnCursoDesdeOperario(tarea, nextTareas);
+      } else {
+        onUpdateTareasProcesamientoOperario(nextTareas);
+      }
     } catch {
       window.alert("No se pudo pasar la orden a «En curso». Revisá que sigas asignado o intentá de nuevo.");
     } finally {
@@ -228,6 +274,7 @@ export default function RequestsQueue(props: RequestsQueueProps) {
   };
 
   const handleTerminarProcesamiento = async (tarea: Record<string, unknown>) => {
+    if (llamadaDesdeRol !== "procesador") return;
     const clientId = String(tarea.clientId ?? "").trim();
     const solicitudId = String(tarea.solicitudId ?? "").trim();
     if (!clientId || !solicitudId) return;
@@ -261,6 +308,7 @@ export default function RequestsQueue(props: RequestsQueueProps) {
         const zone = (nextRequest.sourceZone || "").toString().toLowerCase();
         if (zone === "bodega") return "bodega";
         if (zone === "salida") return "salida";
+        if (zone === "procesamiento") return "procesamiento";
         if (zone === "ingreso" || zone === "ingresos") return "ingreso";
         return "ingreso";
       })()
@@ -383,10 +431,11 @@ export default function RequestsQueue(props: RequestsQueueProps) {
   };
 
   const handleCall = () => {
+    const esProc = llamadaDesdeRol === "procesador";
     const llamada = {
       timestamp: Date.now(),
-      from: "operario",
-      message: "Llamado del operario",
+      from: llamadaDesdeRol,
+      message: esProc ? "Llamado del procesador" : "Llamado del operario",
     };
     onUpdateLlamadasJefe([...llamadasJefe, llamada]);
     setShowCallModal(true);
@@ -424,7 +473,9 @@ export default function RequestsQueue(props: RequestsQueueProps) {
               </h2>
               <p className="text-sm text-slate-500 font-medium text-center max-w-sm">
                 {tareasProcesamientoOperarioVisibles.length > 0
-                  ? "Temperatura alta y procesamiento que el jefe te envió a la cola."
+                  ? showTemperaturaAlertasAsignadas
+                    ? "Temperatura alta y procesamiento que el jefe te envió a la cola."
+                    : "Órdenes de procesamiento que el jefe de bodega te asignó."
                   : "Estas son las alertas de temperatura que tienes asignadas actualmente."}
               </p>
               <button
@@ -538,20 +589,17 @@ export default function RequestsQueue(props: RequestsQueueProps) {
                             <div className="font-mono text-sm font-bold text-sky-950">{num}</div>
                             <div className="text-xs font-semibold text-slate-700">{cuenta}</div>
                             <div className="mt-1 line-clamp-2 text-xs text-slate-600">{prim}</div>
-                            {enCursoCola ? (
-                              <p className="mt-1 text-[10px] font-semibold text-amber-800">En curso — al terminar se descuenta kg en bodega.</p>
-                            ) : null}
                           </div>
-                          {enCursoCola ? (
+                          {enCursoCola && llamadaDesdeRol === "procesador" ? (
                             <button
                               type="button"
                               disabled={busy || !onUpdateTareasProcesamientoOperario}
                               onClick={() => void handleTerminarProcesamiento(tarea)}
                               className="shrink-0 rounded-lg bg-linear-to-r from-emerald-600 to-teal-500 px-4 py-2 text-xs font-bold text-white shadow-md transition hover:from-emerald-700 hover:to-teal-600 disabled:cursor-not-allowed disabled:opacity-50"
                             >
-                              {busy ? "Guardando…" : "Terminar y descontar"}
+                              {busy ? "Guardando…" : "Terminar"}
                             </button>
-                          ) : (
+                          ) : !enCursoCola ? (
                             <button
                               type="button"
                               disabled={busy || !onUpdateTareasProcesamientoOperario}
@@ -560,7 +608,7 @@ export default function RequestsQueue(props: RequestsQueueProps) {
                             >
                               {busy ? "Guardando…" : "Pasar a en curso"}
                             </button>
-                          )}
+                          ) : null}
                         </li>
                       );
                     })}
@@ -581,7 +629,7 @@ export default function RequestsQueue(props: RequestsQueueProps) {
       )}
 
       <div>
-        {canExecute ? (
+        {canExecuteWorkOrders ? (
           <button
             type="button"
             disabled={!nextRequest}
@@ -628,8 +676,12 @@ export default function RequestsQueue(props: RequestsQueueProps) {
                           ? "Bodega"
                           : nextRequest.sourceZone === "salida"
                             ? "Salida"
-                            : "Ingreso"}{" "}
-                        {nextRequest.sourcePosition}
+                            : nextRequest.sourceZone === "procesamiento"
+                              ? "Procesamiento"
+                              : "Ingreso"}{" "}
+                        {nextRequest.sourceZone === "procesamiento" && nextRequest.procesamientoOrigen
+                          ? nextRequest.procesamientoOrigen.numero
+                          : nextRequest.sourcePosition}
                       </span>
                     </div>
                     <FiArrowRight className="w-8 h-8 sm:w-10 sm:h-10 text-slate-300" />
@@ -683,21 +735,94 @@ export default function RequestsQueue(props: RequestsQueueProps) {
             )}
           </button>
         ) : null}
+        {!canExecuteWorkOrders && canExecuteProcesamientoTasks ? (
+          <button
+            type="button"
+            disabled={tareasProcesamientoOperarioVisibles.length === 0}
+            onClick={() => {
+              if (tareasProcesamientoOperarioVisibles.length > 0) setShowAlertModal(true);
+            }}
+            className="rounded-2xl bg-white p-6 sm:p-8 shadow-sm w-full border border-sky-200 transition-transform duration-150 hover:shadow-lg focus:shadow-lg active:shadow-lg hover:scale-[0.98] active:scale-[0.95] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:scale-100"
+            style={{ outline: "none" }}
+          >
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
+              <span className="px-6 py-2 rounded-xl bg-sky-600 text-white font-semibold text-lg flex items-center gap-2 w-full sm:w-auto justify-center sm:justify-start">
+                <FiCpu className="w-5 h-5" />
+                Procesamiento
+              </span>
+              <div className="flex flex-wrap items-center gap-2 sm:gap-3 w-full sm:w-auto justify-start sm:justify-end">
+                <span className="px-4 py-1 rounded-xl border border-sky-300 bg-sky-50 text-sky-800 font-semibold text-base flex items-center gap-2 w-full sm:w-auto justify-center sm:justify-start">
+                  <FiAlertCircle className="w-5 h-5" /> Pendiente
+                </span>
+                <span className="px-3 py-1 rounded-full bg-sky-100 text-sky-800 font-bold text-base border border-sky-200 w-full sm:w-auto text-center">
+                  {tareasProcesamientoOperarioVisibles.length} tareas
+                </span>
+              </div>
+            </div>
+            {!nextProcTarea ? (
+              <div className="flex min-h-88 items-center justify-center rounded-3xl border border-slate-200 bg-slate-50 px-6 py-10 text-center">
+                <p className="text-2xl font-semibold text-slate-700">
+                  No hay tareas de procesamiento asignadas.
+                </p>
+              </div>
+            ) : (
+              <div className="rounded-2xl bg-white p-4 sm:p-8">
+                <div className="flex flex-col items-center">
+                  <span className="text-slate-500 font-semibold text-lg mb-4">Próxima tarea</span>
+                  <div className="w-full rounded-2xl border border-sky-200 bg-linear-to-b from-sky-50/90 to-white px-6 py-6 text-center">
+                    <p className="font-mono text-xl font-bold text-sky-950">
+                      {String(nextProcTarea.numero ?? "").trim() || "—"}
+                    </p>
+                    <p className="mt-2 text-sm font-semibold text-slate-700">
+                      {String(nextProcTarea.clientName ?? nextProcTarea.clientId ?? "").trim() || "—"}
+                    </p>
+                    <p className="mt-2 text-left text-[10px] font-bold uppercase tracking-wide text-slate-500">
+                      Primario
+                    </p>
+                    <p className="mt-0.5 line-clamp-3 text-left text-sm text-slate-800">
+                      {String(nextProcTarea.productoPrimarioTitulo ?? "").trim() || "—"}
+                    </p>
+                    <p className="mt-3 text-left text-[10px] font-bold uppercase tracking-wide text-slate-500">
+                      Secundario (objetivo)
+                    </p>
+                    <p className="mt-0.5 line-clamp-2 text-left text-sm text-slate-800">
+                      → {String(nextProcTarea.productoSecundarioTitulo ?? "").trim() || "—"}
+                    </p>
+                    <p className="mt-3 text-left text-sm font-semibold text-slate-700">
+                      Cantidad: {formatCantidadProcesamientoCola(nextProcTarea.cantidadPrimario)} ·{" "}
+                      {etiquetaUnidadProcesamientoCola(nextProcTarea)}
+                      {nextProcTarea.estimadoUnidadesSecundario != null &&
+                      Number.isFinite(Number(nextProcTarea.estimadoUnidadesSecundario))
+                        ? ` · est. sec. ${formatCantidadProcesamientoCola(nextProcTarea.estimadoUnidadesSecundario)} u.`
+                        : ""}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+          </button>
+        ) : null}
         <div className="mt-8 flex flex-col sm:flex-row gap-4 w-full">
           <button
             type="button"
             className={`flex-1 flex items-center justify-center gap-2 rounded-2xl font-bold text-lg py-4 shadow transition-all border-2 focus:outline-none focus:ring-2
               ${
-                totalAsignacionesOperario > 0
-                  ? tareasProcesamientoOperarioVisibles.length > 0 && alertasOperarioVisibles.length === 0
-                    ? "bg-sky-100 hover:bg-sky-200 text-sky-900 border-sky-200 focus:ring-sky-300"
-                    : "bg-red-100 hover:bg-red-200 text-red-700 border-red-200 focus:ring-red-300"
-                  : "bg-slate-100 text-slate-400 border-slate-200 focus:ring-slate-300 cursor-not-allowed"
+                deshabilitarBandejaYllamarProcesador
+                  ? "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400 focus:ring-slate-200"
+                  : totalAsignacionesOperario > 0
+                    ? tareasProcesamientoOperarioVisibles.length > 0 && alertasOperarioVisibles.length === 0
+                      ? "bg-sky-100 hover:bg-sky-200 text-sky-900 border-sky-200 focus:ring-sky-300"
+                      : "bg-red-100 hover:bg-red-200 text-red-700 border-red-200 focus:ring-red-300"
+                    : "bg-slate-100 text-slate-400 border-slate-200 focus:ring-slate-300 cursor-not-allowed"
               }
             `}
             style={{ minWidth: 0 }}
-            onClick={() => totalAsignacionesOperario > 0 && setShowAlertModal(true)}
-            disabled={totalAsignacionesOperario === 0}
+            onClick={() =>
+              totalAsignacionesOperario > 0 &&
+              !deshabilitarBandejaYllamarProcesador &&
+              setShowAlertModal(true)
+            }
+            disabled={totalAsignacionesOperario === 0 || deshabilitarBandejaYllamarProcesador}
           >
             {tareasProcesamientoOperarioVisibles.length > 0 ? (
               <FiCpu className="w-6 h-6 shrink-0" />
@@ -720,9 +845,16 @@ export default function RequestsQueue(props: RequestsQueueProps) {
           </button>
           <button
             type="button"
-            className="flex-1 flex items-center justify-center gap-2 rounded-2xl bg-yellow-100 hover:bg-yellow-200 text-yellow-700 font-bold text-lg py-4 shadow transition-all border-2 border-yellow-200 focus:outline-none focus:ring-2 focus:ring-yellow-300"
+            className={`flex-1 flex items-center justify-center gap-2 rounded-2xl font-bold text-lg py-4 shadow transition-all border-2 focus:outline-none focus:ring-2 ${
+              deshabilitarBandejaYllamarProcesador
+                ? "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400 focus:ring-slate-200"
+                : "border-yellow-200 bg-yellow-100 text-yellow-700 hover:bg-yellow-200 focus:ring-yellow-300"
+            }`}
             style={{ minWidth: 0 }}
-            onClick={handleCall}
+            onClick={() => {
+              if (!deshabilitarBandejaYllamarProcesador) handleCall();
+            }}
+            disabled={deshabilitarBandejaYllamarProcesador}
           >
             <FiPhoneCall className="w-6 h-6" />
             Llamar
@@ -772,6 +904,7 @@ export default function RequestsQueue(props: RequestsQueueProps) {
                         ingresos: "Ingreso",
                         bodega: "Bodega",
                         salida: "Salida",
+                        procesamiento: "Procesamiento",
                       };
                       return `${labelMap[reviewModal.order.sourceZone]} ${reviewModal.order.sourcePosition}`;
                     })()}
