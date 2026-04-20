@@ -126,63 +126,158 @@ const parseNumber = (value: unknown): number | null => {
   return Number.isFinite(n) ? n : null;
 };
 
+/** Clave normalizada para emparejar campos del JSON aunque vengan con distinto casing, guiones o acentos. */
+function normalizeInventoryKey(key: string): string {
+  return key
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/\p{M}/gu, "")
+    .replace(/[\s_-]+/g, "");
+}
+
+/** Convierte valores típicos de Firestore (Timestamp, Date, número) a texto para la tabla. */
+function valueToInventoryString(value: unknown, keyNormalized: string): string | null {
+  const treatAsDateOnly =
+    keyNormalized.includes("fecha") || keyNormalized === "updatetime" || keyNormalized === "fechahora";
+
+  if (typeof value === "string" && value.trim()) return value.trim();
+  if (typeof value === "number" && Number.isFinite(value)) {
+    if (treatAsDateOnly) {
+      const d = new Date(value);
+      if (!Number.isNaN(d.getTime())) return d.toISOString().slice(0, 10);
+    }
+    return String(value);
+  }
+  if (typeof value === "boolean") return value ? "true" : "false";
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    return treatAsDateOnly ? value.toISOString().slice(0, 10) : value.toISOString();
+  }
+
+  if (value && typeof value === "object") {
+    const o = value as Record<string, unknown>;
+    if (typeof o.toDate === "function") {
+      try {
+        const d = (o.toDate as () => Date)();
+        if (d instanceof Date && !Number.isNaN(d.getTime())) {
+          return treatAsDateOnly ? d.toISOString().slice(0, 10) : d.toISOString();
+        }
+      } catch {
+        /* vacío */
+      }
+    }
+    const sec = o.seconds ?? o._seconds;
+    if (typeof sec === "number" && Number.isFinite(sec)) {
+      const nanos = Number(o.nanoseconds ?? o._nanoseconds) || 0;
+      const d = new Date(sec * 1000 + Math.floor(nanos / 1e6));
+      if (!Number.isNaN(d.getTime())) {
+        return treatAsDateOnly ? d.toISOString().slice(0, 10) : d.toISOString();
+      }
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Obtiene un string del registro crudo buscando por nombre canónico (ej. `fecha_ingreso` coincide con
+ * `Fecha_Ingreso`, `fecha ingreso`, `FECHAINGRESO`, etc.).
+ * Incluye Timestamp / Date de Firestore para `fecha_ingreso`.
+ */
+function pickRawString(raw: FridemRaw, canonicalKey: string): string {
+  const target = normalizeInventoryKey(canonicalKey);
+  for (const [k, v] of Object.entries(raw)) {
+    if (normalizeInventoryKey(k) !== target) continue;
+    const s = valueToInventoryString(v, target);
+    if (s) return s;
+  }
+  return "";
+}
+
+function pickRawNumberFrom(raw: FridemRaw, canonicalKey: string): number | null {
+  const target = normalizeInventoryKey(canonicalKey);
+  for (const [k, v] of Object.entries(raw)) {
+    if (normalizeInventoryKey(k) !== target) continue;
+    const n = parseNumber(v);
+    if (n !== null) return n;
+  }
+  return null;
+}
+
+/** Copia campos desde objetos anidados típicos (`status`, `data`) si en la raíz no vienen (Firestore a veces agrupa así). */
+function mergeNestedShallow(raw: FridemRaw): FridemRaw {
+  const out: Record<string, unknown> = { ...(raw as Record<string, unknown>) };
+  for (const box of ["status", "data", "fields", "payload"] as const) {
+    const inner = (raw as Record<string, unknown>)[box];
+    if (inner && typeof inner === "object" && !Array.isArray(inner)) {
+      for (const [ik, iv] of Object.entries(inner as Record<string, unknown>)) {
+        if (out[ik] === undefined && iv !== undefined) {
+          out[ik] = iv;
+        }
+      }
+    }
+  }
+  return out as FridemRaw;
+}
+
 const normalizeRawToRow = (raw: FridemRaw, index: number): FridemInventoryRow => {
-  const kilosDirect = parseNumber(raw.kilosactual);
+  const r = mergeNestedShallow(raw);
+
+  const kilosDirect =
+    pickRawNumberFrom(r, "kilosactual") ?? pickRawNumberFrom(r, "kilos_actual");
+  const pesoUnitario =
+    pickRawNumberFrom(r, "peso_unitario") ?? pickRawNumberFrom(r, "pesounitario");
+  const piezas = pickRawNumberFrom(r, "piezas");
   const kilosFromUnit = (() => {
-    const unit = parseNumber(raw.peso_unitario);
-    const pieces = parseNumber(raw.piezas);
-    if (unit !== null && pieces !== null) return unit * pieces;
+    if (pesoUnitario !== null && piezas !== null) return pesoUnitario * piezas;
     return null;
   })();
 
   const kilos = kilosDirect ?? kilosFromUnit ?? 0;
-  const piezas = parseNumber(raw.piezas);
-  const pesoUnitario = parseNumber(raw.peso_unitario);
-  const id =
-    (typeof raw.llaveunica === "string" && raw.llaveunica.trim()) ||
-    (typeof raw.rd === "string" && raw.rd.trim()
-      ? `${raw.rd}_${raw.renglon ?? index + 1}`
-      : `registro-${index + 1}`);
+  const llaveFromDb = pickRawString(r, "llaveunica");
+  const rd = pickRawString(r, "rd");
+  const renglon = pickRawString(r, "renglon");
+  const fechaIngreso = pickRawString(r, "fecha_ingreso");
+  const loteStr = pickRawString(r, "lote");
+
+  const composedLlave = rd ? `${rd}_${renglon || String(index + 1)}` : "";
+  const id = llaveFromDb || composedLlave || `registro-${index + 1}`;
+  const llaveDisplay = llaveFromDb || composedLlave || undefined;
 
   return {
     id,
-    rd: typeof raw.rd === "string" ? raw.rd : undefined,
-    renglon: typeof raw.renglon === "string" ? raw.renglon : undefined,
-    lote: typeof raw.lote === "string" && raw.lote.trim() ? raw.lote : id,
-    descripcion:
-      typeof raw.descripcion === "string" && raw.descripcion.trim()
-        ? raw.descripcion
-        : "Sin descripción",
-    embalaje: typeof raw.embalaje === "string" ? raw.embalaje : "",
-    marca: typeof raw.marca === "string" ? raw.marca : "",
-    caducidad: typeof raw.caducidad === "string" ? raw.caducidad : "",
-    fechaIngreso: typeof raw.fecha_ingreso === "string" ? raw.fecha_ingreso : "",
+    rd: rd || undefined,
+    renglon: renglon || undefined,
+    lote: loteStr || id,
+    descripcion: pickRawString(r, "descripcion") || "Sin descripción",
+    embalaje: pickRawString(r, "embalaje"),
+    marca: pickRawString(r, "marca"),
+    caducidad: pickRawString(r, "caducidad"),
+    fechaIngreso,
     pesoUnitario,
     piezas,
     kilos,
     kilosActual: kilosDirect,
-    llaveUnica: typeof raw.llaveunica === "string" ? raw.llaveunica : undefined,
-    updateTime: typeof raw.updateTime === "string" ? raw.updateTime : undefined,
-    estado: typeof raw.estado === "string" && raw.estado.trim() ? raw.estado : "Disponible",
+    llaveUnica: llaveDisplay,
+    updateTime: pickRawString(r, "updateTime") || pickRawString(r, "updatetime") || undefined,
+    estado: pickRawString(r, "estado") || "Disponible",
   };
 };
 
 const normalizeRawToSlot = (raw: FridemRaw, index: number): Slot => {
   const position = index + 1;
-  const autoId =
-    typeof raw.llaveunica === "string" && raw.llaveunica.trim()
-      ? raw.llaveunica
-      : `${raw.rd ?? "RD"}_${raw.renglon ?? position}`;
-  const name =
-    typeof raw.descripcion === "string" && raw.descripcion.trim()
-      ? raw.descripcion
-      : autoId;
+  const r = mergeNestedShallow(raw);
+  const llave = pickRawString(r, "llaveunica");
+  const rd = pickRawString(r, "rd");
+  const renglon = pickRawString(r, "renglon");
+  const autoId = llave || `${rd || "RD"}_${renglon || String(position)}`;
+  const desc = pickRawString(r, "descripcion");
+  const name = desc || autoId;
   return {
     position,
     autoId,
     name,
     temperature: null,
-    client: typeof raw.marca === "string" ? raw.marca : "",
+    client: pickRawString(r, "marca"),
   };
 };
 

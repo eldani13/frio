@@ -1,4 +1,4 @@
-import { FiLogOut, FiMenu, FiX } from "react-icons/fi";
+import { FiLogOut, FiMenu, FiPlus, FiX } from "react-icons/fi";
 import { useState } from "react";
 import type { HeaderProps } from "../../interfaces/bodega/Header";
 import type { Role } from "../../interfaces/bodega";
@@ -10,6 +10,8 @@ interface ExtendedHeaderProps extends HeaderProps {
   onLogout?: () => void;
   role?: Role;
   onGoMenu?: () => void;
+  /** Solo administrador de cuenta (rol `cliente`): tarea para el configurador. */
+  onCrearTarea?: () => void;
 }
 
 export default function Header({
@@ -25,10 +27,21 @@ export default function Header({
   onLogout,
   role,
   onGoMenu,
+  onCrearTarea,
 }: ExtendedHeaderProps) {
   const [menuOpen, setMenuOpen] = useState(false);
 
-   
+  const roleLabel =
+    role === "operadorCuentas"
+      ? "Operador de cuentas"
+      : role === "cliente"
+        ? "Administrador de cuenta"
+        : role === "procesador"
+          ? "Procesador"
+          : role === "transporte"
+            ? "Transporte"
+            : role;
+
   return (
     <header className="w-full bg-white shadow-md border-b border-slate-200">
       <div className="max-w-7xl mx-auto px-4 py-3">
@@ -69,7 +82,25 @@ export default function Header({
           <div className="flex items-center gap-3 flex-nowrap">
 
             <div className="h-8 w-px bg-slate-200" />
-       
+
+            {onCrearTarea ? (
+              <button
+                type="button"
+                onClick={onCrearTarea}
+                className="group inline-flex max-w-[9.5rem] flex-col items-center gap-0.5 bg-transparent px-1 py-0.5 text-center focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/60 focus-visible:ring-offset-2 rounded-md"
+                title="Enviar una tarea al configurador"
+              >
+                <span className="flex h-8 w-8 items-center justify-center rounded-full border border-dashed border-slate-400 text-slate-600 transition group-hover:border-[#2D5A3F] group-hover:bg-[#f0fdf4] group-hover:text-[#1B4332]">
+                  <FiPlus className="h-4 w-4" strokeWidth={2.5} aria-hidden />
+                </span>
+                <span className="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500 group-hover:text-[#1B4332]">
+                  Crear tarea
+                </span>
+              </button>
+            ) : null}
+
+            {onCrearTarea ? <div className="h-8 w-px bg-slate-200" /> : null}
+
             {/* PERFIL DE USUARIO */}
             <div className="flex items-center gap-3">
               {userDisplayName && (
@@ -83,7 +114,7 @@ export default function Header({
                 {userDisplayName}
                 </h3>
                 <span className="text-[12px] text-gray-400 font-normal">
-                {role}
+                {roleLabel}
                 </span>
               </div>
 
@@ -143,6 +174,17 @@ export default function Header({
               <span className="text-base">🏠</span>
               Volver al menú
             </button>
+
+            {onCrearTarea ? (
+              <button
+                type="button"
+                onClick={onCrearTarea}
+                className="flex w-full items-center justify-center gap-2 border border-dashed border-slate-400 py-2.5 text-sm font-semibold text-slate-700 transition hover:border-[#2D5A3F] hover:bg-[#f0fdf4] hover:text-[#1B4332]"
+              >
+                <FiPlus className="h-4 w-4" />
+                Crear tarea
+              </button>
+            ) : null}
 
             {canSearch &&
               searchValue !== undefined &&

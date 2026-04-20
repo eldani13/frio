@@ -1,20 +1,33 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   FiUsers,
   FiUserCheck,
   FiHome,
+  FiExternalLink,
   FiPlus,
   FiEdit2,
   FiArrowRight,
-  FiTrash2,
-  FiCheck,
+  FiArrowLeft,
   FiRefreshCw,
+  FiLayers,
+  FiMapPin,
+  FiClipboard,
+  FiAlertCircle,
+  FiBox,
+  FiCalendar,
+  FiPackage,
+  FiPhoneCall,
+  FiUser,
 } from "react-icons/fi";
-import type { Dispatch, SetStateAction } from "react";
+import type { Dispatch, MouseEvent, SetStateAction } from "react";
 import type { Client, ConfigUser, Role, WarehouseMeta } from "../../interfaces/bodega";
-import { MdOutlineAutorenew } from "react-icons/md";
+import { SolicitudIntegracionService } from "@/app/services/solicitudIntegracionService";
+import {
+  etiquetasTipoIntegracionRow,
+  type SolicitudIntegracion,
+} from "@/app/types/solicitudIntegracion";
 
 
 type Props = {
@@ -62,6 +75,8 @@ type Props = {
   handleCreateUser: () => Promise<void>;
   toggleUserDisabled: (userId: string, disabled: boolean) => Promise<void>;
   handleUpdateUser: (userId: string, payload: { name: string; role: Role; clientId: string }) => Promise<void>;
+  /** Pulso desde el botón Menú del header: vuelve a la pantalla principal (Creación / Creación y asignación / Integración). */
+  menuResetNonce?: number;
 };
 
 export default function ConfiguratorPanel({
@@ -75,7 +90,7 @@ export default function ConfiguratorPanel({
   setNewWarehouseCapacity,
   handleCreateWarehouse,
   handleUpdateWarehouse,
-  toggleWarehouseDisabled,
+  toggleWarehouseDisabled: _toggleWarehouseDisabled,
   newClientName,
   newClientCode,
   setNewClientName,
@@ -85,7 +100,7 @@ export default function ConfiguratorPanel({
   handleCreateClient,
   fetchClients,
   clients,
-  toggleClientDisabled,
+  toggleClientDisabled: _toggleClientDisabled,
   handleUpdateClient,
   fetchUsers,
   users,
@@ -104,12 +119,21 @@ export default function ConfiguratorPanel({
   usersLoading,
   userSaving,
   handleCreateUser,
-  toggleUserDisabled,
+  toggleUserDisabled: _toggleUserDisabled,
   handleUpdateUser,
+  menuResetNonce,
 }: Props) {
-  const [view, setView] = useState<"landing" | "clientes" | "usuarios" | "bodegaInterna" | "bodegaExterna">(
-    "landing",
-  );
+  type ConfiguratorView =
+    | "main"
+    | "creacion"
+    | "asignacion"
+    | "tareasPendiente"
+    | "clientes"
+    | "usuarios"
+    | "bodegaInterna"
+    | "bodegaExterna";
+
+  const [view, setView] = useState<ConfiguratorView>("main");
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showCreateUserModal, setShowCreateUserModal] = useState(false);
   const [editClient, setEditClient] = useState<Client | null>(null);
@@ -128,6 +152,10 @@ export default function ConfiguratorPanel({
   const [editWarehouseSaving, setEditWarehouseSaving] = useState(false);
   const [createWarehouseStatus, setCreateWarehouseStatus] = useState<"interna" | "externa">("interna");
   const [editWarehouseStatus, setEditWarehouseStatus] = useState<"interna" | "externa">("interna");
+  const [solicitudesIntegracionCola, setSolicitudesIntegracionCola] = useState<SolicitudIntegracion[]>([]);
+  const [integracionLoading, setIntegracionLoading] = useState(false);
+  const [integracionError, setIntegracionError] = useState<string | null>(null);
+  const [integracionEjecutandoId, setIntegracionEjecutandoId] = useState<string | null>(null);
 
   const normalizeBase36 = (value: string) => value.toUpperCase().replace(/[^0-9A-Z]/g, "");
   const ensureFiveClientCode = (value: string) => {
@@ -140,18 +168,24 @@ export default function ConfiguratorPanel({
     configurador: "",
     administrador: "bodega",
     operario: "bodega",
+    procesador: "bodega",
     jefe: "bodega",
     cliente: "",
     custodio: "bodega",
+    operadorCuentas: "",
+    transporte: "",
   };
 
   const roleLabels: Record<Role, string> = {
     custodio: "custodio",
     administrador: "administrador",
     operario: "operario",
+    procesador: "procesador",
     jefe: "jefe",
     cliente: "administrador de cuentas",
     configurador: "configurador",
+    operadorCuentas: "operador de cuentas",
+    transporte: "transporte (entregas venta)",
   };
 
   const warehouseNameByAccountCode = useMemo(() => {
@@ -192,31 +226,115 @@ export default function ConfiguratorPanel({
     }
   }, [newUserRole, showCreateUserModal, setNewUserClientId]);
 
+  const prevMenuNonce = useRef<number | null>(null);
+  useEffect(() => {
+    if (menuResetNonce === undefined) return;
+    if (prevMenuNonce.current === null) {
+      prevMenuNonce.current = menuResetNonce;
+      return;
+    }
+    if (prevMenuNonce.current === menuResetNonce) return;
+    prevMenuNonce.current = menuResetNonce;
+    setView("main");
+    setShowCreateModal(false);
+    setShowCreateUserModal(false);
+    setShowCreateWarehouseModal(false);
+    setEditClient(null);
+    setEditUser(null);
+    setEditWarehouse(null);
+  }, [menuResetNonce]);
+
+  useEffect(() => {
+    if (view !== "tareasPendiente") return;
+    setIntegracionLoading(true);
+    setIntegracionError(null);
+    const clientIds = clients.map((c) => c.id);
+    const unsub = SolicitudIntegracionService.subscribePendientesConfigurador(
+      clientIds,
+      (items) => {
+        setSolicitudesIntegracionCola(items);
+        setIntegracionLoading(false);
+        setIntegracionError(null);
+      },
+      (err) => {
+        console.error(err);
+        setSolicitudesIntegracionCola([]);
+        setIntegracionError(
+          "No se pudieron cargar las solicitudes. Revisá permisos en clientes/{id}/solicitudesIntegracion.",
+        );
+        setIntegracionLoading(false);
+      },
+    );
+    return () => unsub();
+  }, [view, clients]);
+
+  const formatIntegracionFecha = (s: SolicitudIntegracion) => {
+    const ts = s.createdAt;
+    if (!ts || typeof ts.toDate !== "function") return "—";
+    try {
+      return ts.toDate().toLocaleString("es-CO", { dateStyle: "short", timeStyle: "short" });
+    } catch {
+      return "—";
+    }
+  };
+
+  const solicitudesIntegracionOrdenadas = useMemo(() => {
+    return [...solicitudesIntegracionCola].sort((a, b) => {
+      const ma =
+        a.createdAt && typeof a.createdAt.toMillis === "function" ? a.createdAt.toMillis() : 0;
+      const mb =
+        b.createdAt && typeof b.createdAt.toMillis === "function" ? b.createdAt.toMillis() : 0;
+      return ma - mb;
+    });
+  }, [solicitudesIntegracionCola]);
+
+  const proximaSolicitudIntegracion = solicitudesIntegracionOrdenadas[0];
+
+  const handleIntegracionExecute = (event: MouseEvent<HTMLButtonElement>) => {
+    const s = proximaSolicitudIntegracion;
+    if (!s || integracionEjecutandoId) return;
+    setIntegracionError(null);
+    const btn = event.currentTarget;
+    btn.classList.add("zoom-out");
+    window.setTimeout(() => {
+      btn.classList.remove("zoom-out");
+      setIntegracionEjecutandoId(s.id);
+      void SolicitudIntegracionService.ejecutarSolicitudConfigurador(s.clientId, s.id)
+        .catch((err) => {
+          console.error(err);
+          setIntegracionError("No se pudo completar la solicitud. Reintentá.");
+        })
+        .finally(() => {
+          setIntegracionEjecutandoId(null);
+        });
+    }, 180);
+  };
+
   const internalWarehouses = warehouses.filter((warehouse) => warehouse.status !== "externa");
   const externalWarehouses = warehouses.filter((warehouse) => warehouse.status === "externa");
 
   const renderClientes = () => (
     <>
-      <div className="overflow-hidden rounded-xl border border-[#e5e7eb] bg-white shadow-sm">
-        <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+      <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-4 py-3">
           <div>
-            <p className="text-sm font-semibold text-[#3b3b3b]">Cuentas</p>
-            <p className="text-xs text-[#7c7c7c]">Código, nombre y acciones.</p>
+            <p className="text-sm font-semibold text-slate-900">Cuentas</p>
+            <p className="text-xs text-slate-500">Código, nombre y acciones.</p>
           </div>
           <div className="flex items-center gap-2">
-            <span className="text-sm font-semibold text-[#4b5563]">Total: {clients.length}</span>
+            <span className="text-sm font-semibold text-slate-600">Total: {clients.length}</span>
             <button
               type="button"
               onClick={fetchClients}
               disabled={clientsLoading || clientSaving}
-              className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-[#d1d5db] bg-white text-[#6b7280] transition hover:bg-[#f8fafc] disabled:opacity-60"
+              className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 transition hover:bg-slate-50 disabled:opacity-60"
             >
               <FiRefreshCw className={`h-4 w-4 ${clientsLoading ? "animate-spin" : ""}`} />
             </button>
             <button
               type="button"
               onClick={() => setShowCreateModal(true)}
-              className="inline-flex items-center gap-2 rounded-lg bg-[#24a46d] px-3 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-[#1f8f60]"
+              className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-3 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700"
             >
               <FiPlus className="h-4 w-4" />
               Agregar
@@ -224,67 +342,100 @@ export default function ConfiguratorPanel({
           </div>
         </div>
 
-        <div className="grid grid-cols-[1.6fr_2.2fr_1.7fr_1.5fr_2fr] border-y border-[#edf1f5] bg-white px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-[#7c8087]">
-          <span>Código</span>
-          <span>Nombre</span>
-          <span>Bodega asignada</span>
-          <span>Credenciales</span>
-          <span>Acciones</span>
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[920px] border-collapse text-left text-sm">
+            <thead>
+              <tr className="border-b border-slate-200 bg-slate-50">
+                <th className="whitespace-nowrap px-4 py-3 font-bold uppercase tracking-wide text-[11px] text-slate-500">
+                  Código
+                </th>
+                <th className="min-w-[10rem] px-4 py-3 font-bold uppercase tracking-wide text-[11px] text-slate-500">
+                  Nombre
+                </th>
+                <th className="min-w-[10rem] px-4 py-3 font-bold uppercase tracking-wide text-[11px] text-slate-500">
+                  Bodega asignada
+                </th>
+                <th className="whitespace-nowrap px-4 py-3 font-bold uppercase tracking-wide text-[11px] text-slate-500">
+                  Credenciales
+                </th>
+                <th className="min-w-[8rem] px-4 py-3 font-bold uppercase tracking-wide text-[11px] text-slate-500">
+                  Acciones
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {clientsLoading && !clients.length ? (
+                <>
+                  {[1, 2, 3].map((item) => (
+                    <tr key={item} className="border-b border-slate-100">
+                      <td colSpan={5} className="px-4 py-3">
+                        <div className="h-10 animate-pulse rounded-md bg-slate-100" />
+                      </td>
+                    </tr>
+                  ))}
+                </>
+              ) : clients.length ? (
+                clients.map((client) => {
+                  const hasCreds = users.some((user) => user.clientId === client.id && user.email?.trim());
+                  return (
+                    <tr
+                      key={client.id}
+                      className="border-b border-slate-100 transition-colors hover:bg-violet-50/80"
+                    >
+                      <td className="whitespace-nowrap px-4 py-3 font-mono text-[13px] font-semibold text-slate-900">
+                        {client.code}
+                      </td>
+                      <td className="max-w-[14rem] px-4 py-3 text-[13px] font-medium text-slate-800">
+                        <span className={client.disabled ? "text-slate-400" : ""}>{client.name}</span>
+                      </td>
+                      <td
+                        className="max-w-[12rem] px-4 py-3 text-[13px] text-slate-800"
+                        title={
+                          warehouseNameByAccountCode.get(ensureFiveClientCode(client.code ?? "")) ??
+                          undefined
+                        }
+                      >
+                        <span className="line-clamp-2">
+                          {warehouseNameByAccountCode.get(ensureFiveClientCode(client.code ?? "")) ??
+                            "Sin asignar"}
+                        </span>
+                      </td>
+                      <td className="whitespace-nowrap px-4 py-3">
+                        <span
+                          className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold ${
+                            hasCreds ? "bg-emerald-100 text-emerald-800" : "bg-slate-100 text-slate-500"
+                          }`}
+                        >
+                          {hasCreds ? "Sí" : "No"}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditClient(client);
+                            setEditName(client.name);
+                            setEditCode(client.code);
+                          }}
+                          className="inline-flex items-center gap-2 rounded-full bg-sky-50 px-3 py-1.5 text-xs font-semibold text-sky-800 ring-1 ring-sky-200/80 transition hover:bg-sky-100"
+                        >
+                          <FiEdit2 className="h-4 w-4" />
+                          Editar
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })
+              ) : (
+                <tr>
+                  <td colSpan={5} className="px-4 py-12 text-center text-slate-500">
+                    Aún no hay clientes creados.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
         </div>
-        {clientsLoading && !clients.length ? (
-          <div className="grid gap-0">
-            {[1, 2, 3].map((item) => (
-              <div key={item} className="h-12 animate-pulse border-t border-[#edf1f5] bg-white" />
-            ))}
-          </div>
-        ) : clients.length ? (
-          clients.map((client) => {
-            const shortId = client.id.length > 14 ? `${client.id.slice(0, 8)}...${client.id.slice(-4)}` : client.id;
-            return (
-              <div
-                key={client.id}
-                className="grid grid-cols-[1.6fr_2.2fr_1.7fr_1.5fr_2fr] items-center gap-3 border-t border-[#edf1f5] bg-white px-4 py-3 text-sm text-[#3f3f3f]"
-              >
-                <span className="font-mono text-xs text-[#6b7280]">{client.code}</span>
-                <span className={`font-semibold ${client.disabled ? "text-[#9ca3af]" : "text-[#2d2d2d]"}`}>
-                  {client.name}
-                </span>
-                <span className="text-sm text-[#4b5563]">
-                  {warehouseNameByAccountCode.get(ensureFiveClientCode(client.code ?? "")) ?? "Sin asignar"}
-                </span>
-                <span className={`text-sm font-semibold ${users.some((user) => user.clientId === client.id && user.email?.trim()) ? "text-[#15803d]" : "text-[#9ca3af]"}`}>
-                  {users.some((user) => user.clientId === client.id && user.email?.trim()) ? "Sí" : "No"}
-                </span>
-                <div className="flex flex-wrap items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setEditClient(client);
-                      setEditName(client.name);
-                      setEditCode(client.code);
-                    }}
-                    className="inline-flex items-center gap-2 rounded-full bg-[#e8f1ff] px-3 py-1.5 text-xs font-semibold text-[#2b4ea3] transition hover:bg-[#dce7ff]"
-                  >
-                    <FiEdit2 className="h-4 w-4" />
-                    Editar
-                  </button>
-                  {/* Botón de habilitar/deshabilitar temporalmente oculto */}
-                  {/* <button
-                    type="button"
-                    onClick={() => toggleClientDisabled(client.id, !client.disabled)}
-                    title={client.disabled ? "Habilitar" : "Deshabilitar"}
-                    className={`inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-semibold transition ${client.disabled ? "bg-[#e5f3e8] text-[#1d8a45] hover:bg-[#d8ecde]" : "bg-[#f8e7e7] text-[#b64545] hover:bg-[#f3dcdc]"}`}
-                  >
-                    {client.disabled ? <FiCheck className="h-4 w-4" /> : <FiTrash2 className="h-4 w-4" />}
-                    {client.disabled ? "Habilitar" : "Deshabilitar"}
-                  </button> */}
-                </div>
-              </div>
-            );
-          })
-        ) : (
-          <div className="border-t border-[#edf1f5] px-4 py-4 text-sm text-[#6b7280]">Aún no hay clientes creados.</div>
-        )}
       </div>
     </>
   );
@@ -296,19 +447,19 @@ export default function ConfiguratorPanel({
     statusKey: "interna" | "externa",
   ) => (
     <>
-      <div className="overflow-hidden rounded-xl border border-[#e5e7eb] bg-white shadow-sm">
-        <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+      <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-4 py-3">
           <div>
-            <p className="text-sm font-semibold text-[#3b3b3b]">{title}</p>
-            <p className="text-xs text-[#7c7c7c]">{subtitle}</p>
+            <p className="text-sm font-semibold text-slate-900">{title}</p>
+            <p className="text-xs text-slate-500">{subtitle}</p>
           </div>
           <div className="flex items-center gap-2">
-            <span className="text-sm font-semibold text-[#4b5563]">Total: {list.length}</span>
+            <span className="text-sm font-semibold text-slate-600">Total: {list.length}</span>
             <button
               type="button"
               onClick={fetchWarehouses}
               disabled={warehousesLoading || warehouseSaving}
-              className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-[#d1d5db] bg-white text-[#6b7280] transition hover:bg-[#f8fafc] disabled:opacity-60"
+              className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 transition hover:bg-slate-50 disabled:opacity-60"
             >
               <FiRefreshCw className={`h-4 w-4 ${warehousesLoading ? "animate-spin" : ""}`} />
             </button>
@@ -318,7 +469,7 @@ export default function ConfiguratorPanel({
                 setCreateWarehouseStatus(statusKey);
                 setShowCreateWarehouseModal(true);
               }}
-              className="inline-flex items-center gap-2 rounded-lg bg-[#24a46d] px-3 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-[#1f8f60]"
+              className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-3 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700"
             >
               <FiPlus className="h-4 w-4" />
               Agregar
@@ -326,109 +477,136 @@ export default function ConfiguratorPanel({
           </div>
         </div>
 
-        <div className="grid grid-cols-[2fr_1.5fr_1.7fr_2fr] border-y border-[#edf1f5] bg-white px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-[#7c8087]">
-          <span>Nombre</span>
-          <span>Capacidad</span>
-          <span>Bodega asignada</span>
-          <span>Acciones</span>
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[860px] border-collapse text-left text-sm">
+            <thead>
+              <tr className="border-b border-slate-200 bg-slate-50">
+                <th className="min-w-[12rem] px-4 py-3 font-bold uppercase tracking-wide text-[11px] text-slate-500">
+                  Nombre
+                </th>
+                <th className="whitespace-nowrap px-4 py-3 font-bold uppercase tracking-wide text-[11px] text-slate-500">
+                  Capacidad
+                </th>
+                <th className="min-w-[11rem] px-4 py-3 font-bold uppercase tracking-wide text-[11px] text-slate-500">
+                  Bodega asignada
+                </th>
+                <th className="min-w-[8rem] px-4 py-3 font-bold uppercase tracking-wide text-[11px] text-slate-500">
+                  Acciones
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {warehousesLoading && !list.length ? (
+                <>
+                  {[1, 2, 3].map((item) => (
+                    <tr key={item} className="border-b border-slate-100">
+                      <td colSpan={4} className="px-4 py-3">
+                        <div className="h-10 animate-pulse rounded-md bg-slate-100" />
+                      </td>
+                    </tr>
+                  ))}
+                </>
+              ) : list.length ? (
+                list.map((warehouse) => {
+                  const shortId =
+                    warehouse.id.length > 12
+                      ? `${warehouse.id.slice(0, 6)}...${warehouse.id.slice(-3)}`
+                      : warehouse.id;
+                  const capacityLabel =
+                    typeof warehouse.capacity === "number" && Number.isFinite(warehouse.capacity)
+                      ? warehouse.capacity
+                      : "—";
+                  const effectiveStatus = warehouse.status === "externa" ? "externa" : "interna";
+                  const normalizedCode = ensureFiveClientCode(warehouse.codeCuenta ?? "");
+                  const assignedLabel = normalizedCode ? clientNameByCode.get(normalizedCode) : undefined;
+                  const assignedDisplay = assignedLabel ?? (normalizedCode || "Sin asignar");
+                  return (
+                    <tr
+                      key={warehouse.id}
+                      className="border-b border-slate-100 transition-colors hover:bg-violet-50/80"
+                    >
+                      <td className="max-w-[16rem] px-4 py-3">
+                        <div className="flex flex-col gap-0.5">
+                          <span
+                            className={`text-[13px] font-semibold text-slate-900 ${warehouse.disabled ? "text-slate-400" : ""}`}
+                          >
+                            {warehouse.name || "Sin nombre"}
+                          </span>
+                          <span className="font-mono text-[11px] text-slate-500">{shortId}</span>
+                          <span className="inline-flex w-fit rounded-full border border-slate-200 bg-slate-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-700">
+                            {effectiveStatus === "externa" ? "Externa" : "Interna"}
+                          </span>
+                        </div>
+                      </td>
+                      <td className="whitespace-nowrap px-4 py-3 text-[13px] font-semibold tabular-nums text-slate-800">
+                        {capacityLabel}
+                      </td>
+                      <td className="max-w-[14rem] px-4 py-3 text-[13px] text-slate-800" title={assignedDisplay}>
+                        <div className="flex flex-col gap-0.5">
+                          <span className="line-clamp-2">{assignedDisplay}</span>
+                          <span className="font-mono text-[11px] text-slate-500">
+                            {normalizedCode || "Sin código"}
+                          </span>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditWarehouse(warehouse);
+                            setEditWarehouseName(warehouse.name ?? "");
+                            setEditWarehouseCapacity(
+                              typeof warehouse.capacity === "number" && Number.isFinite(warehouse.capacity)
+                                ? warehouse.capacity.toString()
+                                : "",
+                            );
+                            setEditWarehouseStatus(effectiveStatus);
+                          }}
+                          className="inline-flex items-center gap-2 rounded-full bg-sky-50 px-3 py-1.5 text-xs font-semibold text-sky-800 ring-1 ring-sky-200/80 transition hover:bg-sky-100"
+                        >
+                          <FiEdit2 className="h-4 w-4" />
+                          Editar
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })
+              ) : (
+                <tr>
+                  <td colSpan={4} className="px-4 py-12 text-center text-slate-500">
+                    Aún no hay bodegas.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
         </div>
-        {warehousesLoading && !list.length ? (
-          <div className="grid gap-0">
-            {[1, 2, 3].map((item) => (
-              <div key={item} className="h-12 animate-pulse border-t border-[#edf1f5] bg-white" />
-            ))}
-          </div>
-        ) : list.length ? (
-          list.map((warehouse) => {
-            const shortId = warehouse.id.length > 12 ? `${warehouse.id.slice(0, 6)}...${warehouse.id.slice(-3)}` : warehouse.id;
-            const capacityLabel =
-              typeof warehouse.capacity === "number" && Number.isFinite(warehouse.capacity)
-                ? warehouse.capacity
-                : "-";
-            const effectiveStatus = warehouse.status === "externa" ? "externa" : "interna";
-            const normalizedCode = ensureFiveClientCode(warehouse.codeCuenta ?? "");
-            const assignedLabel = normalizedCode ? clientNameByCode.get(normalizedCode) : undefined;
-            const assignedDisplay = assignedLabel ?? (normalizedCode || "Sin asignar");
-            return (
-              <div
-                key={warehouse.id}
-                className="grid grid-cols-[2fr_1.5fr_1.7fr_2fr] items-center gap-3 border-t border-[#edf1f5] bg-white px-4 py-3 text-sm text-[#3f3f3f]"
-              >
-                <div className="flex flex-col">
-                  <span className={`font-semibold ${warehouse.disabled ? "text-[#9ca3af]" : "text-[#2d2d2d]"}`}>
-                    {warehouse.name || "Sin nombre"}
-                  </span>
-                  <span className="font-mono text-[11px] text-[#6b7280]">{shortId}</span>
-                  <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#6b7280]">
-                    {effectiveStatus === "externa" ? "Externa" : "Interna"}
-                  </span>
-                </div>
-                <span className="text-sm font-semibold text-[#3f3f3f]">{capacityLabel}</span>
-                <div className="flex flex-col text-sm text-[#3f3f3f]">
-                  <span>{assignedDisplay}</span>
-                  <span className="font-mono text-[11px] text-[#6b7280]">{normalizedCode || "Sin código"}</span>
-                </div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setEditWarehouse(warehouse);
-                      setEditWarehouseName(warehouse.name ?? "");
-                      setEditWarehouseCapacity(
-                        typeof warehouse.capacity === "number" && Number.isFinite(warehouse.capacity)
-                          ? warehouse.capacity.toString()
-                          : "",
-                      );
-                      setEditWarehouseStatus(effectiveStatus);
-                    }}
-                    className="inline-flex items-center gap-2 rounded-full bg-[#e8f1ff] px-3 py-1.5 text-xs font-semibold text-[#2b4ea3] transition hover:bg-[#dce7ff]"
-                  >
-                    <FiEdit2 className="h-4 w-4" />
-                    Editar
-                  </button>
-                  {/* Botón de habilitar/deshabilitar temporalmente oculto */}
-                  {/* <button
-                    type="button"
-                    onClick={() => toggleWarehouseDisabled(warehouse.id, !warehouse.disabled)}
-                    title={warehouse.disabled ? "Habilitar" : "Deshabilitar"}
-                    className={`inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-semibold transition ${warehouse.disabled ? "bg-[#e5f3e8] text-[#1d8a45] hover:bg-[#d8ecde]" : "bg-[#f8e7e7] text-[#b64545] hover:bg-[#f3dcdc]"}`}
-                  >
-                    {warehouse.disabled ? <FiCheck className="h-4 w-4" /> : <FiTrash2 className="h-4 w-4" />}
-                    {warehouse.disabled ? "Habilitar" : "Deshabilitar"}
-                  </button> */}
-                </div>
-              </div>
-            );
-          })
-        ) : (
-          <div className="border-t border-[#edf1f5] px-4 py-4 text-sm text-[#6b7280]">Aún no hay bodegas.</div>
-        )}
       </div>
     </>
   );
 
       const renderUsuarios = () => (
         <>
-          <div className="overflow-hidden rounded-xl border border-[#e5e7eb] bg-white shadow-sm">
-            <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+          <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-4 py-3">
               <div>
-                <p className="text-sm font-semibold text-[#3b3b3b]">Usuarios</p>
-                <p className="text-xs text-[#7c7c7c]">ID, rol, nombre, cliente y acciones.</p>
+                <p className="text-sm font-semibold text-slate-900">Usuarios</p>
+                <p className="text-xs text-slate-500">ID, rol, nombre, cliente y acciones.</p>
               </div>
               <div className="flex items-center gap-2">
-                <span className="text-sm font-semibold text-[#4b5563]">Total: {users.length}</span>
+                <span className="text-sm font-semibold text-slate-600">Total: {users.length}</span>
                 <button
                   type="button"
                   onClick={fetchUsers}
                   disabled={usersLoading || userSaving}
-                  className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-[#d1d5db] bg-white text-[#6b7280] transition hover:bg-[#f8fafc] disabled:opacity-60"
+                  className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 transition hover:bg-slate-50 disabled:opacity-60"
                 >
                   <FiRefreshCw className={`h-4 w-4 ${usersLoading ? "animate-spin" : ""}`} />
                 </button>
                 <button
                   type="button"
                   onClick={() => setShowCreateUserModal(true)}
-                  className="inline-flex items-center gap-2 rounded-lg bg-[#24a46d] px-3 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-[#1f8f60]"
+                  className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-3 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700"
                 >
                   <FiPlus className="h-4 w-4" />
                   Agregar
@@ -436,163 +614,419 @@ export default function ConfiguratorPanel({
               </div>
             </div>
 
-            <div className="grid grid-cols-[1.5fr_1.4fr_1.9fr_1.7fr_1.2fr_2fr] border-y border-[#edf1f5] bg-white px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-[#7c8087]">
-              <span>Código</span>
-              <span>Rol</span>
-              <span>Nombre</span>
-              <span>Cuenta</span>
-              <span>Credenciales</span>
-              <span>Acciones</span>
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[960px] border-collapse text-left text-sm">
+                <thead>
+                  <tr className="border-b border-slate-200 bg-slate-50">
+                    <th className="whitespace-nowrap px-4 py-3 font-bold uppercase tracking-wide text-[11px] text-slate-500">
+                      Código
+                    </th>
+                    <th className="min-w-[8rem] px-4 py-3 font-bold uppercase tracking-wide text-[11px] text-slate-500">
+                      Rol
+                    </th>
+                    <th className="min-w-[10rem] px-4 py-3 font-bold uppercase tracking-wide text-[11px] text-slate-500">
+                      Nombre
+                    </th>
+                    <th className="min-w-[10rem] px-4 py-3 font-bold uppercase tracking-wide text-[11px] text-slate-500">
+                      Cuenta
+                    </th>
+                    <th className="whitespace-nowrap px-4 py-3 font-bold uppercase tracking-wide text-[11px] text-slate-500">
+                      Credenciales
+                    </th>
+                    <th className="min-w-[8rem] px-4 py-3 font-bold uppercase tracking-wide text-[11px] text-slate-500">
+                      Acciones
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {usersLoading && !users.length ? (
+                    <>
+                      {[1, 2, 3].map((item) => (
+                        <tr key={item} className="border-b border-slate-100">
+                          <td colSpan={6} className="px-4 py-3">
+                            <div className="h-10 animate-pulse rounded-md bg-slate-100" />
+                          </td>
+                        </tr>
+                      ))}
+                    </>
+                  ) : users.length ? (
+                    users.map((user, index) => {
+                      const hasCredentials = Boolean(user.email?.trim());
+                      const shortId =
+                        user.id.length > 12 ? `${user.id.slice(0, 6)}...${user.id.slice(-3)}` : user.id;
+                      const code = ensureFiveClientCode(user.code ?? shortId);
+                      return (
+                        <tr
+                          key={`${user.id}-${index}`}
+                          className="border-b border-slate-100 transition-colors hover:bg-violet-50/80"
+                        >
+                          <td className="whitespace-nowrap px-4 py-3 font-mono text-[13px] font-semibold text-slate-900">
+                            {code}
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className="inline-flex max-w-full truncate rounded-full border border-slate-200 bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-800">
+                              {roleLabels[user.role] ?? user.role}
+                            </span>
+                          </td>
+                          <td className="max-w-[14rem] px-4 py-3 text-[13px] font-medium text-slate-800">
+                            <span className={user.disabled ? "text-slate-400" : ""}>{user.name}</span>
+                          </td>
+                          <td
+                            className="max-w-[12rem] px-4 py-3 text-[13px] text-slate-800"
+                            title={
+                              user.clientId
+                                ? (clientNameById.get(user.clientId) ?? user.clientId)
+                                : undefined
+                            }
+                          >
+                            <span className="line-clamp-2">
+                              {user.clientId ? clientNameById.get(user.clientId) ?? user.clientId : "—"}
+                            </span>
+                          </td>
+                          <td className="whitespace-nowrap px-4 py-3">
+                            <span
+                              className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold ${
+                                hasCredentials
+                                  ? "bg-emerald-100 text-emerald-800"
+                                  : "bg-slate-100 text-slate-500"
+                              }`}
+                            >
+                              {hasCredentials ? "Sí" : "No"}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setEditUser(user);
+                                  setEditUserName(user.name);
+                                  setEditUserRole(user.role);
+                                  setEditUserClientId(user.clientId ?? "");
+                                }}
+                                className="inline-flex items-center gap-2 rounded-full bg-sky-50 px-3 py-1.5 text-xs font-semibold text-sky-800 ring-1 ring-sky-200/80 transition hover:bg-sky-100"
+                              >
+                                <FiEdit2 className="h-4 w-4" />
+                                Editar
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  ) : (
+                    <tr>
+                      <td colSpan={6} className="px-4 py-12 text-center text-slate-500">
+                        Aún no hay usuarios.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
             </div>
-            {usersLoading && !users.length ? (
-              <div className="grid gap-0">
-                {[1, 2, 3].map((item) => (
-                  <div key={item} className="h-12 animate-pulse border-t border-[#edf1f5] bg-white" />
-                ))}
-              </div>
-            ) : users.length ? (
-              users.map((user) => {
-                const hasCredentials = Boolean(user.email?.trim());
-                const shortId = user.id.length > 12 ? `${user.id.slice(0, 6)}...${user.id.slice(-3)}` : user.id;
-                const code = ensureFiveClientCode(user.code ?? shortId);
-                return (
-                  <div
-                    key={user.id}
-                    className="grid grid-cols-[1.5fr_1.4fr_1.9fr_1.7fr_1.2fr_2fr] items-center gap-3 border-t border-[#edf1f5] bg-white px-4 py-3 text-sm text-[#3f3f3f]"
-                  >
-                    <span className="font-mono text-xs text-[#6b7280]">{code}</span>
-                    <span className="text-sm font-semibold text-[#3f3f3f]">{roleLabels[user.role] ?? user.role}</span>
-                    <span className={`font-semibold ${user.disabled ? "text-[#9ca3af]" : "text-[#2d2d2d]"}`}>
-                      {user.name}
-                    </span>
-                    <span className="text-sm text-[#4b5563]">
-                      {user.clientId ? clientNameById.get(user.clientId) ?? user.clientId : "-"}
-                    </span>
-                    <span className={`text-sm font-semibold ${hasCredentials ? "text-[#15803d]" : "text-[#9ca3af]"}`}>
-                      {hasCredentials ? "Sí" : "No"}
-                    </span>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setEditUser(user);
-                          setEditUserName(user.name);
-                          setEditUserRole(user.role);
-                          setEditUserClientId(user.clientId ?? "");
-                        }}
-                        className="inline-flex items-center gap-2 rounded-full bg-[#e8f1ff] px-3 py-1.5 text-xs font-semibold text-[#2b4ea3] transition hover:bg-[#dce7ff]"
-                      >
-                        <FiEdit2 className="h-4 w-4" />
-                        Editar
-                      </button>
-                      {/* Botón de habilitar/deshabilitar temporalmente oculto */}
-                      {/* <button
-                        type="button"
-                        onClick={() => toggleUserDisabled(user.id, !user.disabled)}
-                        title={user.disabled ? "Habilitar" : "Deshabilitar"}
-                        className={`inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-semibold transition ${user.disabled ? "bg-[#e5f3e8] text-[#1d8a45] hover:bg-[#d8ecde]" : "bg-[#f8e7e7] text-[#b64545] hover:bg-[#f3dcdc]"}`}
-                      >
-                        {user.disabled ? <FiCheck className="h-4 w-4" /> : <FiTrash2 className="h-4 w-4" />}
-                        {user.disabled ? "Habilitar" : "Deshabilitar"}
-                      </button> */}
-                    </div>
-                  </div>
-                );
-              })
-            ) : (
-              <div className="border-t border-[#edf1f5] px-4 py-4 text-sm text-[#6b7280]">Aún no hay usuarios.</div>
-            )}
           </div>
         </>
       );
 
-  return (
-    <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-      <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-        <div className="flex-1 space-y-2">
-          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Configuración</p>
-          <h2 className="text-lg font-semibold text-slate-900">Panel de configurador</h2>
-          <p className="text-sm text-slate-600">Selecciona una herramienta para comenzar.</p>
-        </div>
-        {view !== "landing" ? (
-          <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={() => setView("landing")}
-              className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
-            >
-              Volver al menú
-            </button>
-          </div>
-        ) : null}
-      </div>
+  const configLandingLabel = "text-[#1A2B48]";
+  const configLandingTile =
+    "group flex min-h-[200px] flex-col items-center justify-center gap-5 rounded-[24px] px-6 py-8 text-center outline-none transition-all duration-300 hover:-translate-y-1 active:scale-[0.98] focus-visible:ring-2 focus-visible:ring-[#1A2B48]/25 focus-visible:ring-offset-2 sm:min-h-0 sm:aspect-square sm:p-8";
+  const configLandingIconWrap =
+    "flex h-[4.75rem] w-[4.75rem] shrink-0 items-center justify-center rounded-2xl bg-white/80 shadow-[0_2px_14px_rgba(26,43,72,0.08)] ring-1 ring-[#1A2B48]/[0.06] backdrop-blur-[2px] transition-transform duration-300 group-hover:scale-[1.04]";
 
-      {view === "landing" ? (
-        <div className="mt-6 space-y-3">
-          {[
-            {
-              key: "clientes" as const,
-              label: "Cuentas",
-              helper: "Clientes",
-              icon: <FiUsers className="h-6 w-6" />,
-              bg: "#a9d7b4",
-              iconBg: "#d9efdf",
-              arrowBg: "#cde7d4",
-            },
-            {
-              key: "usuarios" as const,
-              label: "Usuarios",
-              helper: "Usuarios",
-              icon: <FiUserCheck className="h-6 w-6" />,
-              bg: "#b8ceff",
-              iconBg: "#dfe9ff",
-              arrowBg: "#d1ddff",
-            },
-            {
-              key: "bodegaInterna" as const,
-              label: "Bodegas internas",
-              helper: "Gestiona bodegas internas",
-              icon: <FiHome className="h-6 w-6" />,
-              bg: "#ffeaaa",
-              iconBg: "#fff4cc",
-              arrowBg: "#fff0b8",
-            },
-            {
-              key: "bodegaExterna" as const,
-              label: "Bodegas externas",
-              helper: "Gestiona bodegas externas",
-              icon: <FiHome className="h-6 w-6" />,
-              bg: "#d6d5ff",
-              iconBg: "#ecebff",
-              arrowBg: "#e1e0ff",
-            },
-          ].map((item) => (
+  const isMainOrHubPadding =
+    view === "main" || view === "creacion" || view === "asignacion" || view === "tareasPendiente";
+  const isLeafView =
+    view === "clientes" || view === "usuarios" || view === "bodegaInterna" || view === "bodegaExterna";
+
+  const handleConfiguratorBack = () => {
+    if (view === "clientes" || view === "bodegaInterna" || view === "bodegaExterna") {
+      setView("creacion");
+      return;
+    }
+    if (view === "usuarios") {
+      setView("asignacion");
+      return;
+    }
+    setView("main");
+  };
+
+  return (
+    <section
+      className={
+        isMainOrHubPadding
+          ? "p-4 sm:p-8"
+          : "rounded-3xl border border-slate-200 bg-white p-6 shadow-sm"
+      }
+    >
+      {view !== "main" ? (
+        <div className="mb-6 space-y-3">
+          <button
+            type="button"
+            onClick={handleConfiguratorBack}
+            className="inline-flex items-center gap-2 text-sm font-semibold text-slate-600 transition hover:text-slate-900"
+          >
+            <FiArrowLeft className="h-4 w-4" aria-hidden />
+            Volver
+          </button>
+          {isLeafView ? (
+            <>
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Configuración</p>
+              <h2 className="text-lg font-semibold text-slate-900">Panel de configurador</h2>
+              <p className="text-sm text-slate-600">
+                Usá el botón Menú del encabezado para volver al inicio del configurador.
+              </p>
+            </>
+          ) : view === "creacion" ? (
+            <h2 className="text-lg font-semibold text-slate-900">Creación</h2>
+          ) : view === "asignacion" ? (
+            <h2 className="text-lg font-semibold text-slate-900">Creación y asignación</h2>
+          ) : view === "tareasPendiente" ? (
+            <h2 className="text-lg font-semibold text-slate-900">Integración</h2>
+          ) : null}
+        </div>
+      ) : null}
+
+      {view === "main" ? (
+        <div className="mx-auto grid max-w-6xl grid-cols-1 gap-4 sm:grid-cols-3 sm:gap-5">
+          {(
+            [
+              {
+                key: "creacion" as const,
+                label: "Creación",
+                bg: "#C2E3CD",
+                shadowClass:
+                  "shadow-[0_14px_40px_-10px_rgba(0,109,62,0.28)] hover:shadow-[0_20px_48px_-12px_rgba(0,109,62,0.32)]",
+                icon: <FiLayers size={38} className="text-[#006D3E]" aria-hidden />,
+              },
+              {
+                key: "asignacion" as const,
+                label: "Creación y asignación",
+                bg: "#FEF6CD",
+                shadowClass:
+                  "shadow-[0_14px_40px_-10px_rgba(133,91,17,0.28)] hover:shadow-[0_20px_48px_-12px_rgba(133,91,17,0.3)]",
+                icon: <FiUserCheck size={38} className="text-[#855B11]" aria-hidden />,
+              },
+              {
+                key: "tareasPendiente" as const,
+                label: "Integración",
+                bg: "#E2E8F0",
+                shadowClass:
+                  "shadow-[0_14px_40px_-10px_rgba(51,65,85,0.22)] hover:shadow-[0_20px_48px_-12px_rgba(51,65,85,0.28)]",
+                icon: <FiClipboard size={38} className="text-[#334155]" aria-hidden />,
+              },
+            ] as const
+          ).map((item) => (
             <button
               key={item.key}
               type="button"
               onClick={() => setView(item.key)}
               style={{ backgroundColor: item.bg }}
-              className="flex w-full items-center justify-between rounded-2xl px-5 py-4 text-left shadow-sm transition hover:-translate-y-0.5 focus:outline-none focus:ring-2 focus:ring-emerald-500/60"
+              className={`${configLandingTile} transition-shadow duration-300 ${item.shadowClass}`}
             >
-              <div className="flex items-center gap-4">
-                <span
-                  style={{ backgroundColor: item.iconBg }}
-                  className="flex h-12 w-12 items-center justify-center rounded-2xl text-slate-800"
-                >
-                  {item.icon}
-                </span>
-                <div>
-                  <p className="text-lg font-semibold text-slate-900">{item.label}</p>
-                </div>
-              </div>
+              <span className={configLandingIconWrap}>{item.icon}</span>
               <span
-                style={{ backgroundColor: item.arrowBg }}
-                className="flex h-10 w-10 items-center justify-center rounded-full text-slate-800"
+                className={`max-w-[13rem] text-lg font-bold leading-snug tracking-tight sm:text-xl ${configLandingLabel}`}
               >
-                <FiArrowRight className="h-4 w-4" />
+                {item.label}
               </span>
             </button>
           ))}
+        </div>
+      ) : null}
+
+      {view === "creacion" ? (
+        <div className="mx-auto grid max-w-6xl grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-5 lg:grid-cols-3">
+          {(
+            [
+              {
+                key: "clientes" as const,
+                label: "Cuentas",
+                bg: "#C2E3CD",
+                shadowClass:
+                  "shadow-[0_14px_40px_-10px_rgba(0,109,62,0.28)] hover:shadow-[0_20px_48px_-12px_rgba(0,109,62,0.32)]",
+                icon: <FiUsers size={38} className="text-[#006D3E]" aria-hidden />,
+              },
+              {
+                key: "bodegaInterna" as const,
+                label: "Bodega interna",
+                bg: "#D2E0FB",
+                shadowClass:
+                  "shadow-[0_14px_40px_-10px_rgba(0,71,171,0.26)] hover:shadow-[0_20px_48px_-12px_rgba(0,71,171,0.3)]",
+                icon: <FiHome size={38} className="text-[#0047AB]" aria-hidden />,
+              },
+              {
+                key: "bodegaExterna" as const,
+                label: "Bodega externa",
+                bg: "#E3D2F1",
+                shadowClass:
+                  "shadow-[0_14px_40px_-10px_rgba(106,13,173,0.26)] hover:shadow-[0_20px_48px_-12px_rgba(106,13,173,0.3)]",
+                icon: <FiExternalLink size={38} className="text-[#6A0DAD]" aria-hidden />,
+              },
+            ] as const
+          ).map((item) => (
+            <button
+              key={item.key}
+              type="button"
+              onClick={() => setView(item.key)}
+              style={{ backgroundColor: item.bg }}
+              className={`${configLandingTile} transition-shadow duration-300 ${item.shadowClass}`}
+            >
+              <span className={configLandingIconWrap}>{item.icon}</span>
+              <span
+                className={`max-w-[13rem] text-lg font-bold leading-snug tracking-tight sm:text-xl ${configLandingLabel}`}
+              >
+                {item.label}
+              </span>
+            </button>
+          ))}
+        </div>
+      ) : null}
+
+      {view === "asignacion" ? (
+        <div className="mx-auto grid max-w-6xl grid-cols-1 gap-4 sm:max-w-md">
+          <button
+            type="button"
+            onClick={() => setView("usuarios")}
+            style={{ backgroundColor: "#FEF6CD" }}
+            className={`${configLandingTile} transition-shadow duration-300 shadow-[0_14px_40px_-10px_rgba(133,91,17,0.28)] hover:shadow-[0_20px_48px_-12px_rgba(133,91,17,0.3)]`}
+          >
+            <span className={configLandingIconWrap}>
+              <FiUserCheck size={38} className="text-[#855B11]" aria-hidden />
+            </span>
+            <span
+              className={`max-w-[13rem] text-lg font-bold leading-snug tracking-tight sm:text-xl ${configLandingLabel}`}
+            >
+              Usuarios
+            </span>
+          </button>
+        </div>
+      ) : null}
+
+      {view === "tareasPendiente" ? (
+        <div className="mx-auto w-full max-w-5xl">
+          <p className="mb-4 text-center text-xs text-slate-500 sm:text-left">
+            Las <strong>solicitudes de integración</strong> que envía el operador desde Reportes → Bodega externa →
+            Integración aparecen aquí mientras están <strong>Activas</strong>. Al tocá la tarjeta y ejecutar la tarea, el
+            estado pasa a <strong>Finalizado</strong> en Firestore y la tabla del operador se actualiza sola.
+          </p>
+          {integracionError ? (
+            <p className="rounded-2xl border border-red-100 bg-red-50 px-4 py-6 text-center text-sm text-red-600">
+              {integracionError}
+            </p>
+          ) : integracionLoading ? (
+            <p className="rounded-2xl border border-slate-200 bg-white px-4 py-12 text-center text-sm text-slate-500 shadow-sm">
+              Cargando solicitudes…
+            </p>
+          ) : (
+            <button
+              type="button"
+              disabled={!proximaSolicitudIntegracion || !!integracionEjecutandoId}
+              onClick={handleIntegracionExecute}
+              className="rounded-2xl bg-white p-6 sm:p-8 shadow-sm w-full border border-emerald-200 transition-transform duration-150 hover:shadow-lg focus:shadow-lg active:shadow-lg hover:scale-[0.98] active:scale-[0.95] text-left disabled:hover:scale-100 disabled:active:scale-100 disabled:hover:shadow-sm disabled:cursor-not-allowed disabled:opacity-95"
+              style={{ outline: "none" }}
+            >
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6 pointer-events-none">
+                <span className="px-6 py-2 rounded-xl bg-emerald-600 text-white font-semibold text-lg flex items-center gap-2 w-full sm:w-auto justify-center sm:justify-start">
+                  <FiBox className="w-5 h-5" aria-hidden />
+                  Integración
+                </span>
+                <div className="flex flex-wrap items-center gap-2 sm:gap-3 w-full sm:w-auto justify-start sm:justify-end">
+                  <span className="px-4 py-1 rounded-xl border border-yellow-300 bg-yellow-50 text-yellow-700 font-semibold text-base flex items-center gap-2 w-full sm:w-auto justify-center sm:justify-start">
+                    <FiAlertCircle className="w-5 h-5" aria-hidden />
+                    {integracionEjecutandoId ? "Guardando…" : "Pendiente"}
+                  </span>
+                  <span className="px-3 py-1 rounded-full bg-emerald-100 text-emerald-700 font-bold text-base border border-emerald-200 w-full sm:w-auto text-center">
+                    {solicitudesIntegracionOrdenadas.length} solicitudes
+                  </span>
+                </div>
+              </div>
+              {!proximaSolicitudIntegracion ? (
+                <div className="flex min-h-88 items-center justify-center rounded-3xl border border-slate-200 bg-slate-50 px-6 py-10 text-center pointer-events-none">
+                  <p className="text-2xl font-semibold text-slate-700">No hay solicitudes pendientes.</p>
+                </div>
+              ) : (
+                <div className="rounded-2xl p-4 sm:p-8 pointer-events-none">
+                  <div className="flex flex-col items-center">
+                    <span className="text-slate-500 font-semibold text-lg mb-4">
+                      Solicitud de integración · tocá para ejecutar y cerrar (queda Finalizado en la cuenta)
+                    </span>
+                    <div className="flex flex-col sm:flex-row items-center justify-center gap-4 sm:gap-6 w-full">
+                      <div className="flex flex-col items-center rounded-2xl px-6 sm:px-8 py-5 sm:py-6 w-full sm:w-64 max-w-md border bg-blue-50 border-blue-200">
+                        <FiMapPin className="w-8 h-8 mb-2 text-blue-500" aria-hidden />
+                        <span className="text-xs mb-1 text-blue-500">CUENTA</span>
+                        <span className="text-2xl font-bold text-blue-700 text-center leading-tight break-words max-w-full">
+                          {proximaSolicitudIntegracion.clientName?.trim() ||
+                            proximaSolicitudIntegracion.clientId ||
+                            "—"}
+                        </span>
+                      </div>
+                      <FiArrowRight className="w-8 h-8 sm:w-10 sm:h-10 text-slate-300 shrink-0" aria-hidden />
+                      <div className="flex flex-col items-center rounded-2xl px-6 sm:px-8 py-5 sm:py-6 w-full sm:w-64 max-w-md border bg-yellow-50 border-yellow-200">
+                        <FiClipboard className="w-8 h-8 mb-2 text-yellow-600" aria-hidden />
+                        <span className="text-xs mb-1 text-yellow-600">BODEGA EXTERNA</span>
+                        <span className="text-xl font-bold text-yellow-800 text-center leading-snug break-words max-w-full">
+                          {proximaSolicitudIntegracion.bodegaExternaNombre?.trim() || "—"}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="mt-6 w-full max-w-2xl rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-left text-sm text-slate-700">
+                      <span className="font-semibold text-slate-600">Tipo: </span>
+                      {etiquetasTipoIntegracionRow(proximaSolicitudIntegracion)}
+                    </div>
+                    <hr className="my-8 border-slate-200 w-full" />
+                    <div className="flex flex-wrap justify-center gap-4 sm:gap-8 w-full mb-2">
+                      <div className="flex items-center gap-1 sm:gap-2 text-center sm:text-left">
+                        <FiUser className="w-5 h-5 text-slate-400 shrink-0" aria-hidden />
+                        <span className="text-xs text-slate-500">Solicitado por</span>
+                        <span className="font-semibold text-slate-700">
+                          {proximaSolicitudIntegracion.creadoPorNombre || "—"}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-1 sm:gap-2 text-center sm:text-left">
+                        <FiCalendar className="w-5 h-5 text-slate-400 shrink-0" aria-hidden />
+                        <span className="text-xs text-slate-500">Fecha y hora</span>
+                        <span className="font-semibold text-slate-700">
+                          {formatIntegracionFecha(proximaSolicitudIntegracion)}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-1 sm:gap-2 text-center sm:text-left max-w-full">
+                        <FiPackage className="w-5 h-5 text-slate-400 shrink-0" aria-hidden />
+                        <span className="text-xs text-slate-500">ID de solicitud</span>
+                        <span className="font-semibold text-slate-700 break-all text-left">
+                          {proximaSolicitudIntegracion.id}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </button>
+          )}
+          <div className="mt-8 flex flex-col sm:flex-row gap-4 w-full">
+            <button
+              type="button"
+              disabled
+              aria-disabled="true"
+              className="flex-1 flex items-center justify-center gap-2 rounded-2xl font-bold text-lg py-4 shadow transition-all border-2 border-slate-200 bg-slate-100 text-slate-400 cursor-not-allowed opacity-80 focus:outline-none focus:ring-2 focus:ring-slate-300"
+              style={{ minWidth: 0 }}
+              title="No disponible en integración"
+            >
+              <FiAlertCircle className="w-6 h-6 shrink-0" aria-hidden />
+              Alertas
+            </button>
+            <button
+              type="button"
+              disabled
+              aria-disabled="true"
+              className="flex-1 flex items-center justify-center gap-2 rounded-2xl bg-yellow-100 text-yellow-600 font-bold text-lg py-4 shadow transition-all border-2 border-yellow-200 cursor-not-allowed opacity-70 focus:outline-none focus:ring-2 focus:ring-yellow-200"
+              style={{ minWidth: 0 }}
+              title="No disponible en integración"
+            >
+              <FiPhoneCall className="w-6 h-6 shrink-0" aria-hidden />
+              Llamar
+            </button>
+          </div>
         </div>
       ) : null}
 
@@ -774,7 +1208,17 @@ export default function ConfiguratorPanel({
                   className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none"
                   disabled={userSaving || usersLoading}
                 >
-                  {["custodio", "administrador", "operario", "jefe", "cliente", "configurador"].map((role) => (
+                  {[
+                    "custodio",
+                    "administrador",
+                    "operario",
+                    "procesador",
+                    "jefe",
+                    "cliente",
+                    "configurador",
+                    "operadorCuentas",
+                    "transporte",
+                  ].map((role) => (
                     <option key={role} value={role}>{roleLabels[role as Role] ?? role}</option>
                   ))}
                 </select>
@@ -1191,7 +1635,17 @@ export default function ConfiguratorPanel({
                   className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none"
                   disabled={editUserSaving || usersLoading}
                 >
-                  {["custodio", "administrador", "operario", "jefe", "cliente", "configurador"].map((role) => (
+                  {[
+                    "custodio",
+                    "administrador",
+                    "operario",
+                    "procesador",
+                    "jefe",
+                    "cliente",
+                    "configurador",
+                    "operadorCuentas",
+                    "transporte",
+                  ].map((role) => (
                     <option key={role} value={role}>{roleLabels[role as Role] ?? role}</option>
                   ))}
                 </select>

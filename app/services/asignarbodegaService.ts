@@ -3,15 +3,13 @@ import {
   collection, 
   getDocs, 
   doc, 
-  getDoc,
   updateDoc, 
-  query,     // <--- Añade esto
-  where      // <--- Añade esto
+  query,
+  where
 } from "firebase/firestore";
 import { WarehouseMeta } from "@/app/interfaces/bodega";
 
 const WAREHOUSES_COL = "warehouses";
-const CLIENTS_COL = "clientes";
 
 export const AsignarBodegaService = {
   

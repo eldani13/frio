@@ -1,4 +1,5 @@
 import type { SlotCardProps } from "../../interfaces/bodega/SlotCard";
+import { occupiedSlotVisualClasses } from "@/app/lib/bodegaDisplay";
 import { FiBox } from "react-icons/fi";
 
 export default function SlotCard({
@@ -7,15 +8,16 @@ export default function SlotCard({
   onSelect,
 }: SlotCardProps) {
   const isOccupied = slot.autoId && slot.autoId.trim() !== "";
+  const tone = isOccupied ? occupiedSlotVisualClasses(slot) : null;
 
   return (
     <button
       type="button"
       onClick={() => isOccupied && onSelect(slot.position)}
-      className={`relative flex flex-col items-center justify-center rounded-3xl border border-slate-300 p-2 sm:p-4 transition ${
-        isOccupied
-          ? "bg-cyan-100 text-slate-900 cursor-pointer hover:ring-2 hover:ring-cyan-400"
-          : "bg-slate-50 text-slate-400 cursor-default"
+      className={`relative flex flex-col items-center justify-center rounded-3xl border p-2 sm:p-4 transition ${
+        isOccupied && tone
+          ? tone.card
+          : "bg-slate-50 text-slate-400 border-slate-300 cursor-default"
       } ${isSelected ? "ring-2 ring-emerald-300" : ""}`}
       style={{ minHeight: 90, maxWidth: 140, width: "100%" }}
     >
@@ -23,10 +25,10 @@ export default function SlotCard({
         {slot.position}
       </span>
 
-      {isOccupied ? (
+      {isOccupied && tone ? (
         <>
           <div className="mb-1">
-            <FiBox className="w-4 h-4 sm:w-6 sm:h-6 text-cyan-400" />
+            <FiBox className={`w-4 h-4 sm:w-6 sm:h-6 ${tone.icon}`} />
           </div>
           <div className="font-semibold text-[clamp(0.65rem,1vw,0.85rem)] text-center truncate w-full">
             {slot.name || "Sin nombre"}
@@ -37,7 +39,9 @@ export default function SlotCard({
           {/* <div className="text-[clamp(0.68rem,1.4vw,0.8rem)] text-center truncate w-full text-slate-600">
             Cliente: {slot.client || "—"}
           </div> */}
-          <div className="mt-2 text-[clamp(0.7rem,1.5vw,0.85rem)] font-medium bg-cyan-200 rounded-full px-1.5 sm:px-3 py-0.5 inline-block">
+          <div
+            className={`mt-2 text-[clamp(0.7rem,1.5vw,0.85rem)] font-medium rounded-full px-1.5 sm:px-3 py-0.5 inline-block ${tone.pill}`}
+          >
             {typeof slot.temperature === "number"
               ? `${slot.temperature} °C`
               : "Sin temperatura"}

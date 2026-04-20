@@ -3,10 +3,13 @@ import React, { useState } from "react";
 import Operacion from "./operacion";
 import ListadoCargue from "./listadocargue";
 
-type Props = { warehouseName?: string };
+type Props = {
+  warehouseId?: string;
+  warehouseName?: string;
+  onTotalChange?: (totalKg: number) => void;
+};
 
-export default function BodegasInternasPage({ warehouseName }: Props) {
-  // Estado inicial "CA": Listado por defecto
+export default function BodegasInternasPage({ warehouseId, warehouseName, onTotalChange }: Props) {
   const [view, setView] = useState<"OP" | "CA">("CA");
 
   return (
@@ -44,7 +47,11 @@ export default function BodegasInternasPage({ warehouseName }: Props) {
 
       {/* Renderizado condicional: Mostramos ListadoCargue si view es "CA" */}
       <div className="mt-4">
-        {view === "CA" ? <ListadoCargue /> : <Operacion />}
+        {view === "CA" ? (
+          <ListadoCargue warehouseId={warehouseId} onTotalChange={onTotalChange} />
+        ) : (
+          <Operacion warehouseId={warehouseId} onTotalChange={onTotalChange} />
+        )}
       </div>
     </div>
   );

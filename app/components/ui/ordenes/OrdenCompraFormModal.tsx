@@ -3,9 +3,9 @@
 import React, { useEffect, useState } from "react";
 import { HiOutlinePlus, HiOutlineTrash, HiOutlineXMark } from "react-icons/hi2";
 import type { Catalogo } from "@/app/types/catalogo";
-import type { Provider } from "@/app/types/provider";
-import type { OrdenCompraLineItem } from "@/app/types/ordenCompra";
+import { ORDEN_COMPRA_ESTADOS, type OrdenCompraLineItem } from "@/app/types/ordenCompra";
 import { OrdenCompraService } from "@/app/services/ordenCompraService";
+import { formatKgEs, parseDecimalEs } from "@/app/lib/decimalEs";
 
 type DraftLine = OrdenCompraLineItem;
 
@@ -15,7 +15,6 @@ interface Props {
   idCliente: string;
   codeCuenta: string;
   productos: Catalogo[];
-  proveedores: Provider[];
   onSuccess: () => void;
 }
 
@@ -25,26 +24,23 @@ export function OrdenCompraFormModal({
   idCliente,
   codeCuenta,
   productos,
-  proveedores,
   onSuccess,
 }: Props) {
-  const [proveedorId, setProveedorId] = useState("");
   const [fecha, setFecha] = useState("");
-  const [estado, setEstado] = useState("En curso");
+  const [estado, setEstado] = useState<string>("Iniciado");
   const [lines, setLines] = useState<DraftLine[]>([]);
   const [pickProductId, setPickProductId] = useState("");
-  const [pickCantidad, setPickCantidad] = useState("1");
+  const [pickPesoKg, setPickPesoKg] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!isOpen) return;
-    setProveedorId("");
     setFecha(new Date().toISOString().slice(0, 10));
-    setEstado("En curso");
+    setEstado("Iniciado");
     setLines([]);
     setPickProductId("");
-    setPickCantidad("1");
+    setPickPesoKg("");
     setError(null);
   }, [isOpen]);
 
@@ -57,14 +53,15 @@ export function OrdenCompraFormModal({
       setError("Seleccioná un producto del catálogo.");
       return;
     }
-    const q = Math.max(1, Math.floor(Number(pickCantidad) || 0));
-    if (q < 1) {
-      setError("La cantidad debe ser al menos 1.");
+    const pesoNum = parseDecimalEs(pickPesoKg);
+    if (pesoNum == null || pesoNum <= 0) {
+      setError("Ingresá un peso en kg mayor a 0 (podés usar coma: 15,6).");
       return;
     }
     const line: DraftLine = {
       catalogoProductId: p.id,
-      cantidad: q,
+      cantidad: 0,
+      pesoKg: pesoNum,
       titleSnapshot: p.title || "Sin título",
       ...(p.sku != null && String(p.sku).trim() !== "" ? { skuSnapshot: String(p.sku) } : {}),
       ...(p.code != null && String(p.code).trim() !== ""
@@ -73,7 +70,7 @@ export function OrdenCompraFormModal({
     };
     setLines((prev) => [...prev, line]);
     setPickProductId("");
-    setPickCantidad("1");
+    setPickPesoKg("");
   };
 
   const removeLine = (index: number) => {
@@ -83,25 +80,14 @@ export function OrdenCompraFormModal({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
-    if (!proveedorId) {
-      setError("Seleccioná un proveedor.");
-      return;
-    }
     if (lines.length === 0) {
       setError("Agregá al menos una línea con productos del catálogo.");
-      return;
-    }
-    const prov = proveedores.find((x) => x.id === proveedorId);
-    if (!prov?.id) {
-      setError("Proveedor inválido.");
       return;
     }
 
     setSaving(true);
     try {
       await OrdenCompraService.create(idCliente, codeCuenta, {
-        proveedorId: prov.id,
-        proveedorNombre: prov.name,
         fecha,
         estado,
         lineItems: lines,
@@ -144,7 +130,9 @@ export function OrdenCompraFormModal({
 
         <p className="mb-4 text-xs text-[#6B7280]">
           Cada línea debe ser un producto de tu <strong>catálogo</strong> (mismo SKU y datos que en
-          Catálogo).
+          Catálogo). Indicá el <strong>peso en kg</strong> por línea (coma o punto:{" "}
+          <span className="whitespace-nowrap">15,6</span>). El proveedor es el definido para integración
+          (ID en código + datos en Proveedores: nombre, código y teléfono).
         </p>
 
         {error ? (
@@ -152,29 +140,6 @@ export function OrdenCompraFormModal({
         ) : null}
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label
-              htmlFor="oc-proveedor-id"
-              className="mb-1 block text-[11px] font-bold uppercase text-gray-500"
-            >
-              Proveedor
-            </label>
-            <select
-              id="oc-proveedor-id"
-              value={proveedorId}
-              onChange={(e) => setProveedorId(e.target.value)}
-              required
-              className="w-full rounded-[8px] border border-gray-200 px-4 py-2 text-sm focus:border-[#A8D5BA] focus:outline-none"
-            >
-              <option value="">Seleccionar proveedor…</option>
-              {proveedores.map((pr) => (
-                <option key={pr.id} value={pr.id}>
-                  {pr.name}
-                </option>
-              ))}
-            </select>
-          </div>
-
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label
@@ -205,16 +170,19 @@ export function OrdenCompraFormModal({
                 onChange={(e) => setEstado(e.target.value)}
                 className="w-full rounded-[8px] border border-gray-200 px-4 py-2 text-sm focus:border-[#A8D5BA] focus:outline-none"
               >
-                <option value="En curso">En curso</option>
-                <option value="Terminado">Terminado</option>
+                {ORDEN_COMPRA_ESTADOS.map((opt) => (
+                  <option key={opt} value={opt}>
+                    {opt}
+                  </option>
+                ))}
               </select>
             </div>
           </div>
 
           <div className="rounded-lg border border-dashed border-[#A8D5BA]/60 bg-[#f8faf8] p-3">
             <p className="mb-2 text-[11px] font-bold uppercase text-gray-500">Productos del catálogo</p>
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
-              <div className="min-w-0 flex-1">
+            <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-end">
+              <div className="min-w-0 flex-1 sm:min-w-[200px]">
                 <label className="sr-only" htmlFor="oc-catalogo">
                   Producto
                 </label>
@@ -233,17 +201,20 @@ export function OrdenCompraFormModal({
                   ))}
                 </select>
               </div>
-              <div className="w-full sm:w-24">
-                <label className="sr-only" htmlFor="oc-cantidad-line">
-                  Cantidad
+              <div className="w-full sm:w-32">
+                <label
+                  className="mb-0.5 block text-[10px] font-bold uppercase text-gray-500 sm:sr-only"
+                  htmlFor="oc-peso-kg-line"
+                >
+                  Peso (kg)
                 </label>
                 <input
-                  id="oc-cantidad-line"
-                  type="number"
-                  min={1}
-                  step={1}
-                  value={pickCantidad}
-                  onChange={(e) => setPickCantidad(e.target.value)}
+                  id="oc-peso-kg-line"
+                  type="text"
+                  inputMode="decimal"
+                  value={pickPesoKg}
+                  onChange={(e) => setPickPesoKg(e.target.value)}
+                  placeholder="Ej. 15,6"
                   className="w-full rounded-[8px] border border-gray-200 bg-white px-3 py-2 text-sm focus:border-[#A8D5BA] focus:outline-none"
                 />
               </div>
@@ -270,7 +241,11 @@ export function OrdenCompraFormModal({
                       <p className="truncate font-medium text-gray-900">{ln.titleSnapshot}</p>
                       <p className="text-xs text-gray-500">
                         {ln.skuSnapshot ? `SKU ${ln.skuSnapshot} · ` : null}
-                        Cant. {ln.cantidad}
+                        {ln.pesoKg != null && ln.pesoKg > 0
+                          ? `${formatKgEs(ln.pesoKg)} kg`
+                          : ln.cantidad > 0
+                            ? `${ln.cantidad} u.`
+                            : "—"}
                       </p>
                     </div>
                     <button

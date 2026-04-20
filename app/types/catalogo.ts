@@ -22,7 +22,7 @@ export interface Catalogo {
     optionValue1?: string;
     linkedOption1?: string;
     
-    // Precios y Costos
+    /** @deprecated Precio de venta: no se edita en catálogo (menú). Persistencia legacy. */
     price?: number;
     internationalPrice?: number;
     compareAtPrice?: number;
@@ -35,12 +35,35 @@ export interface Catalogo {
     inventoryQty?: number;
     continueSelling?: boolean;
     weightValue?: number;
+    /** @deprecated Preferir `unidadVisualizacion`. Se mantiene por datos antiguos. */
     weightUnit?: string;
+    /**
+     * Cómo mostrar cantidades del producto en la app.
+     * Incluye presets (`cantidad`, `peso`, `bolsas`, …); ver `UNIDAD_VIS_CATALOGO_OPCIONES`.
+     */
+    unidadVisualizacion?: string;
+    /**
+     * Regla de conversión primario → secundario (alta desde «Crear secundario» o edición).
+     * En bodega el insumo se trabaja en kg: `cantidadPrimario` = kg de referencia (típ. 1) y
+     * `unidadesSecundario` = unidades de secundario por esa referencia (= 1000 / g por unidad).
+     */
+    reglaConversionCantidadPrimario?: number;
+    reglaConversionUnidadesSecundario?: number;
+    /** % de merma típica (0–100) asociada al secundario; referencia al crear procesamiento. */
+    mermaPct?: number;
     requiresShipping?: boolean;
     logisticService?: string;
     
     // Inclusiones e Imágenes
+    /** @deprecated Preferir `includedPrimarioCatalogoId`. */
     includedPrimary?: boolean;
+    /** Id de documento en `clientes/{id}/productos` del producto primario vinculado (p. ej. secundarios). */
+    includedPrimarioCatalogoId?: string;
+    /**
+     * Regla de tres legacy (opcional): la regla vigente para nuevas solicitudes se define al crear la orden de procesamiento.
+     */
+    conversionCantidadPrimario?: number;
+    conversionUnidadesSecundario?: number;
     includedInternational?: boolean;
     productImageUrl?: string;
     imagePosition?: number;

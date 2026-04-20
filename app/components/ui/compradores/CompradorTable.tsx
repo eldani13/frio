@@ -10,64 +10,63 @@ interface Props {
 
 export const CompradorTable = ({ compradores, onEdit, onDelete }: Props) => {
   return (
-    <div className="bg-white rounded-[12px] border border-gray-100 overflow-hidden shadow-sm">
-      <table className="w-full text-left border-collapse">
-        <thead className="bg-[#A8D5BA]/10">
-          <tr>
-            <th className="p-4 text-[12px] font-medium text-gray-500 uppercase">ID</th>
-            <th className="p-4 text-[12px] font-medium text-gray-500 uppercase">Código</th>
-            <th className="p-4 text-[12px] font-medium text-gray-500 uppercase">Comprador</th>
-            <th className="p-4 text-[12px] font-medium text-gray-500 uppercase text-right">Acciones</th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-gray-50">
-          {compradores.map((c) => (
-            <tr key={c.id} className="hover:bg-gray-50 transition-colors">
-              {/* ID Numérico */}
-              <td className="p-4 text-[14px] text-gray-700">
-                {c.numericId}
-              </td>
-              
-              {/* Código Base 36 */}
-              <td className="p-4 text-[14px] font-mono font-bold text-[#2D5A3F]">
-                {c.code}
-              </td>
-              
-              {/* Nombre */}
-              <td className="p-4 text-[14px] text-gray-900 font-medium">
-                {c.name}
-              </td>
-              
-              {/* Acciones */}
-              <td className="p-4 text-right">
-                <div className="flex justify-end gap-1">
-                  {/* Botón Editar - Azul Suave */}
-                  <button 
-                    onClick={() => onEdit(c)}
-                    className="p-2 text-[#AFCBFF] hover:text-[#2D5A3F] transition-colors hover:bg-[#AFCBFF]/10 rounded-lg"
-                    title="Editar Comprador"
-                  >
-                    <HiOutlinePencilSquare size={18} />
-                  </button>
-                  
-                  {/* Botón Eliminar - Rosa Suave */}
-                  <button 
-                    onClick={() => c.id && onDelete(c.id)}
-                    className="p-2 text-[#FFB3C1] hover:text-red-500 transition-colors hover:bg-[#FFB3C1]/10 rounded-lg"
-                    title="Eliminar Comprador"
-                  >
-                    <HiOutlineTrash size={18} />
-                  </button>
-                </div>
-              </td>
+    <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[560px] border-collapse text-left text-sm">
+          <thead>
+            <tr className="border-b border-slate-200 bg-slate-50">
+              <th className="whitespace-nowrap px-4 py-3 text-left text-[11px] font-bold uppercase tracking-wide text-slate-500">
+                ID
+              </th>
+              <th className="whitespace-nowrap px-4 py-3 text-left text-[11px] font-bold uppercase tracking-wide text-slate-500">
+                Código
+              </th>
+              <th className="px-4 py-3 text-left text-[11px] font-bold uppercase tracking-wide text-slate-500">
+                Comprador
+              </th>
+              <th className="px-4 py-3 text-right text-[11px] font-bold uppercase tracking-wide text-slate-500">
+                Acciones
+              </th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {compradores.map((c) => (
+              <tr key={c.id} className="border-b border-slate-100 transition-colors hover:bg-violet-50/80">
+                <td className="whitespace-nowrap px-4 py-3 text-[13px] tabular-nums text-slate-600">
+                  {c.numericId}
+                </td>
+                <td className="whitespace-nowrap px-4 py-3 font-mono text-[13px] font-semibold text-slate-900">
+                  {c.code}
+                </td>
+                <td className="px-4 py-3 text-[13px] font-medium text-slate-800">{c.name}</td>
+                <td className="px-4 py-3 text-right">
+                  <div className="flex justify-end gap-1">
+                    <button
+                      type="button"
+                      onClick={() => onEdit(c)}
+                      className="rounded-lg p-2 text-sky-600 transition-colors hover:bg-sky-50 hover:text-sky-800"
+                      title="Editar Comprador"
+                    >
+                      <HiOutlinePencilSquare size={18} />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => c.id && onDelete(c.id)}
+                      className="rounded-lg p-2 text-rose-400 transition-colors hover:bg-rose-50 hover:text-rose-600"
+                      title="Eliminar Comprador"
+                    >
+                      <HiOutlineTrash size={18} />
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
 
-      {/* Estado Vacío */}
       {compradores.length === 0 && (
-        <div className="p-8 text-center text-gray-400 text-[14px]">
+        <div className="border-t border-slate-100 px-4 py-12 text-center text-sm text-slate-500">
           No hay compradores registrados.
         </div>
       )}

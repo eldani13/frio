@@ -13,6 +13,7 @@ export default function SlotsGrid({
   slots,
   selectedPosition,
   onSelect,
+  titleActions,
   headerActions,
   occupiedCount,
   totalSlots,
@@ -28,13 +29,16 @@ export default function SlotsGrid({
   const visibleSlots = slots.slice(start, end);
   return (
     <div className="self-start rounded-2xl bg-white p-2 sm:p-4 shadow-md border border-blue-200 w-full">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3 relative mb-3 sm:mb-4">
-        <h2 className="text-sm sm:text-lg font-semibold text-slate-900 mb-2 sm:mb-4 flex items-center gap-1 sm:gap-2">
-          <span className="inline-block">
-            <FiArchive className="w-4 h-4 sm:w-5 sm:h-5 text-cyan-400" />
-          </span>
-          Mapa de Bodega
-        </h2>
+      <div className="relative mb-3 flex flex-col gap-2 sm:mb-4 sm:flex-row sm:items-start sm:justify-between sm:gap-3">
+        <div className="mb-2 flex flex-wrap items-center gap-2 sm:mb-0">
+          <h2 className="flex items-center gap-1 sm:gap-2 text-sm font-semibold text-slate-900 sm:text-lg">
+            <span className="inline-block">
+              <FiArchive className="h-4 w-4 text-cyan-400 sm:h-5 sm:w-5" />
+            </span>
+            Mapa de Bodega
+          </h2>
+          {titleActions}
+        </div>
         <div className="flex items-center gap-2 sm:gap-3 sm:ml-auto relative z-10 mt-1 sm:mt-0">
           {headerActions ? <div>{headerActions}</div> : null}
           {(role === "administrador" || role === "jefe") && typeof occupiedCount === "number" && typeof totalSlots === "number" && (
@@ -79,14 +83,15 @@ export default function SlotsGrid({
           </button>
         </div>
       ) : null}
-      {/* Indicador de estado alineado a la derecha debajo del grid */}
       <div className="flex justify-end mt-2 sm:mt-4">
-        <div className="flex flex-wrap items-center gap-1 sm:gap-3">
+        <div className="flex flex-wrap items-center justify-end gap-x-3 gap-y-1 sm:gap-3">
           <div className="flex items-center gap-1">
-            <span className="w-2 h-2 sm:w-3 sm:h-3 rounded-full bg-cyan-400 inline-block"></span>
-            <span className="text-[10px] sm:text-xs text-slate-600">
-              Ocupada
-            </span>
+            <span className="h-2.5 w-3 sm:h-3 sm:w-4 rounded-sm bg-cyan-200 border border-cyan-400 inline-block" />
+            <span className="text-[10px] sm:text-xs text-slate-600">Ocupada (primario)</span>
+          </div>
+          <div className="flex items-center gap-1">
+            <span className="h-2.5 w-3 sm:h-3 sm:w-4 rounded-sm bg-sky-500 border border-sky-700 inline-block" />
+            <span className="text-[10px] sm:text-xs text-slate-600">Ocupada (procesado)</span>
           </div>
           <div className="flex items-center gap-1">
             <span className="w-2 h-2 sm:w-3 sm:h-3 rounded-full bg-slate-300 inline-block"></span>

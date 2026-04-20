@@ -18,7 +18,7 @@ export const BodegaAsignarModal = ({
   isOpen, 
   onClose, 
   onSuccess, 
-  clientId, 
+  clientId: _clientId, 
   estado, 
 }: Props) => {
   

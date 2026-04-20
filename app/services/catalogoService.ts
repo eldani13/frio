@@ -1,15 +1,16 @@
 import { db } from "@/lib/firebaseClient";
-import { 
-  collection, 
-  addDoc, 
-  getDocs, 
-  deleteDoc, 
-  doc, 
-  updateDoc, 
-  query, 
+import {
+  collection,
+  addDoc,
+  getDocs,
+  getDoc,
+  deleteDoc,
+  doc,
+  updateDoc,
+  query,
   where, // Agregado para filtrar por cuenta
   orderBy,
-  limit
+  limit,
 } from "firebase/firestore";
 import { Catalogo } from "@/app/types/catalogo";
 
@@ -32,6 +33,18 @@ export const CatalogoService = {
    * Obtiene los productos filtrados por codeCuenta.
    * Sin orderBy para evitar el error de índice compuesto.
    */
+  async getById(idCliente: string, id: string): Promise<Catalogo | null> {
+    try {
+      if (!idCliente?.trim() || !id?.trim()) return null;
+      const snap = await getDoc(getProductoDocRef(idCliente, id));
+      if (!snap.exists()) return null;
+      return { id: snap.id, ...snap.data() } as Catalogo;
+    } catch (e: unknown) {
+      console.error("Error en CatalogoService.getById:", e);
+      return null;
+    }
+  },
+
   async getAll(idCliente: string, codeCuenta: string): Promise<Catalogo[]> {
     try {
       if (!idCliente?.trim()) return [];
@@ -45,8 +58,8 @@ export const CatalogoService = {
         id: d.id, 
         ...d.data() 
       } as Catalogo));
-    } catch (error: any) {
-      console.error("Error en CatalogoService.getAll:", error.message);
+    } catch (error: unknown) {
+      console.error("Error en CatalogoService.getAll:", error instanceof Error ? error.message : error);
       return [];
     }
   },
@@ -74,8 +87,8 @@ export const CatalogoService = {
       };
 
       return await addDoc(getColRef(idCliente), newProduct);
-    } catch (error: any) {
-      console.error("Error en CatalogoService.create:", error.message);
+    } catch (error: unknown) {
+      console.error("Error en CatalogoService.create:", error instanceof Error ? error.message : error);
       throw error;
     }
   },
@@ -86,11 +99,14 @@ export const CatalogoService = {
   async update(idCliente: string, id: string, data: Partial<Catalogo>) {
     try {
       if (!idCliente?.trim()) throw new Error("idCliente requerido");
-      const { id: _, numericId, code, createdAt, codeCuenta, ...updateData } = data as any;
+      const u: Record<string, unknown> = { ...data };
+      for (const k of ["id", "numericId", "code", "createdAt", "codeCuenta"] as const) {
+        delete u[k];
+      }
 
-      return await updateDoc(getProductoDocRef(idCliente, id), updateData);
-    } catch (error: any) {
-      console.error("Error en CatalogoService.update:", error.message);
+      return await updateDoc(getProductoDocRef(idCliente, id), u as Partial<Catalogo>);
+    } catch (error: unknown) {
+      console.error("Error en CatalogoService.update:", error instanceof Error ? error.message : error);
       throw error;
     }
   },
@@ -99,13 +115,13 @@ export const CatalogoService = {
     try {
       if (!idCliente?.trim()) throw new Error("idCliente requerido");
       return await deleteDoc(getProductoDocRef(idCliente, id));
-    } catch (error: any) {
-      console.error("Error en CatalogoService.delete:", error.message);
+    } catch (error: unknown) {
+      console.error("Error en CatalogoService.delete:", error instanceof Error ? error.message : error);
       throw error;
     }
   },
 
-  async importMany(dataList: any[], idCliente: string, codeCuenta: string) {
+  async importMany(dataList: Record<string, unknown>[], idCliente: string, codeCuenta: string) {
     try {
       if (!idCliente?.trim()) throw new Error("idCliente requerido");
       const qLast = query(getColRef(idCliente), orderBy("numericId", "desc"), limit(1));
@@ -119,7 +135,7 @@ export const CatalogoService = {
       const promises = dataList.map((item, index) => {
         const nextId = currentId + index;
         const newProduct: Omit<Catalogo, "id"> = {
-          ...item,
+          ...(item as Omit<Catalogo, "id">),
           codeCuenta,
           numericId: nextId,
           code: this.toBase36(nextId),

@@ -1,7 +1,7 @@
 import * as XLSX from 'xlsx';
 
 interface ImportExcelProps {
-  onDataLoaded: (data: any[]) => void;
+  onDataLoaded: (data: Record<string, unknown>[]) => void;
 }
 
 export const ImportExcel = ({ onDataLoaded }: ImportExcelProps) => {
@@ -22,17 +22,17 @@ export const ImportExcel = ({ onDataLoaded }: ImportExcelProps) => {
       const ws = wb.Sheets[wsname];
       
       // 3. Convertir a JSON
-      const rawData = XLSX.utils.sheet_to_json(ws);
+      const rawData = XLSX.utils.sheet_to_json(ws) as Record<string, unknown>[];
       
       // Validación de campos obligatorios
-      const validatedData = rawData.filter((row: any) => {
-        return (
-          row.title && 
-          row.description && 
-          row.provider && 
-          row.category && 
-          row.productType && 
-          row.status
+      const validatedData = rawData.filter((row: Record<string, unknown>) => {
+        return Boolean(
+          row.title &&
+            row.description &&
+            row.provider &&
+            row.category &&
+            row.productType &&
+            row.status,
         );
       });
 

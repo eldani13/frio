@@ -39,7 +39,7 @@ export default function TrucksPage() {
       }
       await load();
       setIsModalOpen(false); // Cerramos el modal tras el éxito
-    } catch (error) {
+    } catch (_error) {
       alert("Hubo un error al guardar los datos del camión.");
     }
   };
@@ -51,7 +51,7 @@ export default function TrucksPage() {
       try {
         await TruckService.delete(idCliente, id);
         await load();
-      } catch (error) {
+      } catch (_error) {
         alert("No se pudo eliminar el camión.");
       }
     }

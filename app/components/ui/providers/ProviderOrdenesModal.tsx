@@ -1,7 +1,9 @@
 "use client";
 
-import { HiOutlineXMark } from "react-icons/hi2";
+import { HiCheckCircle, HiOutlineXMark, HiXCircle } from "react-icons/hi2";
 import type { Provider } from "@/app/types/provider";
+import { ordenCompraEstadoBadgeClass } from "@/app/types/ordenCompra";
+import type { LineaRecepcionDiff } from "@/app/lib/ordenCompraRecepcionDiff";
 
 export type ProveedorOrdenCompraRow = {
   id: string;
@@ -9,6 +11,9 @@ export type ProveedorOrdenCompraRow = {
   estado: string;
   /** Resumen de líneas vinculadas al catálogo */
   resumenProductos?: string;
+  lineasDiff?: LineaRecepcionDiff[];
+  adicionales?: string[];
+  tieneRecepcion?: boolean;
 };
 
 interface ProviderOrdenesModalProps {
@@ -37,10 +42,10 @@ export function ProviderOrdenesModal({
       onClick={onClose}
     >
       <div
-        className="max-h-[90vh] w-full max-w-4xl overflow-hidden rounded-[12px] border border-gray-100 bg-white shadow-xl"
+        className="flex max-h-[min(90vh,900px)] w-full max-w-4xl flex-col overflow-hidden rounded-[12px] border border-gray-100 bg-white shadow-xl"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between border-b border-[#eef1f4] px-6 py-4">
+        <div className="flex shrink-0 items-center justify-between border-b border-[#eef1f4] px-6 py-4">
           <div>
             <h2 id="provider-ordenes-title" className="text-lg font-semibold text-gray-900">
               Órdenes de compra
@@ -57,32 +62,38 @@ export function ProviderOrdenesModal({
           </button>
         </div>
 
-        <div className="overflow-hidden p-5">
-          <div className="overflow-x-auto overflow-y-auto rounded-[12px] border border-[#e5e7eb]">
-            <table className="w-full border-collapse text-left text-sm">
-              <thead>
-                <tr className="border-b border-[#eef1f4] bg-[#F8FAFB]">
-                  <th className="px-5 py-3.5 text-left text-[12px] font-semibold uppercase tracking-wide text-[#6B7280]">
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-4">
+          <div className="overflow-x-auto rounded-xl border border-slate-200">
+            <table className="w-full min-w-[520px] border-collapse text-left text-sm">
+              <thead className="sticky top-0 z-10 bg-slate-50 shadow-[0_1px_0_0_rgb(226_232_240)]">
+                <tr className="border-b border-slate-200 bg-slate-50">
+                  <th className="bg-slate-50 px-4 py-3 text-left text-[11px] font-bold uppercase tracking-wide text-slate-500">
                     Orden de compra
                   </th>
-                  {/* <th className="px-5 py-3.5 text-left text-[12px] font-semibold uppercase tracking-wide text-[#6B7280]">
-                    Productos (catálogo)
-                  </th> */}
-                  <th className="px-5 py-3.5 text-left text-[12px] font-semibold uppercase tracking-wide text-[#6B7280]">
+                  <th className="bg-slate-50 px-4 py-3 text-left text-[11px] font-bold uppercase tracking-wide text-slate-500">
                     Estado
+                  </th>
+                  <th className="bg-slate-50 px-4 py-3 text-left text-[11px] font-bold uppercase tracking-wide text-slate-500">
+                    Pedido vs ingreso (bodega)
                   </th>
                 </tr>
               </thead>
-              <tbody className="bg-white">
+              <tbody>
                 {loading ? (
                   <tr>
-                    <td colSpan={3} className="px-5 py-10 text-center text-sm text-[#6B7280]">
+                    <td
+                      colSpan={3}
+                      className="border-b border-slate-100 px-4 py-12 text-center text-sm text-slate-500"
+                    >
                       Cargando órdenes…
                     </td>
                   </tr>
                 ) : ordenes.length === 0 ? (
                   <tr>
-                    <td colSpan={3} className="px-5 py-10 text-center text-sm text-[#6B7280]">
+                    <td
+                      colSpan={3}
+                      className="border-b border-slate-100 px-4 py-12 text-center text-sm text-slate-500"
+                    >
                       No hay órdenes de compra registradas para este proveedor.
                     </td>
                   </tr>
@@ -90,20 +101,64 @@ export function ProviderOrdenesModal({
                   ordenes.map((row) => (
                     <tr
                       key={row.id}
-                      className="border-t border-[#f3f4f6] transition-colors hover:bg-[#F8FAFB]"
+                      className="border-b border-slate-100 transition-colors hover:bg-violet-50/80"
                     >
-                      <td className="px-5 py-3.5 align-middle font-mono text-[14px] font-bold text-[#0D3B43] whitespace-nowrap">
+                      <td className="whitespace-nowrap px-4 py-3 align-top font-mono text-[13px] font-semibold text-slate-900">
                         {row.ordenCompra}
                       </td>
-                      {/* <td className="max-w-md px-5 py-3.5 align-middle text-[13px] text-[#374151]">
-                        <span className="line-clamp-2" title={row.resumenProductos}>
-                          {row.resumenProductos || "—"}
-                        </span>
-                      </td> */}
-                      <td className="px-5 py-3.5 align-middle whitespace-nowrap">
-                        <span className="inline-flex rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-800">
+                      <td className="whitespace-nowrap px-4 py-3 align-top">
+                        <span
+                          className={`inline-flex rounded-full border-0 px-2.5 py-0.5 text-xs font-semibold ${ordenCompraEstadoBadgeClass(row.estado)}`}
+                        >
                           {row.estado}
                         </span>
+                      </td>
+                      <td className="px-4 py-3 align-top text-[13px] text-slate-700">
+                        {!row.tieneRecepcion ? (
+                          <span className="text-slate-400">Aún no hay recepción en bodega.</span>
+                        ) : !row.lineasDiff?.length ? (
+                          <span className="text-slate-400">Sin líneas en la orden.</span>
+                        ) : (
+                          <ul className="space-y-1.5">
+                            {row.lineasDiff.map((ln, lnIdx) => (
+                              <li
+                                key={`${row.id}-ln-${lnIdx}-${ln.catalogoProductId}`}
+                                className="flex items-start gap-2 text-[12px] leading-snug"
+                              >
+                                {ln.ok ? (
+                                  <HiCheckCircle
+                                    className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600"
+                                    aria-label="Coincide con el pedido"
+                                  />
+                                ) : (
+                                  <HiXCircle
+                                    className="mt-0.5 h-4 w-4 shrink-0 text-rose-600"
+                                    aria-label="No coincide con el pedido"
+                                  />
+                                )}
+                                <span>
+                                  <span className="font-medium text-slate-800">{ln.titleSnapshot}</span>
+                                  <span className="text-slate-500">
+                                    {" "}
+                                    · pedido {ln.pedidoLabel} → recibido {ln.recibidoLabel}
+                                  </span>
+                                </span>
+                              </li>
+                            ))}
+                            {(row.adicionales ?? []).map((txt, i) => (
+                              <li
+                                key={`extra-${row.id}-${i}`}
+                                className="flex items-start gap-2 text-[12px] text-amber-900"
+                              >
+                                <HiXCircle
+                                  className="mt-0.5 h-4 w-4 shrink-0 text-amber-600"
+                                  aria-label="Producto adicional"
+                                />
+                                <span>{txt}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
                       </td>
                     </tr>
                   ))
@@ -113,7 +168,7 @@ export function ProviderOrdenesModal({
           </div>
         </div>
 
-        <div className="border-t border-[#eef1f4] px-6 py-3">
+        <div className="shrink-0 border-t border-[#eef1f4] bg-white px-6 py-3">
           <button
             type="button"
             onClick={onClose}

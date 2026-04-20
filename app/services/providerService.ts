@@ -1,15 +1,16 @@
 import { db } from "@/lib/firebaseClient";
-import { 
-  collection, 
-  addDoc, 
-  getDocs, 
-  deleteDoc, 
-  doc, 
-  updateDoc, 
-  query, 
-  where, 
-  orderBy, 
-  limit 
+import {
+  collection,
+  addDoc,
+  getDocs,
+  getDoc,
+  deleteDoc,
+  doc,
+  updateDoc,
+  query,
+  where,
+  orderBy,
+  limit,
 } from "firebase/firestore";
 import { Provider } from "@/app/types/provider";
 
@@ -41,14 +42,32 @@ export const ProviderService = {
         id: d.id, 
         ...d.data() 
       } as Provider));
-    } catch (error: any) {
-      console.error("Error en getAll:", error.message);
+    } catch (error: unknown) {
+      console.error("Error en getAll:", error instanceof Error ? error.message : error);
       return [];
     }
   },
 
+  /** Un proveedor por ID de documento (misma subcolección bajo el cliente). */
+  async getById(idCliente: string, id: string): Promise<Provider | null> {
+    try {
+      if (!idCliente?.trim() || !id?.trim()) return null;
+      const snap = await getDoc(getProviderDocRef(idCliente.trim(), id.trim()));
+      if (!snap.exists()) return null;
+      return { id: snap.id, ...snap.data() } as Provider;
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : String(error);
+      console.error("ProviderService.getById:", msg);
+      return null;
+    }
+  },
+
   // 2. Correlativo por cliente (subcolección); codeCuenta se mantiene en el documento
-  async create(name: string, idCliente: string, codeCuenta: string) {
+  async create(
+    payload: { name: string; nombre?: string; telefono?: string; email?: string },
+    idCliente: string,
+    codeCuenta: string,
+  ) {
     try {
       if (!idCliente?.trim()) throw new Error("idCliente requerido");
       const qLast = query(getColRef(idCliente), orderBy("numericId", "desc"), limit(1));
@@ -61,7 +80,10 @@ export const ProviderService = {
       }
 
       const newProvider: Omit<Provider, 'id'> = {
-        name: name.trim(),
+        name: payload.name.trim(),
+        nombre: payload.nombre?.trim() ?? "",
+        telefono: payload.telefono?.trim() ?? "",
+        email: payload.email?.trim() ?? "",
         codeCuenta: codeCuenta, // Se guarda para que el dueño lo vea
         numericId: nextId,
         code: this.toBase36(nextId),
@@ -69,19 +91,23 @@ export const ProviderService = {
       };
 
       return await addDoc(getColRef(idCliente), newProvider);
-    } catch (error: any) {
-      console.error("Error en create:", error.message);
+    } catch (error: unknown) {
+      console.error("Error en create:", error instanceof Error ? error.message : error);
       throw error;
     }
   },
 
-  async update(idCliente: string, id: string, data: Partial<Provider>) {
+  async update(idCliente: string, id: string, data: Partial<Pick<Provider, "name" | "nombre" | "telefono" | "email">>) {
     try {
       if (!idCliente?.trim()) throw new Error("idCliente requerido");
-      const { name } = data;
-      return await updateDoc(getProviderDocRef(idCliente, id), { name });
-    } catch (error: any) {
-      console.error("Error en update:", error.message);
+      const patch: Record<string, string> = {};
+      if (data.name !== undefined) patch.name = data.name.trim();
+      if (data.nombre !== undefined) patch.nombre = data.nombre.trim();
+      if (data.telefono !== undefined) patch.telefono = data.telefono.trim();
+      if (data.email !== undefined) patch.email = data.email.trim();
+      return await updateDoc(getProviderDocRef(idCliente, id), patch);
+    } catch (error: unknown) {
+      console.error("Error en update:", error instanceof Error ? error.message : error);
       throw error;
     }
   },
@@ -90,8 +116,8 @@ export const ProviderService = {
     try {
       if (!idCliente?.trim()) throw new Error("idCliente requerido");
       return await deleteDoc(getProviderDocRef(idCliente, id));
-    } catch (error: any) {
-      console.error("Error en delete:", error.message);
+    } catch (error: unknown) {
+      console.error("Error en delete:", error instanceof Error ? error.message : error);
       throw error;
     }
   }

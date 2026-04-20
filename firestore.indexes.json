@@ -1,0 +1,10 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "viajesTransporte",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [{ "fieldPath": "numericId", "order": "DESCENDING" }]
+    }
+  ],
+  "fieldOverrides": []
+}

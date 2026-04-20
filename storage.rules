@@ -1,0 +1,13 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /ventaViajes/{clientId}/{ventaId}/{viajeId}/{fileName} {
+      allow read: if request.auth != null;
+      // Subidas: máx. 10 MB. En borrado `request.resource` es null.
+      // Nota: con `uploadBytesResumable`, a veces `request.resource.size` no acompaña y la regla falla;
+      // el cliente usa `uploadBytes` para evidencias (≤10 MB) para que el tamaño llegue bien a las reglas.
+      allow write: if request.auth != null
+        && (request.resource == null || request.resource.size < 10 * 1024 * 1024);
+    }
+  }
+}

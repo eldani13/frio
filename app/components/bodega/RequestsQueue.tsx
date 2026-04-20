@@ -9,12 +9,16 @@ import {
   FiArrowRight,
   FiBox,
   FiCalendar,
+  FiCpu,
   FiMapPin,
   FiPackage,
   FiPhoneCall,
+  FiShoppingCart,
   FiUser,
 } from "react-icons/fi";
+import { SolicitudProcesamientoService } from "@/app/services/solicitudProcesamientoService";
 import { IoCloseOutline } from "react-icons/io5";
+import { temperatureStringFromAnalyzeResponse } from "@/app/lib/imageAnalyzeApi";
 
 const TYPE_LABELS: Record<OrderType, string> = {
   a_bodega: "A bodega",
@@ -23,7 +27,7 @@ const TYPE_LABELS: Record<OrderType, string> = {
 };
 
 const STATUS_STYLES: Record<
-  "ingreso" | "bodega" | "salida" | "revisar",
+  "ingreso" | "bodega" | "salida" | "revisar" | "procesamiento",
   { bg: string; border: string; text: string; icon: string; label: string }
 > = {
   ingreso: {
@@ -54,10 +58,89 @@ const STATUS_STYLES: Record<
     icon: "text-yellow-500",
     label: "text-yellow-600",
   },
+  procesamiento: {
+    bg: "bg-violet-50",
+    border: "border-violet-200",
+    text: "text-violet-800",
+    icon: "text-violet-600",
+    label: "text-violet-600",
+  },
 };
 
 const orderTimestamp = (order: BodegaOrder) =>
   typeof order.createdAtMs === "number" ? order.createdAtMs : Date.now();
+
+/** Mismo umbral que `BodegaDashboard` / jefe: por encima = temperatura alta. */
+const HIGH_TEMP_ALERT_THRESHOLD = 5;
+
+function coerceTempLocal(v: unknown): number | null {
+  if (v === null || v === undefined) return null;
+  if (typeof v === "number" && Number.isFinite(v)) return v;
+  if (typeof v === "string") {
+    const t = Number(String(v).trim().replace(",", "."));
+    return Number.isFinite(t) ? t : null;
+  }
+  return null;
+}
+
+function liveTempAssignedAlert(
+  alerta: { position: number; zone?: unknown },
+  slots: RequestsQueueProps["slots"],
+  inboundBoxes: RequestsQueueProps["inboundBoxes"],
+  outboundBoxes: RequestsQueueProps["outboundBoxes"],
+): number | null {
+  const pos = Number(alerta.position);
+  const zone = (alerta.zone as OrderSource | undefined) ?? "bodega";
+  if (zone === "bodega") {
+    const s = slots.find((x) => x.position === pos);
+    return coerceTempLocal(s?.temperature);
+  }
+  if (zone === "ingresos") {
+    const b = inboundBoxes.find((x) => x.position === pos);
+    return coerceTempLocal(b?.temperature);
+  }
+  const b = outboundBoxes.find((x) => x.position === pos);
+  return coerceTempLocal(b?.temperature);
+}
+
+function formatCantidadProcesamientoCola(n: unknown): string {
+  const v = Number(n);
+  if (!Number.isFinite(v)) return "—";
+  return Math.round(v).toLocaleString("es-CO", { maximumFractionDigits: 0 });
+}
+
+function etiquetaUnidadProcesamientoCola(t: Record<string, unknown>): string {
+  const u = t.unidadPrimarioVisualizacion;
+  if (u === "peso") return "Peso";
+  if (u === "cantidad") return "Cantidad";
+  return "—";
+}
+
+function esTareaVentaSalida(t: Record<string, unknown>): boolean {
+  return String(t.tipo ?? "").trim() === "venta_salida";
+}
+
+function lineItemsVentaSalidaResumen(t: Record<string, unknown>): string {
+  const raw = t.lineItems;
+  if (!Array.isArray(raw) || raw.length === 0) return "—";
+  return raw
+    .map((row) => {
+      const r = row as Record<string, unknown>;
+      const title = String(r.titleSnapshot ?? "").trim() || "Producto";
+      const c = Number(r.cantidad);
+      const q = Number.isFinite(c) && c > 0 ? `${Math.round(c)} u.` : "—";
+      return `${title} (${q})`;
+    })
+    .join(" · ");
+}
+
+function busyKeyTareaCola(t: Record<string, unknown>): string {
+  const cid = String(t.clientId ?? "").trim();
+  if (esTareaVentaSalida(t)) {
+    return `${cid}::venta::${String(t.ventaId ?? t.ordenVentaId ?? "").trim()}`;
+  }
+  return `${cid}::${String(t.solicitudId ?? "").trim()}`;
+}
 
 type ReviewDetail = {
   zone: OrderSource;
@@ -69,10 +152,19 @@ type ReviewDetail = {
   source: "cloud" | "order";
 };
 
+/** Una fila de la cola del operario: traslados del mapa u orden de procesamiento asignada. */
+type ColaOperarioItem =
+  | { kind: "orden"; order: BodegaOrder }
+  | { kind: "procesamiento"; tarea: Record<string, unknown> };
+
 export default function RequestsQueue(props: RequestsQueueProps) {
   const {
     requests,
     canExecute,
+    canExecuteWorkOrders: canExecuteWorkOrdersProp,
+    canExecuteProcesamientoTasks: canExecuteProcesamientoTasksProp,
+    showTemperaturaAlertasAsignadas: showTemperaturaAlertasAsignadasProp,
+    llamadaDesdeRol = "operario",
     onExecute,
     onReport: _onReport,
     slots = [],
@@ -84,7 +176,19 @@ export default function RequestsQueue(props: RequestsQueueProps) {
     onUpdateAlertasOperario,
     onUpdateAlertasOperarioSolved,
     onUpdateLlamadasJefe,
+    onPersistTemperatureForAlert,
+    onOperarioResolveTemperatureAlert,
+    tareasProcesamientoOperario = [],
+    onUpdateTareasProcesamientoOperario,
+    operarioSessionUid,
+    onProcesamientoEnCursoDesdeOperario,
+    onProcesamientoTerminadoDesdeOperario,
+    onEjecutarSalidaVentaDesdeMapa,
   } = props;
+
+  const canExecuteWorkOrders = canExecuteWorkOrdersProp ?? canExecute;
+  const canExecuteProcesamientoTasks = canExecuteProcesamientoTasksProp ?? canExecute;
+  const showTemperaturaAlertasAsignadas = showTemperaturaAlertasAsignadasProp ?? canExecute;
 
   // Optional callbacks may be provided from parent, keep refs without invoking
   void _onReport;
@@ -110,6 +214,7 @@ export default function RequestsQueue(props: RequestsQueueProps) {
   >(null);
   const [editTempLoading, setEditTempLoading] = useState(false);
   const [showCallModal, setShowCallModal] = useState(false);
+  const [procBusyKey, setProcBusyKey] = useState<string | null>(null);
   const [reviewModal, setReviewModal] = useState<
     | null
     | {
@@ -122,26 +227,223 @@ export default function RequestsQueue(props: RequestsQueueProps) {
     () => [...requests].sort((a, b) => orderTimestamp(a) - orderTimestamp(b)),
     [requests],
   );
-  const nextRequest = orderedRequests[0];
+  /**
+   * Solo alertas cuya zona sigue por encima del umbral. Evita listar asignaciones “fantasma”
+   * si Firestore aún tiene la fila pero el mapa ya tiene temperatura corregida.
+   * `sourceIndex` = índice en `alertasOperario` (para resolver / persistir).
+   */
+  const alertasOperarioVisibles = useMemo(() => {
+    if (!showTemperaturaAlertasAsignadas) return [];
+    const out: Array<{
+      alerta: (typeof alertasOperario)[number];
+      sourceIndex: number;
+    }> = [];
+    alertasOperario.forEach((alerta, sourceIndex) => {
+      const live = liveTempAssignedAlert(alerta, slots, inboundBoxes, outboundBoxes);
+      if (live !== null && Number.isFinite(live) && live <= HIGH_TEMP_ALERT_THRESHOLD) {
+        return;
+      }
+      out.push({ alerta, sourceIndex });
+    });
+    return out;
+  }, [alertasOperario, slots, inboundBoxes, outboundBoxes, showTemperaturaAlertasAsignadas]);
 
-  const originStatus: keyof typeof STATUS_STYLES = nextRequest
+  const tareasProcesamientoOperarioVisibles = useMemo(() => {
+    if (!canExecuteProcesamientoTasks) return [];
+    /** El procesador ve todas las tareas «en curso» de la bodega (pool), sin filtrar por uid. */
+    if (llamadaDesdeRol === "procesador") {
+      return tareasProcesamientoOperario.filter(
+        (t) =>
+          !esTareaVentaSalida(t) && String(t.faseCola ?? "asignado").trim() === "en_curso",
+      );
+    }
+    const uid = String(operarioSessionUid ?? "").trim();
+    if (!uid) return [];
+    let list = tareasProcesamientoOperario.filter((t) => String(t.operarioUid ?? "").trim() === uid);
+    /** El operario solo mueve stock y pasa a «En curso»; lo en curso lo atiende el panel del procesador. */
+    list = list.filter((t) => String(t.faseCola ?? "asignado").trim() !== "en_curso");
+    return list;
+  }, [canExecuteProcesamientoTasks, operarioSessionUid, tareasProcesamientoOperario, llamadaDesdeRol]);
+
+  const colaOperarioItems = useMemo((): ColaOperarioItem[] => {
+    const out: ColaOperarioItem[] = [];
+    for (const order of orderedRequests) {
+      out.push({ kind: "orden", order });
+    }
+    if (canExecuteProcesamientoTasks && llamadaDesdeRol === "operario") {
+      for (const t of tareasProcesamientoOperarioVisibles) {
+        out.push({ kind: "procesamiento", tarea: t });
+      }
+    }
+    return out;
+  }, [orderedRequests, tareasProcesamientoOperarioVisibles, canExecuteProcesamientoTasks, llamadaDesdeRol]);
+
+  const primerItem = colaOperarioItems[0];
+  const totalTareasColaOperario = colaOperarioItems.length;
+
+  /** Solo alertas de temperatura: el procesamiento se muestra en el panel principal. */
+  const totalAlertasOperario = alertasOperarioVisibles.length;
+
+  const nextProcTarea = tareasProcesamientoOperarioVisibles[0];
+
+  /** Órdenes aún en fase operario («asignado» / no en curso): el procesador espera a que pasen a en curso. */
+  const tareasProcesadorEsperandoOperario = useMemo(() => {
+    if (llamadaDesdeRol !== "procesador" || !canExecuteProcesamientoTasks) return 0;
+    return tareasProcesamientoOperario.filter(
+      (t) =>
+        !esTareaVentaSalida(t) && String(t.faseCola ?? "asignado").trim() !== "en_curso",
+    ).length;
+  }, [llamadaDesdeRol, canExecuteProcesamientoTasks, tareasProcesamientoOperario]);
+
+  const nextProcTareaBusyKey = nextProcTarea
+    ? `${String(nextProcTarea.clientId ?? "").trim()}::${String(nextProcTarea.solicitudId ?? "").trim()}`
+    : "";
+  const procProcesadorBusy = Boolean(nextProcTareaBusyKey && procBusyKey === nextProcTareaBusyKey);
+
+  const esVistaSoloProcesador = !canExecuteWorkOrders && canExecuteProcesamientoTasks;
+  const deshabilitarBandejaYllamarProcesador =
+    esVistaSoloProcesador && tareasProcesamientoOperarioVisibles.length > 0;
+
+  const bandejaLabel = showTemperaturaAlertasAsignadas ? "Alertas" : "Tareas";
+
+  const handleCompletarTareaVentaSalida = async (tarea: Record<string, unknown>) => {
+    if (!onUpdateTareasProcesamientoOperario) return;
+    const clientId = String(tarea.clientId ?? "").trim();
+    const ventaId = String(tarea.ventaId ?? tarea.ordenVentaId ?? "").trim();
+    if (!clientId || !ventaId) return;
+    const key = busyKeyTareaCola(tarea);
+    setProcBusyKey(key);
+    try {
+      if (onEjecutarSalidaVentaDesdeMapa) {
+        const ok = await Promise.resolve(onEjecutarSalidaVentaDesdeMapa(tarea));
+        if (!ok) return;
+      }
+      onUpdateTareasProcesamientoOperario(
+        tareasProcesamientoOperario.filter(
+          (x) =>
+            !(
+              esTareaVentaSalida(x) &&
+              String(x.clientId ?? "").trim() === clientId &&
+              String(x.ventaId ?? x.ordenVentaId ?? "").trim() === ventaId
+            ),
+        ),
+      );
+    } finally {
+      setProcBusyKey(null);
+    }
+  };
+
+  const handlePasarProcesamientoEnCurso = async (tarea: Record<string, unknown>) => {
+    if (esTareaVentaSalida(tarea)) return;
+    if (!onUpdateTareasProcesamientoOperario) return;
+    const clientId = String(tarea.clientId ?? "").trim();
+    const solicitudId = String(tarea.solicitudId ?? "").trim();
+    if (!clientId || !solicitudId) return;
+    const key = `${clientId}::${solicitudId}`;
+    setProcBusyKey(key);
+
+    const nextTareas = tareasProcesamientoOperario.map((x) =>
+      String(x.clientId ?? "").trim() === clientId && String(x.solicitudId ?? "").trim() === solicitudId
+        ? { ...x, faseCola: "en_curso" }
+        : x,
+    );
+
+    try {
+      await SolicitudProcesamientoService.actualizarEstado(clientId, solicitudId, "En curso");
+    } catch (firstErr) {
+      let estadoReal: string | null = null;
+      try {
+        estadoReal = await SolicitudProcesamientoService.obtenerEstadoSolicitud(clientId, solicitudId);
+      } catch {
+        estadoReal = null;
+      }
+      if (estadoReal !== "En curso") {
+        const code = firstErr instanceof Error ? firstErr.message : "";
+        window.alert(
+          code === "solo_operario_asignado"
+            ? "Solo el operario asignado puede pasar la orden a «En curso»."
+            : code === "sin_operario_asignado"
+              ? "Falta asignar un responsable a la orden antes de pasarla a «En curso»."
+              : "No se pudo pasar la orden a «En curso». Revisá que sigas asignado o intentá de nuevo.",
+        );
+        setProcBusyKey(null);
+        return;
+      }
+    }
+
+    try {
+      if (onProcesamientoEnCursoDesdeOperario) {
+        await onProcesamientoEnCursoDesdeOperario(tarea, nextTareas);
+      } else {
+        onUpdateTareasProcesamientoOperario(nextTareas);
+      }
+    } catch (err) {
+      console.error("[RequestsQueue] Tras «En curso» en Firestore, falló mapa/cola local:", err);
+      onUpdateTareasProcesamientoOperario(nextTareas);
+    } finally {
+      setProcBusyKey(null);
+    }
+  };
+
+  const handleMarcarProcesamientoTerminado = async (tarea: Record<string, unknown>) => {
+    if (!onUpdateTareasProcesamientoOperario) return;
+    const clientId = String(tarea.clientId ?? "").trim();
+    const solicitudId = String(tarea.solicitudId ?? "").trim();
+    if (!clientId || !solicitudId) return;
+    const key = `${clientId}::${solicitudId}`;
+    setProcBusyKey(key);
+    try {
+      await SolicitudProcesamientoService.actualizarEstado(clientId, solicitudId, "Terminado");
+      if (onProcesamientoTerminadoDesdeOperario) {
+        await onProcesamientoTerminadoDesdeOperario(tarea);
+      } else {
+        onUpdateTareasProcesamientoOperario(
+          tareasProcesamientoOperario.filter(
+            (x) =>
+              !(
+                String(x.clientId ?? "").trim() === clientId &&
+                String(x.solicitudId ?? "").trim() === solicitudId
+              ),
+          ),
+        );
+      }
+    } catch {
+      window.alert("No se pudo marcar la orden como terminada. Intentá de nuevo.");
+    } finally {
+      setProcBusyKey(null);
+    }
+  };
+
+  const primerOrden = primerItem?.kind === "orden" ? primerItem.order : null;
+  const primerTareaProc = primerItem?.kind === "procesamiento" ? primerItem.tarea : null;
+
+  const originStatus: keyof typeof STATUS_STYLES = primerOrden
     ? (() => {
-        const zone = (nextRequest.sourceZone || "").toString().toLowerCase();
+        const zone = (primerOrden.sourceZone || "").toString().toLowerCase();
         if (zone === "bodega") return "bodega";
         if (zone === "salida") return "salida";
+        if (zone === "procesamiento") return "procesamiento";
         if (zone === "ingreso" || zone === "ingresos") return "ingreso";
         return "ingreso";
       })()
-    : "ingreso";
-  const destinationStatus: keyof typeof STATUS_STYLES = nextRequest
-    ? nextRequest.type === "a_bodega"
+    : primerTareaProc
+      ? esTareaVentaSalida(primerTareaProc)
+        ? "bodega"
+        : "procesamiento"
+      : "ingreso";
+  const destinationStatus: keyof typeof STATUS_STYLES = primerOrden
+    ? primerOrden.type === "a_bodega"
       ? "bodega"
-      : nextRequest.type === "a_salida"
+      : primerOrden.type === "a_salida"
         ? "salida"
-        : nextRequest.type === "revisar"
+        : primerOrden.type === "revisar"
           ? "revisar"
           : "ingreso"
-    : "ingreso";
+    : primerTareaProc
+      ? esTareaVentaSalida(primerTareaProc)
+        ? "salida"
+        : "bodega"
+      : "ingreso";
   const originStyle = STATUS_STYLES[originStatus];
   const destinationStyle = STATUS_STYLES[destinationStatus];
 
@@ -193,6 +495,11 @@ export default function RequestsQueue(props: RequestsQueueProps) {
     newTemp: number,
     opts: { zone?: OrderSource; name?: string; autoId?: string } = {},
   ) => {
+    const zone = opts.zone ?? "bodega";
+    if (Number.isFinite(newTemp) && onPersistTemperatureForAlert) {
+      onPersistTemperatureForAlert(Number(position), newTemp, zone);
+    }
+
     const updated = alertasOperario.map((a) =>
       Number(a.position) === position ? { ...a, temperature: newTemp } : a,
     );
@@ -204,19 +511,12 @@ export default function RequestsQueue(props: RequestsQueueProps) {
         : prev;
     });
 
-    // Trigger solved flow when editing temperature from a solve modal
     if (alertaSeleccionada) {
       const pos = Number(position);
       const solved = alertasOperarioSolved.includes(pos)
         ? alertasOperarioSolved
         : [...alertasOperarioSolved, pos];
       onUpdateAlertasOperarioSolved(solved);
-    }
-
-    // Mirror the temp change into slots list if we have it
-    const zone = opts.zone ?? "bodega";
-    if (zone === "bodega") {
-      // parent is responsible for persisting; this component just updates alerts
     }
   };
 
@@ -238,45 +538,99 @@ export default function RequestsQueue(props: RequestsQueueProps) {
   };
 
   const handleMainExecute = (event: React.MouseEvent<HTMLButtonElement>) => {
-    if (!nextRequest) return;
-    if (nextRequest.type === "revisar") {
-      const detail = loadReviewDetail(nextRequest);
-      setReviewModal({ order: nextRequest, detail });
+    if (!primerItem) return;
+    if (primerItem.kind === "procesamiento") {
+      const t = primerItem.tarea;
+      if (esTareaVentaSalida(t)) {
+        if (procBusyKey === busyKeyTareaCola(t)) return;
+        void handleCompletarTareaVentaSalida(t);
+        return;
+      }
+      const cid = String(t.clientId ?? "").trim();
+      const sid = String(t.solicitudId ?? "").trim();
+      if (procBusyKey === `${cid}::${sid}`) return;
+      void handlePasarProcesamientoEnCurso(t);
+      return;
+    }
+    const order = primerItem.order;
+    if (order.type === "revisar") {
+      const detail = loadReviewDetail(order);
+      setReviewModal({ order, detail });
       return;
     }
     const btn = event.currentTarget;
     btn.classList.add("zoom-out");
     setTimeout(() => {
       btn.classList.remove("zoom-out");
-      onExecute(nextRequest.id);
+      onExecute(order.id);
     }, 180);
   };
 
   const handleCall = () => {
+    const esProc = llamadaDesdeRol === "procesador";
     const llamada = {
       timestamp: Date.now(),
-      from: "operario",
-      message: "Llamado del operario",
+      from: llamadaDesdeRol,
+      message: esProc ? "Llamado del procesador" : "Llamado del operario",
     };
     onUpdateLlamadasJefe([...llamadasJefe, llamada]);
     setShowCallModal(true);
   };
+
+  const tituloPanelPrincipal =
+    primerItem?.kind === "orden"
+      ? TYPE_LABELS[primerItem.order.type]
+      : primerItem?.kind === "procesamiento"
+        ? esTareaVentaSalida(primerItem.tarea)
+          ? "Salida (venta)"
+          : "Movimiento"
+        : "A bodega";
+
+  const encabezadoPanelOrdenes = (
+    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
+      <span className="px-6 py-2 rounded-xl bg-emerald-600 text-white font-semibold text-lg flex items-center gap-2 w-full sm:w-auto justify-center sm:justify-start">
+        {primerItem?.kind === "procesamiento" ? (
+          esTareaVentaSalida(primerItem.tarea) ? (
+            <FiShoppingCart className="w-5 h-5" />
+          ) : (
+            <FiCpu className="w-5 h-5" />
+          )
+        ) : (
+          <FiBox className="w-5 h-5" />
+        )}
+        {tituloPanelPrincipal}
+      </span>
+      <div className="flex flex-wrap items-center gap-2 sm:gap-3 w-full sm:w-auto justify-start sm:justify-end">
+        <span className="px-4 py-1 rounded-xl border border-yellow-300 bg-yellow-50 text-yellow-700 font-semibold text-base flex items-center gap-2 w-full sm:w-auto justify-center sm:justify-start">
+          <FiAlertCircle className="w-5 h-5" /> Pendiente
+        </span>
+        <span className="px-3 py-1 rounded-full bg-emerald-100 text-emerald-700 font-bold text-base border border-emerald-200 w-full sm:w-auto text-center">
+          {totalTareasColaOperario} tareas
+        </span>
+      </div>
+    </div>
+  );
+
+  const procPrimerBusy =
+    primerItem?.kind === "procesamiento"
+      ? procBusyKey === busyKeyTareaCola(primerItem.tarea)
+      : false;
 
   return (
     <div>
       {/* Modal de Alertas */}
       {showAlertModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center backdrop-blur-sm bg-black/10 animate-fade-in">
-          <div className="bg-white rounded-3xl shadow-2xl p-0 max-w-lg w-full relative animate-fade-in-up border border-red-100">
-            <div className="flex flex-col items-center justify-center pt-8 pb-4 px-8 border-b border-red-100 bg-linear-to-r from-red-50 to-white rounded-t-3xl">
-              <span className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-red-100 shadow animate-pulse mb-2">
-                <FiAlertCircle className="w-9 h-9 text-red-500" />
-              </span>
-              <h2 className="text-2xl font-extrabold text-red-700 drop-shadow mb-1">
-                Alertas asignadas
-              </h2>
-              <p className="text-sm text-slate-500 font-medium text-center">
-                Estas son las alertas de temperatura que tienes asignadas actualmente.
+          <div className="bg-white rounded-3xl shadow-2xl p-0 max-w-lg w-full relative animate-fade-in-up border border-slate-200">
+            <div className="flex flex-col items-center justify-center rounded-t-3xl border-b border-slate-100 bg-linear-to-r from-red-50 to-white px-8 pb-4 pt-8">
+              <div className="mb-2 flex items-center justify-center gap-2">
+                <span className="inline-flex h-14 w-14 items-center justify-center rounded-full bg-red-100 shadow">
+                  <FiAlertCircle className="h-8 w-8 text-red-500" />
+                </span>
+              </div>
+              <h2 className="mb-1 text-center text-2xl font-extrabold text-slate-800 drop-shadow">Alertas asignadas</h2>
+              <p className="max-w-sm text-center text-sm font-medium text-slate-500">
+                Alertas de temperatura alta que tenés asignadas.
               </p>
               <button
                 className="absolute top-4 right-4 text-slate-400 text-2xl font-bold focus:outline-none transition-colors"
@@ -286,11 +640,12 @@ export default function RequestsQueue(props: RequestsQueueProps) {
                 <IoCloseOutline />
               </button>
             </div>
-            <div className="px-8 py-6 min-h-30 flex flex-col items-center">
-              {alertasOperario.length === 0 ? (
+            <div className="px-8 py-6 min-h-30 flex flex-col items-stretch w-full max-w-lg mx-auto">
+              <p className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-500">Temperatura</p>
+              {alertasOperarioVisibles.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-8">
                   <svg
-                    className="w-16 h-16 text-slate-200 mb-3"
+                    className="mb-3 h-16 w-16 text-slate-200"
                     fill="none"
                     viewBox="0 0 24 24"
                     stroke="currentColor"
@@ -302,18 +657,16 @@ export default function RequestsQueue(props: RequestsQueueProps) {
                       d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
                     />
                   </svg>
-                  <p className="text-slate-400 text-lg font-semibold text-center">
-                    No hay alertas asignadas
-                  </p>
-                  <p className="text-slate-400 text-sm text-center mt-1">
+                  <p className="text-center text-lg font-semibold text-slate-400">No hay alertas asignadas</p>
+                  <p className="mt-1 text-center text-sm text-slate-400">
                     Cuando se te asigne una alerta, aparecerá aquí.
                   </p>
                 </div>
               ) : (
-                <ul className="mt-2 w-full space-y-3">
-                  {alertasOperario.map((alerta, idx) => (
+                <ul className="mt-0 w-full space-y-3">
+                  {alertasOperarioVisibles.map(({ alerta, sourceIndex }) => (
                     <li
-                      key={idx}
+                      key={`${sourceIndex}-${Number(alerta.position)}`}
                       className="bg-linear-to-r from-red-50 to-white border border-red-200 rounded-xl px-5 py-4 text-red-800 flex items-center gap-4 shadow-sm hover:shadow-md transition-all"
                     >
                       <span className="inline-flex items-center justify-center w-10 h-10 rounded-full bg-red-100">
@@ -321,26 +674,33 @@ export default function RequestsQueue(props: RequestsQueueProps) {
                       </span>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-1">
-                          <span className="font-bold text-base text-red-700">
-                            Alerta {alerta.position}
-                          </span>
+                          <span className="font-bold text-base text-red-700">Alerta {alerta.position}</span>
                           {(alerta as any).name && (
                             <span className="ml-2 text-xs text-slate-700 bg-slate-100 rounded px-2 py-0.5">
                               {(alerta as any).name}
                             </span>
                           )}
                         </div>
-                        {typeof (alerta as any).temperature === "number" && (
-                          <span className="inline-block text-xs font-semibold text-white bg-red-500 rounded px-2 py-0.5 animate-pulse shadow">
-                            {(alerta as any).temperature} °C
-                          </span>
-                        )}
+                        {(() => {
+                          const live = liveTempAssignedAlert(alerta, slots, inboundBoxes, outboundBoxes);
+                          const shown =
+                            live !== null && Number.isFinite(live)
+                              ? live
+                              : typeof (alerta as any).temperature === "number"
+                                ? (alerta as any).temperature
+                                : null;
+                          return shown !== null ? (
+                            <span className="inline-block text-xs font-semibold text-white bg-red-500 rounded px-2 py-0.5 animate-pulse shadow">
+                              {shown} °C
+                            </span>
+                          ) : null;
+                        })()}
                         <div className="text-xs text-slate-500 mt-1">Alerta de temperatura alta</div>
                       </div>
                       <button
-                        className="ml-2 px-3 py-1 rounded-lg bg-green-500 hover:bg-green-600 text-white text-xs font-bold shadow transition-all focus:outline-none focus:ring-2 focus:ring-green-300"
+                        className="ml-2 shrink-0 px-3 py-1 rounded-lg bg-green-500 hover:bg-green-600 text-white text-xs font-bold shadow transition-all focus:outline-none focus:ring-2 focus:ring-green-300"
                         onClick={() => {
-                          setAlertaSeleccionada({ alerta, idx });
+                          setAlertaSeleccionada({ alerta, idx: sourceIndex });
                           setShowSolveModal(true);
                         }}
                         title="Marcar como solucionada"
@@ -365,103 +725,315 @@ export default function RequestsQueue(props: RequestsQueueProps) {
       )}
 
       <div>
-        {canExecute ? (
+        {canExecuteWorkOrders ? (
+          <>
+            {primerItem ? (
+              <button
+                type="button"
+                disabled={procPrimerBusy}
+                onClick={handleMainExecute}
+                className="w-full rounded-2xl border border-emerald-200 bg-white p-6 shadow-sm transition-transform duration-150 hover:scale-[0.98] hover:shadow-lg focus:shadow-lg active:scale-[0.95] active:shadow-lg sm:p-8 disabled:cursor-wait disabled:opacity-90 disabled:hover:scale-100"
+                style={{ outline: "none" }}
+              >
+                {encabezadoPanelOrdenes}
+                <div className="rounded-2xl bg-white p-4 sm:p-8">
+                  <div className="flex flex-col items-center">
+                    <span className="text-slate-500 font-semibold text-lg mb-4">
+                      {primerItem.kind === "procesamiento"
+                        ? esTareaVentaSalida(primerItem.tarea)
+                          ? "Preparar salida:"
+                          : "Movimiento:"
+                        : "Transferencia de:"}
+                    </span>
+                    {primerItem.kind === "orden" && primerOrden ? (
+                      <>
+                        <div className="flex flex-col sm:flex-row items-center justify-center gap-4 sm:gap-6 w-full">
+                          <div
+                            className={`flex flex-col items-center rounded-2xl px-6 sm:px-8 py-5 sm:py-6 w-full sm:w-64 max-w-md border ${originStyle.bg} ${originStyle.border}`}
+                          >
+                            <FiMapPin className={`w-8 h-8 mb-2 ${originStyle.icon}`} />
+                            <span className={`text-xs mb-1 ${originStyle.label}`}>ORIGEN</span>
+                            <span className={`text-2xl font-bold ${originStyle.text}`}>
+                              {primerOrden.sourceZone === "bodega"
+                                ? "Bodega"
+                                : primerOrden.sourceZone === "salida"
+                                  ? "Salida"
+                                  : primerOrden.sourceZone === "procesamiento"
+                                    ? "Movimiento"
+                                    : "Ingreso"}{" "}
+                              {primerOrden.sourceZone === "procesamiento" && primerOrden.procesamientoOrigen
+                                ? primerOrden.procesamientoOrigen.numero
+                                : primerOrden.sourcePosition}
+                            </span>
+                          </div>
+                          <FiArrowRight className="w-8 h-8 sm:w-10 sm:h-10 text-slate-300" />
+                          <div
+                            className={`flex flex-col items-center rounded-2xl px-6 sm:px-8 py-5 sm:py-6 w-full sm:w-64 max-w-md border ${destinationStyle.bg} ${destinationStyle.border}`}
+                          >
+                            <FiBox className={`w-8 h-8 mb-2 ${destinationStyle.icon}`} />
+                            <span className={`text-xs mb-1 ${destinationStyle.label}`}>DESTINO</span>
+                            <span className={`text-2xl font-bold ${destinationStyle.text}`}>
+                              {primerOrden.type === "a_bodega"
+                                ? `bodega ${primerOrden.targetPosition}`
+                                : primerOrden.type === "a_salida"
+                                  ? `salida ${primerOrden.targetPosition}`
+                                  : primerOrden.targetPosition &&
+                                      String(primerOrden.targetPosition).trim() !== "" &&
+                                      primerOrden.targetPosition !== undefined &&
+                                      primerOrden.targetPosition !== null
+                                    ? `revisar ${primerOrden.targetPosition}`
+                                    : "revisar"}
+                            </span>
+                          </div>
+                        </div>
+                        <hr className="my-8 border-slate-200 w-full" />
+                        <div className="flex flex-wrap justify-center gap-4 sm:gap-8 w-full mb-6">
+                          <div className="flex items-center gap-1 sm:gap-2 text-center sm:text-left">
+                            <FiUser className="w-5 h-5 text-slate-400" />
+                            <span className="text-xs text-slate-500">Solicitado por</span>
+                            <span className="font-semibold text-slate-700">{primerOrden.createdBy}</span>
+                          </div>
+                          <div className="flex items-center gap-1 sm:gap-2 text-center sm:text-left">
+                            <FiCalendar className="w-5 h-5 text-slate-400" />
+                            <span className="text-xs text-slate-500">Fecha y hora</span>
+                            <span className="font-semibold text-slate-700">{primerOrden.createdAt}</span>
+                          </div>
+                          <div className="flex items-center gap-1 sm:gap-2 text-center sm:text-left">
+                            <FiPackage className="w-5 h-5 text-slate-400" />
+                            <span className="text-xs text-slate-500">ID de solicitud</span>
+                            <span className="font-semibold text-slate-700">{primerOrden.id}</span>
+                          </div>
+                        </div>
+                      </>
+                    ) : primerItem.kind === "procesamiento" ? (
+                      esTareaVentaSalida(primerItem.tarea) ? (
+                        <>
+                          <div className="flex flex-col sm:flex-row items-center justify-center gap-4 sm:gap-6 w-full">
+                            <div
+                              className={`flex flex-col items-center rounded-2xl px-6 sm:px-8 py-5 sm:py-6 w-full sm:w-64 max-w-md border ${originStyle.bg} ${originStyle.border}`}
+                            >
+                              <FiMapPin className={`w-8 h-8 mb-2 ${originStyle.icon}`} />
+                              <span className={`text-xs mb-1 ${originStyle.label}`}>ORIGEN</span>
+                              <span
+                                className={`text-center text-xl font-bold leading-tight ${originStyle.text}`}
+                              >
+                                Bodega
+                              </span>
+                              <span className="mt-2 block text-center text-[11px] font-medium leading-snug text-slate-600">
+                                Stock en el mapa (mismas cantidades que la venta)
+                              </span>
+                            </div>
+                            <FiArrowRight className="w-8 h-8 sm:w-10 sm:h-10 text-slate-300" />
+                            <div
+                              className={`flex flex-col items-center rounded-2xl px-6 sm:px-8 py-5 sm:py-6 w-full sm:w-64 max-w-md border ${destinationStyle.bg} ${destinationStyle.border}`}
+                            >
+                              <FiBox className={`w-8 h-8 mb-2 ${destinationStyle.icon}`} />
+                              <span className={`text-xs mb-1 ${destinationStyle.label}`}>DESTINO</span>
+                              <span
+                                className={`text-center text-xl font-bold leading-tight ${destinationStyle.text}`}
+                              >
+                                Salida
+                              </span>
+                              <span className="mt-2 block text-center text-[11px] font-medium leading-snug text-slate-600">
+                                Zona de despacho
+                              </span>
+                            </div>
+                          </div>
+                          <div className="mt-6 w-full max-w-lg rounded-2xl border border-emerald-100 bg-emerald-50/60 px-4 py-4 text-left">
+                            <p className="font-mono text-lg font-bold text-slate-900">
+                              {String(primerItem.tarea.numero ?? "").trim() || "—"}
+                            </p>
+                            <p className="mt-1 text-sm font-semibold text-slate-800">
+                              Comprador:{" "}
+                              {String(primerItem.tarea.compradorNombre ?? "").trim() || "—"}
+                            </p>
+                            <p className="mt-2 text-xs font-bold uppercase tracking-wide text-slate-500">
+                              Pedido
+                            </p>
+                            <p className="mt-1 text-sm leading-relaxed text-slate-800">
+                              {lineItemsVentaSalidaResumen(primerItem.tarea)}
+                            </p>
+                          </div>
+                          <hr className="my-8 border-slate-200 w-full" />
+                          <div className="flex flex-wrap justify-center gap-4 sm:gap-8 w-full mb-6">
+                            <div className="flex items-center gap-1 sm:gap-2 text-center sm:text-left">
+                              <FiUser className="w-5 h-5 text-slate-400" />
+                              <span className="text-xs text-slate-500">Cuenta</span>
+                              <span className="font-semibold text-slate-700">
+                                {String(primerItem.tarea.clientName ?? primerItem.tarea.clientId ?? "").trim() ||
+                                  "—"}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-1 sm:gap-2 text-center sm:text-left">
+                              <FiCalendar className="w-5 h-5 text-slate-400" />
+                              <span className="text-xs text-slate-500">Fecha venta</span>
+                              <span className="font-semibold text-slate-700">
+                                {String(primerItem.tarea.fecha ?? "").trim() || "—"}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-1 sm:gap-2 text-center sm:text-left">
+                              <FiPackage className="w-5 h-5 text-slate-400" />
+                              <span className="text-xs text-slate-500">Operario</span>
+                              <span className="font-semibold text-slate-700">
+                                {String(primerItem.tarea.operarioNombre ?? "").trim() || "—"}
+                              </span>
+                            </div>
+                          </div>
+                          <p className="w-full text-center text-sm font-bold text-emerald-800">
+                            {procPrimerBusy
+                              ? "Moviendo…"
+                              : "Tocá para pasar las cajas de esta venta del mapa a salida"}
+                          </p>
+                        </>
+                      ) : (
+                        <>
+                          <div className="flex flex-col sm:flex-row items-center justify-center gap-4 sm:gap-6 w-full">
+                            <div
+                              className={`flex flex-col items-center rounded-2xl px-6 sm:px-8 py-5 sm:py-6 w-full sm:w-64 max-w-md border ${originStyle.bg} ${originStyle.border}`}
+                            >
+                              <FiCpu className={`w-8 h-8 mb-2 ${originStyle.icon}`} />
+                              <span className={`text-xs mb-1 ${originStyle.label}`}>ORIGEN</span>
+                              <span className={`text-center text-xl font-bold leading-tight ${originStyle.text}`}>
+                                <span className="block font-mono text-2xl">
+                                  {String(primerItem.tarea.numero ?? "").trim() || "—"}
+                                </span>
+                                <span className="mt-2 block text-sm font-semibold normal-case">
+                                  {String(primerItem.tarea.productoPrimarioTitulo ?? "").trim() || "—"}
+                                </span>
+                              </span>
+                            </div>
+                            <FiArrowRight className="w-8 h-8 sm:w-10 sm:h-10 text-slate-300" />
+                            <div
+                              className={`flex flex-col items-center rounded-2xl px-6 sm:px-8 py-5 sm:py-6 w-full sm:w-64 max-w-md border ${destinationStyle.bg} ${destinationStyle.border}`}
+                            >
+                              <FiBox className={`w-8 h-8 mb-2 ${destinationStyle.icon}`} />
+                              <span className={`text-xs mb-1 ${destinationStyle.label}`}>DESTINO</span>
+                              <span
+                                className={`text-center text-lg font-bold leading-snug sm:text-xl ${destinationStyle.text} line-clamp-4`}
+                              >
+                                {String(primerItem.tarea.productoSecundarioTitulo ?? "").trim() || "—"}
+                              </span>
+                            </div>
+                          </div>
+                          <hr className="my-8 border-slate-200 w-full" />
+                          <div className="flex flex-wrap justify-center gap-4 sm:gap-8 w-full mb-6">
+                            <div className="flex items-center gap-1 sm:gap-2 text-center sm:text-left">
+                              <FiUser className="w-5 h-5 text-slate-400" />
+                              <span className="text-xs text-slate-500">Cuenta</span>
+                              <span className="font-semibold text-slate-700">
+                                {String(primerItem.tarea.clientName ?? primerItem.tarea.clientId ?? "").trim() ||
+                                  "—"}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-1 sm:gap-2 text-center sm:text-left">
+                              <FiCalendar className="w-5 h-5 text-slate-400" />
+                              <span className="text-xs text-slate-500">Fecha</span>
+                              <span className="font-semibold text-slate-700">
+                                {String(primerItem.tarea.fecha ?? "").trim() || "—"}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-1 sm:gap-2 text-center sm:text-left">
+                              <FiPackage className="w-5 h-5 text-slate-400" />
+                              <span className="text-xs text-slate-500">Cantidad</span>
+                              <span className="font-semibold text-slate-700">
+                                {formatCantidadProcesamientoCola(primerItem.tarea.cantidadPrimario)} ·{" "}
+                                {etiquetaUnidadProcesamientoCola(primerItem.tarea)}
+                              </span>
+                            </div>
+                          </div>
+                          <p className="w-full text-center text-sm font-bold text-sky-700">
+                            {procPrimerBusy ? "Guardando…" : "Tocá para pasar a en curso"}
+                          </p>
+                        </>
+                      )
+                    ) : null}
+                  </div>
+                </div>
+              </button>
+            ) : (
+              <div className="w-full rounded-2xl border border-emerald-200 bg-white p-6 shadow-sm sm:p-8">
+                {encabezadoPanelOrdenes}
+                <div className="flex min-h-88 items-center justify-center rounded-3xl border border-slate-200 bg-slate-50 px-6 py-10 text-center">
+                  <p className="text-2xl font-semibold text-slate-700">No hay solicitudes pendientes.</p>
+                </div>
+              </div>
+            )}
+          </>
+        ) : null}
+        {!canExecuteWorkOrders && canExecuteProcesamientoTasks ? (
           <button
             type="button"
-            disabled={!nextRequest}
-            onClick={handleMainExecute}
-            className="rounded-2xl bg-white p-6 sm:p-8 shadow-sm w-full border border-emerald-200 transition-transform duration-150 hover:shadow-lg focus:shadow-lg active:shadow-lg hover:scale-[0.98] active:scale-[0.95]"
+            disabled={!nextProcTarea || procProcesadorBusy}
+            onClick={() => {
+              if (!nextProcTarea || procProcesadorBusy) return;
+              void handleMarcarProcesamientoTerminado(nextProcTarea);
+            }}
+            className="rounded-2xl bg-white p-6 sm:p-8 shadow-sm w-full border border-sky-200 transition-transform duration-150 hover:shadow-lg focus:shadow-lg active:shadow-lg hover:scale-[0.98] active:scale-[0.95] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:scale-100"
             style={{ outline: "none" }}
           >
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
-              <span className="px-6 py-2 rounded-xl bg-emerald-600 text-white font-semibold text-lg flex items-center gap-2 w-full sm:w-auto justify-center sm:justify-start">
-                <FiBox className="w-5 h-5" />
-                {nextRequest ? TYPE_LABELS[nextRequest.type] : "A bodega"}
+              <span className="px-6 py-2 rounded-xl bg-sky-600 text-white font-semibold text-lg flex items-center gap-2 w-full sm:w-auto justify-center sm:justify-start">
+                <FiCpu className="w-5 h-5" />
+                Movimiento
               </span>
               <div className="flex flex-wrap items-center gap-2 sm:gap-3 w-full sm:w-auto justify-start sm:justify-end">
-                <span className="px-4 py-1 rounded-xl border border-yellow-300 bg-yellow-50 text-yellow-700 font-semibold text-base flex items-center gap-2 w-full sm:w-auto justify-center sm:justify-start">
+                <span className="px-4 py-1 rounded-xl border border-sky-300 bg-sky-50 text-sky-800 font-semibold text-base flex items-center gap-2 w-full sm:w-auto justify-center sm:justify-start">
                   <FiAlertCircle className="w-5 h-5" /> Pendiente
                 </span>
-                <span className="px-3 py-1 rounded-full bg-emerald-100 text-emerald-700 font-bold text-base border border-emerald-200 w-full sm:w-auto text-center">
-                  {requests.length} tareas
+                <span className="px-3 py-1 rounded-full bg-sky-100 text-sky-800 font-bold text-base border border-sky-200 w-full sm:w-auto text-center">
+                  {tareasProcesamientoOperarioVisibles.length} tareas
                 </span>
               </div>
             </div>
-            {!nextRequest ? (
-              <div className="flex min-h-88 items-center justify-center rounded-3xl border border-slate-200 bg-slate-50 px-6 py-10 text-center">
+            {!nextProcTarea ? (
+              <div className="flex min-h-88 flex-col items-center justify-center gap-3 rounded-3xl border border-slate-200 bg-slate-50 px-6 py-10 text-center">
                 <p className="text-2xl font-semibold text-slate-700">
-                  No hay solicitudes pendientes.
+                  {esVistaSoloProcesador && tareasProcesadorEsperandoOperario > 0
+                    ? "Ninguna orden en curso todavía."
+                    : "No hay órdenes en curso para procesar."}
                 </p>
+                {esVistaSoloProcesador && tareasProcesadorEsperandoOperario > 0 ? (
+                  <p className="max-w-md text-sm text-slate-600">
+                    Cuando el operario pase una orden a <strong>en curso</strong>, aparecerá acá para que la marques
+                    como <strong>terminada</strong>.
+                  </p>
+                ) : null}
               </div>
             ) : (
-              <div className="bg-white rounded-2xl  p-4 sm:p-8">
+              <div className="rounded-2xl bg-white p-4 sm:p-8">
                 <div className="flex flex-col items-center">
-                  <span className="text-slate-500 font-semibold text-lg mb-4">
-                    Transferencia de:
-                  </span>
-                  <div className="flex flex-col sm:flex-row items-center justify-center gap-4 sm:gap-6 w-full">
-                    <div
-                      className={`flex flex-col items-center rounded-2xl px-6 sm:px-8 py-5 sm:py-6 w-full sm:w-64 max-w-md border ${originStyle.bg} ${originStyle.border}`}
-                    >
-                      <FiMapPin className={`w-8 h-8 mb-2 ${originStyle.icon}`} />
-                      <span className={`text-xs mb-1 ${originStyle.label}`}>
-                        ORIGEN
-                      </span>
-                      <span className={`text-2xl font-bold ${originStyle.text}`}>
-                        {nextRequest.sourceZone === "bodega"
-                          ? "Bodega"
-                          : nextRequest.sourceZone === "salida"
-                            ? "Salida"
-                            : "Ingreso"}{" "}
-                        {nextRequest.sourcePosition}
-                      </span>
-                    </div>
-                    <FiArrowRight className="w-8 h-8 sm:w-10 sm:h-10 text-slate-300" />
-                    <div
-                      className={`flex flex-col items-center rounded-2xl px-6 sm:px-8 py-5 sm:py-6 w-full sm:w-64 max-w-md border ${destinationStyle.bg} ${destinationStyle.border}`}
-                    >
-                      <FiBox className={`w-8 h-8 mb-2 ${destinationStyle.icon}`} />
-                      <span className={`text-xs mb-1 ${destinationStyle.label}`}>
-                        DESTINO
-                      </span>
-                      <span className={`text-2xl font-bold ${destinationStyle.text}`}>
-                        {nextRequest.type === "a_bodega"
-                          ? `bodega ${nextRequest.targetPosition}`
-                          : nextRequest.type === "a_salida"
-                            ? `salida ${nextRequest.targetPosition}`
-                            : nextRequest.targetPosition &&
-                                String(nextRequest.targetPosition).trim() !== "" &&
-                                nextRequest.targetPosition !== undefined &&
-                                nextRequest.targetPosition !== null
-                              ? `revisar ${nextRequest.targetPosition}`
-                              : "revisar"}
-                      </span>
-                    </div>
+                  <span className="text-slate-500 font-semibold text-lg mb-4">Próxima tarea</span>
+                  <div className="w-full rounded-2xl border border-sky-200 bg-linear-to-b from-sky-50/90 to-white px-6 py-6 text-center">
+                    <p className="font-mono text-xl font-bold text-sky-950">
+                      {String(nextProcTarea.numero ?? "").trim() || "—"}
+                    </p>
+                    <p className="mt-2 text-sm font-semibold text-slate-700">
+                      {String(nextProcTarea.clientName ?? nextProcTarea.clientId ?? "").trim() || "—"}
+                    </p>
+                    <p className="mt-2 text-left text-[10px] font-bold uppercase tracking-wide text-slate-500">
+                      Primario
+                    </p>
+                    <p className="mt-0.5 line-clamp-3 text-left text-sm text-slate-800">
+                      {String(nextProcTarea.productoPrimarioTitulo ?? "").trim() || "—"}
+                    </p>
+                    <p className="mt-3 text-left text-[10px] font-bold uppercase tracking-wide text-slate-500">
+                      Secundario (objetivo)
+                    </p>
+                    <p className="mt-0.5 line-clamp-2 text-left text-sm text-slate-800">
+                      → {String(nextProcTarea.productoSecundarioTitulo ?? "").trim() || "—"}
+                    </p>
+                    <p className="mt-3 text-left text-sm font-semibold text-slate-700">
+                      Cantidad: {formatCantidadProcesamientoCola(nextProcTarea.cantidadPrimario)} ·{" "}
+                      {etiquetaUnidadProcesamientoCola(nextProcTarea)}
+                      {nextProcTarea.estimadoUnidadesSecundario != null &&
+                      Number.isFinite(Number(nextProcTarea.estimadoUnidadesSecundario))
+                        ? ` · est. sec. ${formatCantidadProcesamientoCola(nextProcTarea.estimadoUnidadesSecundario)} u.`
+                        : ""}
+                    </p>
                   </div>
-                  <hr className="my-8 border-slate-200 w-full" />
-                  <div className="flex flex-wrap justify-center gap-4 sm:gap-8 w-full mb-6">
-                    <div className="flex items-center gap-1 sm:gap-2 text-center sm:text-left">
-                      <FiUser className="w-5 h-5 text-slate-400" />
-                      <span className="text-xs text-slate-500">Solicitado por</span>
-                      <span className="font-semibold text-slate-700">
-                        {nextRequest.createdBy}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-1 sm:gap-2 text-center sm:text-left">
-                      <FiCalendar className="w-5 h-5 text-slate-400" />
-                      <span className="text-xs text-slate-500">Fecha y hora</span>
-                      <span className="font-semibold text-slate-700">
-                        {nextRequest.createdAt}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-1 sm:gap-2 text-center sm:text-left">
-                      <FiPackage className="w-5 h-5 text-slate-400" />
-                      <span className="text-xs text-slate-500">ID de solicitud</span>
-                      <span className="font-semibold text-slate-700">
-                        {nextRequest.id}
-                      </span>
-                    </div>
-                  </div>
+                  <p className="mt-6 text-center text-sm font-bold text-sky-800">
+                    {procProcesadorBusy ? "Guardando…" : "Tocá la tarjeta para marcar como terminada"}
+                  </p>
                 </div>
               </div>
             )}
@@ -471,30 +1043,43 @@ export default function RequestsQueue(props: RequestsQueueProps) {
           <button
             type="button"
             className={`flex-1 flex items-center justify-center gap-2 rounded-2xl font-bold text-lg py-4 shadow transition-all border-2 focus:outline-none focus:ring-2
-              ${alertasOperario.length > 0
-                ? "bg-red-100 hover:bg-red-200 text-red-700 border-red-200 focus:ring-red-300"
-                : "bg-slate-100 text-slate-400 border-slate-200 focus:ring-slate-300 cursor-not-allowed"}
+              ${
+                deshabilitarBandejaYllamarProcesador
+                  ? "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400 focus:ring-slate-200"
+                  : totalAlertasOperario > 0
+                    ? "bg-red-100 hover:bg-red-200 text-red-700 border-red-200 focus:ring-red-300"
+                    : "bg-slate-100 text-slate-400 border-slate-200 focus:ring-slate-300 cursor-not-allowed"
+              }
             `}
             style={{ minWidth: 0 }}
-            onClick={() => alertasOperario.length > 0 && setShowAlertModal(true)}
-            disabled={alertasOperario.length === 0}
+            onClick={() =>
+              totalAlertasOperario > 0 && !deshabilitarBandejaYllamarProcesador && setShowAlertModal(true)
+            }
+            disabled={totalAlertasOperario === 0 || deshabilitarBandejaYllamarProcesador}
           >
-            <FiAlertCircle className="w-6 h-6" />
-            Alertas
-            {alertasOperario.length > 0 && (
+            <FiAlertCircle className="w-6 h-6 shrink-0" />
+            <span className="truncate">{bandejaLabel}</span>
+            {totalAlertasOperario > 0 && (
               <span
-                className="ml-2 px-2 py-0.5 rounded-full bg-red-500 text-white text-base font-bold animate-pulse"
+                className="ml-2 animate-pulse rounded-full bg-red-500 px-2 py-0.5 text-base font-bold text-white"
                 style={{ minWidth: 28, textAlign: "center" }}
               >
-                {alertasOperario.length}
+                {totalAlertasOperario}
               </span>
             )}
           </button>
           <button
             type="button"
-            className="flex-1 flex items-center justify-center gap-2 rounded-2xl bg-yellow-100 hover:bg-yellow-200 text-yellow-700 font-bold text-lg py-4 shadow transition-all border-2 border-yellow-200 focus:outline-none focus:ring-2 focus:ring-yellow-300"
+            className={`flex-1 flex items-center justify-center gap-2 rounded-2xl font-bold text-lg py-4 shadow transition-all border-2 focus:outline-none focus:ring-2 ${
+              deshabilitarBandejaYllamarProcesador
+                ? "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400 focus:ring-slate-200"
+                : "border-yellow-200 bg-yellow-100 text-yellow-700 hover:bg-yellow-200 focus:ring-yellow-300"
+            }`}
             style={{ minWidth: 0 }}
-            onClick={handleCall}
+            onClick={() => {
+              if (!deshabilitarBandejaYllamarProcesador) handleCall();
+            }}
+            disabled={deshabilitarBandejaYllamarProcesador}
           >
             <FiPhoneCall className="w-6 h-6" />
             Llamar
@@ -544,6 +1129,7 @@ export default function RequestsQueue(props: RequestsQueueProps) {
                         ingresos: "Ingreso",
                         bodega: "Bodega",
                         salida: "Salida",
+                        procesamiento: "Movimiento",
                       };
                       return `${labelMap[reviewModal.order.sourceZone]} ${reviewModal.order.sourcePosition}`;
                     })()}
@@ -775,7 +1361,9 @@ export default function RequestsQueue(props: RequestsQueueProps) {
                       autoId: (alertaSeleccionada.alerta as any).autoId,
                       name: (alertaSeleccionada.alerta as any).name,
                       temperature: (alertaSeleccionada.alerta as any).temperature,
-                      zone: "bodega",
+                      zone:
+                        ((alertaSeleccionada.alerta as { zone?: OrderSource }).zone as OrderSource) ??
+                        "bodega",
                     })
                   }
                 >
@@ -898,8 +1486,22 @@ export default function RequestsQueue(props: RequestsQueueProps) {
                 onSubmit={(e) => {
                   e.preventDefault();
                   const formData = new FormData(e.currentTarget);
-                  const temp = Number(formData.get("temp"));
-                  if (!Number.isNaN(temp)) {
+                  const raw = formData.get("temp");
+                  const temp =
+                    raw === "" || raw == null ? NaN : Number(String(raw).replace(",", "."));
+                  if (Number.isNaN(temp) || !Number.isFinite(temp)) {
+                    return;
+                  }
+                  if (alertaSeleccionada && onOperarioResolveTemperatureAlert) {
+                    onOperarioResolveTemperatureAlert({
+                      position: editTempModal.position,
+                      newTemp: temp,
+                      zone: editTempModal.zone,
+                      alertIndex: alertaSeleccionada.idx,
+                    });
+                    setShowSolveModal(false);
+                    setAlertaSeleccionada(null);
+                  } else {
                     handleUpdateAlertTemperature(editTempModal.position, temp, {
                       zone: editTempModal.zone,
                       name: editTempModal.name,
@@ -911,8 +1513,8 @@ export default function RequestsQueue(props: RequestsQueueProps) {
                         alertaSeleccionada.idx,
                       );
                     }
-                    setEditTempModal(null);
                   }
+                  setEditTempModal(null);
                 }}
                 className="flex flex-col gap-1 w-full"
               >
@@ -948,8 +1550,7 @@ export default function RequestsQueue(props: RequestsQueueProps) {
                     step="any"
                     inputMode="decimal"
                     className="w-full flex-1 rounded-lg border border-blue-200 px-2 py-1 text-sm font-semibold text-blue-900 shadow-sm focus:ring-2 focus:ring-blue-300 outline-none transition"
-                    placeholder="Solo por imagen"
-                    readOnly
+                    placeholder="Ej. 2,5 o subí imagen"
                   />
                   <button
                     type="button"
@@ -996,19 +1597,19 @@ export default function RequestsQueue(props: RequestsQueueProps) {
                     setEditTempLoading(true);
                     try {
                       const res = await fetch(
-                        "https://asistencia-dos.onrender.com/api/image/analyze",
+                        "http://localhost:3000/api/image/analyze",
                         {
                           method: "POST",
                           body: fd,
                         },
                       );
                       const data = await res.json();
+                      const tempValue =
+                        temperatureStringFromAnalyzeResponse(data);
                       if (
-                        data.numbersDetected &&
-                        data.numbersDetected.length > 0
+                        tempValue !== null &&
+                        Number.isFinite(Number(tempValue))
                       ) {
-                        let tempValue = data.numbersDetected[0];
-                        tempValue = tempValue.replace(",", ".");
                         if (tempInput) tempInput.value = tempValue;
                       } else {
                         alert("No se detecto temperatura en la imagen.");

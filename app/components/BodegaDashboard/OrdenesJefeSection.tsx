@@ -1,12 +1,208 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { FiArchive, FiBox, FiRepeat, FiSearch, FiAlertTriangle } from "react-icons/fi";
+import {
+  FiArchive,
+  FiBox,
+  FiCpu,
+  FiGrid,
+  FiMapPin,
+  FiPackage,
+  FiRepeat,
+  FiSearch,
+  FiAlertTriangle,
+  FiX,
+} from "react-icons/fi";
 
 import React, { useState, useMemo } from "react";
+import {
+  clientLabelFromList,
+  formatSlotCantidadDisplay,
+  occupiedSlotVisualClasses,
+  secondaryTitleFromSlot,
+  slotLooksLikeProcesamiento,
+  type SlotCantidadContext,
+} from "@/app/lib/bodegaDisplay";
+import type { Client, Role, Slot } from "@/app/interfaces/bodega";
+import type { SolicitudProcesamiento } from "@/app/types/solicitudProcesamiento";
+import { ProcesamientoOrdenesActivasBodega } from "@/app/components/BodegaDashboard/ProcesamientoOrdenesActivasBodega";
+import { AsignarProcesadorProcesamientoModal } from "@/app/components/BodegaDashboard/AsignarProcesadorProcesamientoModal";
+import BodegaZonaCajaCard from "../bodega/BodegaZonaCajaCard";
+import VentasEnCursoMapButton from "../bodega/VentasEnCursoMapButton";
 import EntradaAlertButton from "../common/EntradaAlertButton";
 import { RiUserReceivedLine } from "react-icons/ri";
+import { temperatureStringFromAnalyzeResponse } from "@/app/lib/imageAnalyzeApi";
 
 const HIGH_TEMP_THRESHOLD = 5;
 
+type JefeModalAccent = "emerald" | "blue" | "orange" | "pink";
+
+const jefeModalAccentClass: Record<
+  JefeModalAccent,
+  {
+    header: string;
+    iconWrap: string;
+    iconColor: string;
+    cardBorder: string;
+    primary: string;
+    primaryHover: string;
+    selectFocus: string;
+  }
+> = {
+  emerald: {
+    header: "from-emerald-50 via-white to-slate-50/30",
+    iconWrap: "bg-emerald-100",
+    iconColor: "text-emerald-600",
+    cardBorder: "border-emerald-100",
+    primary: "bg-emerald-600",
+    primaryHover: "hover:bg-emerald-500",
+    selectFocus: "focus:border-emerald-400 focus:ring-emerald-200/60",
+  },
+  blue: {
+    header: "from-blue-50 via-white to-slate-50/30",
+    iconWrap: "bg-blue-100",
+    iconColor: "text-blue-600",
+    cardBorder: "border-blue-100",
+    primary: "bg-blue-600",
+    primaryHover: "hover:bg-blue-500",
+    selectFocus: "focus:border-blue-400 focus:ring-blue-200/60",
+  },
+  orange: {
+    header: "from-orange-50 via-white to-slate-50/30",
+    iconWrap: "bg-orange-100",
+    iconColor: "text-orange-600",
+    cardBorder: "border-orange-100",
+    primary: "bg-orange-600",
+    primaryHover: "hover:bg-orange-500",
+    selectFocus: "focus:border-orange-400 focus:ring-orange-200/60",
+  },
+  pink: {
+    header: "from-pink-50 via-white to-slate-50/30",
+    iconWrap: "bg-pink-100",
+    iconColor: "text-pink-600",
+    cardBorder: "border-pink-100",
+    primary: "bg-pink-600",
+    primaryHover: "hover:bg-pink-500",
+    selectFocus: "focus:border-pink-400 focus:ring-pink-200/60",
+  },
+};
+
+function JefeOrderModalShell({
+  id,
+  title,
+  description,
+  accent,
+  icon,
+  onClose,
+  children,
+  footer,
+  contentMaxWidthClass = "max-w-lg",
+  bodyMaxHeightClass = "max-h-[min(62vh,480px)]",
+}: {
+  id: string;
+  title: string;
+  description?: string;
+  accent: JefeModalAccent;
+  icon: React.ReactNode;
+  onClose: () => void;
+  children: React.ReactNode;
+  footer: React.ReactNode;
+  /** Ancho del panel (p. ej. tablas anchas: `max-w-4xl`). */
+  contentMaxWidthClass?: string;
+  bodyMaxHeightClass?: string;
+}) {
+  const a = jefeModalAccentClass[accent];
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/45 p-3 backdrop-blur-[2px] sm:p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby={`${id}-title`}
+      onClick={onClose}
+    >
+      <div
+        className={`w-full ${contentMaxWidthClass} overflow-hidden rounded-3xl border bg-white shadow-2xl shadow-slate-900/10 ring-1 ring-black/5 ${a.cardBorder}`}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div
+          className={`relative flex items-start gap-4 border-b border-slate-100/80 bg-linear-to-r px-5 py-5 sm:px-6 ${a.header}`}
+        >
+          <div
+            className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl shadow-inner ${a.iconWrap}`}
+          >
+            <span className={a.iconColor}>{icon}</span>
+          </div>
+          <div className="min-w-0 flex-1 pr-10">
+            <h2
+              id={`${id}-title`}
+              className="text-lg font-bold tracking-tight text-slate-900 sm:text-xl"
+            >
+              {title}
+            </h2>
+            {description ? (
+              <p className="mt-1.5 text-sm leading-relaxed text-slate-600">{description}</p>
+            ) : null}
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="absolute right-4 top-4 rounded-xl p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-300"
+            aria-label="Cerrar"
+          >
+            <FiX className="h-5 w-5" strokeWidth={2} />
+          </button>
+        </div>
+        <div className={`${bodyMaxHeightClass} overflow-y-auto px-5 py-5 sm:px-6`}>
+          <div className="flex flex-col gap-5">{children}</div>
+        </div>
+        <div className="border-t border-slate-100 bg-slate-50/90 px-5 py-4 sm:px-6">{footer}</div>
+      </div>
+    </div>
+  );
+}
+
+function JefeModalField({
+  label,
+  icon,
+  hint,
+  children,
+}: {
+  label: string;
+  icon?: React.ReactNode;
+  hint?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center gap-2">
+        {icon ? (
+          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-500">
+            {icon}
+          </span>
+        ) : null}
+        <span className="text-xs font-bold uppercase tracking-wider text-slate-500">{label}</span>
+      </div>
+      {children}
+      {hint ? <p className="text-xs leading-relaxed text-slate-500">{hint}</p> : null}
+    </div>
+  );
+}
+
+function JefeModalEmptyHint({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="flex gap-2.5 rounded-xl border border-amber-200/80 bg-amber-50/90 px-3.5 py-2.5 text-xs leading-snug text-amber-950">
+      <FiAlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" aria-hidden />
+      <div>{children}</div>
+    </div>
+  );
+}
+
+const jefeSelectClass =
+  "w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 shadow-sm transition placeholder:text-slate-400 focus:outline-none focus:ring-2";
+
+const jefeReadonlyClass =
+  "w-full rounded-xl border border-slate-200/90 bg-slate-50 px-3 py-2.5 text-sm font-medium text-slate-700";
+
+const jefeBtnGhost =
+  "inline-flex w-full items-center justify-center rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-300 sm:w-auto";
 
 // Estado para forzar re-render cuando se asigna una alerta debe ir dentro del componente
 
@@ -51,6 +247,30 @@ export default function OrdenesJefeSection(props: {
   orderModalType: string | null;
   setOrderModalType: (type: string | null) => void;
   headerActions?: React.ReactNode;
+  clients?: Client[];
+  /** Código de cuenta de la bodega interna (Firestore `warehouses.codeCuenta`) para listar procesamiento. */
+  warehouseCodeCuenta?: string;
+  sessionUid?: string;
+  sessionRole?: Role;
+  operariosBodega?: Array<{ id: string; name: string; roleLabel?: string }>;
+  /** Solo rol `procesador` — para el modal «Procesamiento» del mapa del jefe. */
+  procesadoresBodega?: Array<{ id: string; name: string }>;
+  tareasProcesamientoOperario?: Array<Record<string, unknown>>;
+  onPushTareaProcesamientoOperario?: (tarea: Record<string, unknown>) => void;
+  warehouseId?: string;
+  onProcesamientoTerminadoInventario?: (
+    nextSlots: Slot[],
+    meta: {
+      row: SolicitudProcesamiento;
+      deductedKg: number;
+      warning?: string;
+      quitarTareaDeCola?: boolean;
+    },
+  ) => void | Promise<void>;
+  /** Órdenes de procesamiento en **Terminado** (disponibles para devolver al mapa vía traslado). */
+  solicitudesProcesamientoTerminadasDisponibles?: SolicitudProcesamiento[];
+  /** Todas las solicitudes terminadas (suscripción); sirve para mostrar unidades secundario en el mapa aunque no estén persistidas en el slot. */
+  solicitudesProcesamientoTerminadas?: SolicitudProcesamiento[];
 }) {
   const ITEMS_PER_PAGE = 4;
   const [entradaPage, setEntradaPage] = useState(0);
@@ -93,13 +313,56 @@ export default function OrdenesJefeSection(props: {
     handleCreateOrderSalida,
     orderModalType,
     setOrderModalType,
+    clients = [],
+    warehouseCodeCuenta = "",
+    sessionUid,
+    sessionRole,
+    operariosBodega = [],
+    procesadoresBodega = [],
+    tareasProcesamientoOperario = [],
+    onPushTareaProcesamientoOperario,
+    warehouseId = "",
+    onProcesamientoTerminadoInventario,
+    solicitudesProcesamientoTerminadasDisponibles = [],
+    solicitudesProcesamientoTerminadas = [],
   } = props;
+
+  const slotCantidadProcesamientoCtx = useMemo((): SlotCantidadContext | undefined => {
+    if (!solicitudesProcesamientoTerminadas.length) return undefined;
+    return { solicitudesTerminadas: solicitudesProcesamientoTerminadas };
+  }, [solicitudesProcesamientoTerminadas]);
 
   // Mark optional handler as intentionally unused in this view
   void handleCreateOrderSalida;
 
   // Estado para loading del modal de editar temperatura
   const [editTempLoading, setEditTempLoading] = React.useState(false);
+  const [trasladoBodegaOrigenTipo, setTrasladoBodegaOrigenTipo] = useState<"bodega" | "procesamiento">(
+    "bodega",
+  );
+  const [trasladoProcesamientoKey, setTrasladoProcesamientoKey] = useState("");
+
+  React.useEffect(() => {
+    if (orderModalType === "bodega") {
+      setTrasladoBodegaOrigenTipo("bodega");
+      setTrasladoProcesamientoKey("");
+    }
+  }, [orderModalType]);
+
+  React.useEffect(() => {
+    if (orderModalType !== "bodega" || trasladoBodegaOrigenTipo !== "procesamiento") return;
+    const first = solicitudesProcesamientoTerminadasDisponibles[0];
+    if (!first) {
+      setTrasladoProcesamientoKey("");
+      return;
+    }
+    const k = `${first.clientId}::${first.id}`;
+    setTrasladoProcesamientoKey((prev) =>
+      solicitudesProcesamientoTerminadasDisponibles.some((s) => `${s.clientId}::${s.id}` === prev)
+        ? prev
+        : k,
+    );
+  }, [orderModalType, trasladoBodegaOrigenTipo, solicitudesProcesamientoTerminadasDisponibles]);
 
   type ZoneKey = "entrada" | "bodega" | "salida";
   type ModalKind = "alertas" | "tareas";
@@ -115,7 +378,6 @@ export default function OrdenesJefeSection(props: {
     zone: ZoneKey;
     kind: ModalKind;
   } | null>(null);
-
   React.useEffect(() => {
     const maxPage = Math.max(
       0,
@@ -211,12 +473,13 @@ export default function OrdenesJefeSection(props: {
 
   // Estado para mostrar el modal de llamados
   const [showLlamadosModal, setShowLlamadosModal] = React.useState(false);
+  const [modalAsignarProcesadorOpen, setModalAsignarProcesadorOpen] = useState(false);
 
   return (
     <section className="grid gap-4 lg:grid-cols-2 xl:grid-cols-4">
       {isJefe && (
         <div className="col-span-4 mb-8">
-          <div className="flex flex-col gap-4 sm:grid sm:grid-cols-2 lg:grid-cols-4">
+          <div className="flex flex-col gap-4 sm:grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
             {/* Ingresos */}
             <button
               type="button"
@@ -258,6 +521,18 @@ export default function OrdenesJefeSection(props: {
               <span className="text-[11px] text-slate-500">
                 Consultar inventario
               </span>
+            </button>
+            {/* Procesamiento: órdenes ya terminadas (solo consulta) */}
+            <button
+              type="button"
+              className="flex flex-col items-start rounded-xl p-3 shadow-sm bg-white text-slate-900 h-20 border border-slate-200 group transition hover:bg-slate-50"
+              onClick={() => setModalAsignarProcesadorOpen(true)}
+            >
+              <div className="flex items-center gap-1 mb-1">
+                <FiCpu className="w-5 h-5 text-slate-500" />
+                <span className="text-base font-semibold">Procesamiento</span>
+              </div>
+              <span className="text-[11px] text-slate-500">Finalizados</span>
             </button>
             {/* Crear Salida */}
             <button
@@ -335,8 +610,26 @@ export default function OrdenesJefeSection(props: {
                     </div>
                     <div className="flex items-center gap-2">
                       <span className="font-semibold text-slate-600">Cliente:</span>
-                      <span>{selectedBoxModal.client || "—"}</span>
+                      <span>
+                        {clientLabelFromList(selectedBoxModal.client || "", clients)}
+                      </span>
                     </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="font-semibold text-slate-600">Cantidad:</span>
+                      <span>
+                        {formatSlotCantidadDisplay(selectedBoxModal, slotCantidadProcesamientoCtx)}
+                      </span>
+                    </div>
+                    {slotLooksLikeProcesamiento(selectedBoxModal) ? (
+                      <div className="flex flex-wrap items-start gap-2">
+                        <span className="font-semibold text-slate-600 shrink-0">
+                          Producto secundario (procesado):
+                        </span>
+                        <span className="break-words text-left">
+                          {secondaryTitleFromSlot(selectedBoxModal) || "—"}
+                        </span>
+                      </div>
+                    ) : null}
                     <div className="flex items-center gap-2">
                       <span className="font-semibold text-slate-600">Posición:</span>
                       <span>{selectedBoxModal.position}</span>
@@ -504,19 +797,19 @@ export default function OrdenesJefeSection(props: {
                               setEditTempLoading(true);
                               try {
                                 const res = await fetch(
-                                  "https://asistencia-dos.onrender.com/api/image/analyze",
+                                  "http://localhost:3000/api/image/analyze",
                                   {
                                     method: "POST",
                                     body: formData,
                                   },
                                 );
                                 const data = await res.json();
+                                const tempValue =
+                                  temperatureStringFromAnalyzeResponse(data);
                                 if (
-                                  data.numbersDetected &&
-                                  data.numbersDetected.length > 0
+                                  tempValue !== null &&
+                                  Number.isFinite(Number(tempValue))
                                 ) {
-                                  let tempValue = data.numbersDetected[0];
-                                  tempValue = tempValue.replace(",", ".");
                                   if (tempInput)
                                     (tempInput as HTMLInputElement).value =
                                       tempValue;
@@ -591,9 +884,9 @@ export default function OrdenesJefeSection(props: {
               </div>
             </div>
           )}
-          <div className="flex flex-col lg:flex-row items-stretch gap-8">
-            {/* Entrada division left */}
-            <div className="flex flex-col items-start rounded-3xl border border-green-200 bg-emerald-50 p-2 sm:p-4 w-full max-w-full sm:max-w-xs lg:max-w-60 h-full lg:min-h-[435px]">
+          {/* Mismo criterio que EstadoBodegaSection (admin): grid estira fila al contenido más alto; mapa completo sin recorte */}
+          <div className="grid gap-6 xl:grid-cols-[1fr_1.8fr_1fr] 2xl:grid-cols-[1fr_2.1fr_1fr]">
+            <div className="flex h-full min-h-0 flex-col items-start rounded-3xl border border-green-200 bg-emerald-50 p-2 sm:p-4 min-h-45 w-full max-w-full sm:max-w-xs lg:max-w-60">
               <div className="flex items-center justify-between w-full mb-2">
                 <h3 className="text-sm sm:text-lg font-semibold text-emerald-600 flex items-center gap-2">
                   <span className="inline-block">
@@ -741,31 +1034,26 @@ export default function OrdenesJefeSection(props: {
                   </div>
                 </div>
               ) : null}
-              <div className="w-full flex flex-col gap-1 sm:gap-2">
+              <div className="w-full flex flex-col gap-2 sm:gap-4">
                 {sortedInboundBoxes.length === 0 ? (
                   <div className="text-xs text-emerald-500">
                     No hay cajas en ingreso.
                   </div>
                 ) : (
                   <>
-                    {inboundPageItems.map((box, idx) => (
-                      <div
-                        key={`${box.position}-${box.autoId ?? "no-id"}-${idx}`}
-                        className="rounded-xl border border-emerald-200 bg-white p-1 sm:p-2 text-[11px] sm:text-xs text-emerald-700 w-full"
-                      >
-                        <div className="font-semibold">
-                          {box.name || "Sin nombre"}
-                        </div>
-                        <div>Id: {box.autoId}</div>
-                        <div>Cliente: {box.client || "—"}</div>
-                        <div>
-                          Temp:{" "}
-                          {typeof box.temperature === "number"
-                            ? `${box.temperature} °C`
-                            : "Sin temperatura"}
-                        </div>
-                      </div>
-                    ))}
+                    {inboundPageItems.map((box, idx) => {
+                      const isHighTemp =
+                        typeof box.temperature === "number" &&
+                        box.temperature > HIGH_TEMP_THRESHOLD;
+                      return (
+                        <BodegaZonaCajaCard
+                          key={`${box.position}-${box.autoId ?? "no-id"}-${idx}`}
+                          box={box}
+                          variant="entrada"
+                          alertaTemperaturaAlta={isHighTemp}
+                        />
+                      );
+                    })}
                     {sortedInboundBoxes.length > ITEMS_PER_PAGE ? (
                       <div className="flex items-center justify-between mt-2 text-[11px] sm:text-xs text-emerald-700">
                         <button
@@ -797,15 +1085,26 @@ export default function OrdenesJefeSection(props: {
                 )}
               </div>
             </div>
-            {/* Mapa de Bodega section center */}
-            <div className="flex-[1.2] rounded-2xl bg-white p-2 sm:p-4 shadow-md border border-blue-200 w-full relative h-full lg:min-h-[380px] flex flex-col">
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-2 sm:mb-4">
-                <h2 className="text-sm sm:text-lg font-semibold text-slate-900 flex items-center gap-1 sm:gap-2">
-                  <span className="inline-block">
-                    <FiArchive className="w-4 h-4 sm:w-5 sm:h-5 text-cyan-400" />
-                  </span>
-                  Mapa de Bodega
-                </h2>
+            <div className="min-w-0 flex flex-col">
+            <div className="self-start w-full rounded-2xl border border-blue-200 bg-white p-2 sm:p-4 shadow-md relative">
+              <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 mb-2 sm:mb-4">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h2 className="text-sm sm:text-lg font-semibold text-slate-900 flex items-center gap-1 sm:gap-2">
+                    <span className="inline-block">
+                      <FiArchive className="w-4 h-4 sm:w-5 sm:h-5 text-cyan-400" />
+                    </span>
+                    Mapa de Bodega
+                  </h2>
+                  {warehouseCodeCuenta.trim() ? (
+                    <VentasEnCursoMapButton
+                      clients={clients}
+                      warehouseCodeCuenta={warehouseCodeCuenta}
+                      operariosBodega={operariosBodega}
+                      tareasProcesamientoOperario={tareasProcesamientoOperario}
+                      onPushTareaProcesamientoOperario={onPushTareaProcesamientoOperario}
+                    />
+                  ) : null}
+                </div>
                 {/* Indicadores de alertas y ocupadas para jefe */}
                 <div className="flex items-center gap-2 sm:justify-end sm:ml-auto">
                   {bodegaHighTempAlerts.length > 0 && (
@@ -1076,6 +1375,7 @@ export default function OrdenesJefeSection(props: {
                                       name: slot.name,
                                       autoId: slot.autoId,
                                       temperature: slot.temperature,
+                                      zone: "bodega",
                                     },
                                   ]);
                                 }}
@@ -1113,20 +1413,25 @@ export default function OrdenesJefeSection(props: {
               <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-4">
                 {slots.slice(0, 12).map((slot) => {
                   const isOccupied = slot.autoId && slot.autoId.trim() !== "";
+                  const tone = isOccupied ? occupiedSlotVisualClasses(slot as Slot) : null;
                   return (
                     <div
                       key={slot.position}
-                      className={`relative flex flex-col items-center justify-center rounded-3xl border border-slate-300 p-2 sm:p-4 transition ${isOccupied ? "bg-cyan-100 text-slate-900 cursor-pointer hover:ring-2 hover:ring-cyan-400" : "bg-slate-50 text-slate-400"}`}
+                      className={`relative flex flex-col items-center justify-center rounded-3xl border p-2 sm:p-4 transition ${
+                        isOccupied && tone
+                          ? tone.card
+                          : "border border-slate-300 bg-slate-50 text-slate-400"
+                      }`}
                       style={{ minHeight: 90, maxWidth: 140 }}
                       onClick={() => isOccupied && setSelectedBoxModal(slot)}
                     >
                       <span className="absolute top-1 left-1 text-[9px] font-semibold rounded-full px-1 py-0.5  text-slate-600">
                         {slot.position}
                       </span>
-                      {isOccupied ? (
+                      {isOccupied && tone ? (
                         <>
                           <div className="mb-1">
-                            <FiBox className="w-4 h-4 sm:w-6 sm:h-6 text-cyan-400" />
+                            <FiBox className={`w-4 h-4 sm:w-6 sm:h-6 ${tone.icon}`} />
                           </div>
                           <div className="font-semibold text-[clamp(0.65rem,1vw,0.85rem)] text-center truncate w-full">
                             {slot.name || "Sin nombre"}
@@ -1134,7 +1439,9 @@ export default function OrdenesJefeSection(props: {
                           <div className="text-[clamp(0.7rem,1.5vw,0.85rem)] mt-1 text-center truncate w-full">
                             {slot.autoId}
                           </div>
-                          <div className="mt-2 text-[clamp(0.7rem,1.5vw,0.85rem)] font-medium bg-cyan-200 rounded-full px-1.5 sm:px-3 py-0.5 inline-block">
+                          <div
+                            className={`mt-2 text-[clamp(0.7rem,1.5vw,0.85rem)] font-medium rounded-full px-1.5 sm:px-3 py-0.5 inline-block ${tone.pill}`}
+                          >
                             {typeof slot.temperature === "number"
                               ? `${slot.temperature} °C`
                               : "Sin temperatura"}
@@ -1154,12 +1461,14 @@ export default function OrdenesJefeSection(props: {
                   );
                 })}
               </div>
-              <div className="flex flex-wrap items-center justify-end mt-2 sm:mt-4 gap-1 sm:gap-3">
+              <div className="flex flex-wrap items-center justify-end mt-2 sm:mt-4 gap-x-3 gap-y-1 sm:gap-3">
                 <div className="flex items-center gap-1">
-                  <span className="w-2 h-2 sm:w-3 sm:h-3 rounded-full bg-cyan-400 inline-block"></span>
-                  <span className="text-[10px] sm:text-xs text-slate-600">
-                    Ocupada
-                  </span>
+                  <span className="h-2.5 w-3 sm:h-3 sm:w-4 rounded-sm bg-cyan-200 border border-cyan-400 inline-block" />
+                  <span className="text-[10px] sm:text-xs text-slate-600">Ocupada (primario)</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <span className="h-2.5 w-3 sm:h-3 sm:w-4 rounded-sm bg-sky-500 border border-sky-700 inline-block" />
+                  <span className="text-[10px] sm:text-xs text-slate-600">Ocupada (procesado)</span>
                 </div>
                 <div className="flex items-center gap-1">
                   <span className="w-2 h-2 sm:w-3 sm:h-3 rounded-full bg-slate-300 inline-block"></span>
@@ -1169,15 +1478,31 @@ export default function OrdenesJefeSection(props: {
                 </div>
               </div>
             </div>
-            {/* Salida division right */}
-            <div className="flex flex-col items-start rounded-3xl border border-pink-200 bg-pink-50 p-4 sm:p-6 w-full max-w-full sm:max-w-xs lg:max-w-60 h-full lg:min-h-108.75">
+            <div className="mt-3 w-full rounded-2xl border border-sky-200 bg-white p-3 shadow-md sm:p-4">
+              <ProcesamientoOrdenesActivasBodega
+                clients={clients}
+                warehouseCodeCuenta={warehouseCodeCuenta}
+                warehouseId={warehouseId}
+                slots={slots as Slot[]}
+                layout="cards"
+                sessionUid={sessionUid}
+                sessionRole={sessionRole}
+                operariosBodega={operariosBodega}
+                procesadoresBodega={procesadoresBodega}
+                tareasProcesamientoOperario={tareasProcesamientoOperario}
+                onPushTareaProcesamientoOperario={onPushTareaProcesamientoOperario}
+                onProcesamientoTerminadoInventario={onProcesamientoTerminadoInventario}
+              />
+            </div>
+            </div>
+            <div className="flex h-full min-h-0 flex-col items-start rounded-3xl border border-pink-200 bg-pink-50 p-4 sm:p-6 min-h-30 w-full max-w-full sm:max-w-xs lg:max-w-60">
               <h3 className="text-base sm:text-lg font-semibold text-pink-600 mb-2 flex items-center gap-2">
                 <span className="inline-block">
                   <FiBox className="w-5 h-5 text-pink-400" />
                 </span>
                 Salida
               </h3>
-              <div className="w-full flex flex-col gap-2">
+              <div className="w-full flex flex-col gap-2 sm:gap-4">
                 {sortedOutboundBoxes.length === 0 ? (
                   <div className="text-xs text-pink-500">
                     No hay cajas en salida.
@@ -1185,22 +1510,11 @@ export default function OrdenesJefeSection(props: {
                 ) : (
                   <>
                     {outboundPageItems.map((box, idx) => (
-                      <div
+                      <BodegaZonaCajaCard
                         key={`${box.position}-${box.autoId ?? "no-id"}-${idx}`}
-                        className="rounded-xl border border-pink-200 bg-white p-2 text-xs text-pink-700 w-full"
-                      >
-                        <div className="font-semibold">
-                          {box.name || "Sin nombre"}
-                        </div>
-                        <div>Id: {box.autoId}</div>
-                        <div>Cliente: {box.client || "—"}</div>
-                        <div>
-                          Temp:{" "}
-                          {typeof box.temperature === "number"
-                            ? `${box.temperature} °C`
-                            : "Sin temperatura"}
-                        </div>
-                      </div>
+                        box={box}
+                        variant="salida"
+                      />
                     ))}
                     {sortedOutboundBoxes.length > ITEMS_PER_PAGE ? (
                       <div className="flex items-center justify-between mt-2 text-[11px] sm:text-xs text-pink-700">
@@ -1239,72 +1553,24 @@ export default function OrdenesJefeSection(props: {
 
       {/* Modals for each action */}
       {isJefe && orderModalType === "ingresos" && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4"
-          role="dialog"
-          aria-modal="true"
-          onClick={() => setOrderModalType(null)}
-        >
-          <div
-            className="w-full max-w-xl rounded-2xl bg-white p-6 shadow-xl"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h2 className="text-lg font-semibold text-slate-900 mb-4">
-              Registrar entrada
-            </h2>
-            {/* ...existing Ingresos form logic... */}
-            <div className="grid gap-3">
-              <label className="text-sm font-medium text-slate-600">
-                Origen
-              </label>
-              <input
-                value="Ingresos"
-                readOnly
-                className="w-full rounded-lg border border-slate-200 bg-slate-100 px-3 py-2 text-sm text-slate-600"
-              />
-              <label className="text-sm font-medium text-slate-600">
-                Caja en ingresos
-              </label>
-              <select
-                value={ingresoOrderSourcePosition}
-                onChange={(event) =>
-                  setIngresoOrderSourcePosition(Number(event.target.value))
-                }
-                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
-              >
-                {availableInboundForOrders.length === 0 ? (
-                  <option value={1}>Sin cajas</option>
-                ) : (
-                  sortByPosition(availableInboundForOrders).map((box) => (
-                    <option
-                      key={box.position}
-                      value={box.position}
-                    >{`Ingreso ${box.position} - ${box.name} (${box.autoId}) · ${box.client || "—"}`}</option>
-                  ))
-                )}
-              </select>
-              <label className="text-sm font-medium text-slate-600">
-                Posicion en bodega
-              </label>
-              <select
-                value={ingresoOrderTargetPosition}
-                onChange={(event) =>
-                  setIngresoOrderTargetPosition(Number(event.target.value))
-                }
-                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
-              >
-                {availableBodegaTargets.length === 0 ? (
-                  <option value={1}>Sin posiciones libres</option>
-                ) : (
-                  availableBodegaTargets.map((position) => (
-                    <option key={position} value={position}>
-                      {position}
-                    </option>
-                  ))
-                )}
-              </select>
+        <JefeOrderModalShell
+          id="jefe-modal-ingresos"
+          title="Registrar entrada"
+          description="Generar orden de ingreso"
+          accent="emerald"
+          icon={<FiArchive className="h-6 w-6" strokeWidth={2} />}
+          onClose={() => setOrderModalType(null)}
+          footer={
+            <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end sm:gap-3">
+              <button type="button" onClick={() => setOrderModalType(null)} className={jefeBtnGhost}>
+                Cancelar
+              </button>
               <button
                 type="button"
+                disabled={
+                  availableInboundForOrders.length === 0 ||
+                  availableBodegaTargets.length === 0
+                }
                 onClick={() =>
                   handleCreateOrder({
                     destination: "a_bodega",
@@ -1313,224 +1579,362 @@ export default function OrdenesJefeSection(props: {
                     targetPosition: ingresoOrderTargetPosition,
                   })
                 }
-                className="mt-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-500"
+                className={`inline-flex w-full items-center justify-center gap-2 rounded-xl px-5 py-2.5 text-sm font-bold text-white shadow-md transition focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 focus-visible:ring-offset-2 sm:w-auto disabled:pointer-events-none disabled:opacity-45 ${jefeModalAccentClass.emerald.primary} ${jefeModalAccentClass.emerald.primaryHover}`}
               >
                 Crear ingreso
               </button>
             </div>
-          </div>
-        </div>
+          }
+        >
+          <JefeModalField label="Origen" icon={<FiMapPin className="h-4 w-4" />}>
+            <input value="Ingresos" readOnly className={jefeReadonlyClass} tabIndex={-1} />
+          </JefeModalField>
+          <JefeModalField
+            label="Caja en ingresos"
+            icon={<FiPackage className="h-4 w-4" />}
+            hint="Solo aparecen cajas que aún no tienen una orden pendiente hacia bodega."
+          >
+            <select
+              value={ingresoOrderSourcePosition}
+              onChange={(event) =>
+                setIngresoOrderSourcePosition(Number(event.target.value))
+              }
+              disabled={availableInboundForOrders.length === 0}
+              className={`${jefeSelectClass} ${jefeModalAccentClass.emerald.selectFocus} disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400`}
+            >
+              {availableInboundForOrders.length === 0 ? (
+                <option value={1}>Sin cajas disponibles</option>
+              ) : (
+                sortByPosition(availableInboundForOrders).map((box) => (
+                  <option key={box.position} value={box.position}>
+                    {`Ingreso ${box.position} — ${box.name} (${box.autoId}) · ${box.client || "—"}`}
+                  </option>
+                ))
+              )}
+            </select>
+            {availableInboundForOrders.length === 0 ? (
+              <JefeModalEmptyHint>
+                No hay cajas en ingreso. Cuando el custodio registre mercancía, vas a poder elegirla acá.
+              </JefeModalEmptyHint>
+            ) : null}
+          </JefeModalField>
+          <JefeModalField
+            label="Posición en bodega"
+            icon={<FiGrid className="h-4 w-4" />}
+            hint="El operario ubicará la caja en el casillero que elijas."
+          >
+            <select
+              value={ingresoOrderTargetPosition}
+              onChange={(event) =>
+                setIngresoOrderTargetPosition(Number(event.target.value))
+              }
+              disabled={availableBodegaTargets.length === 0}
+              className={`${jefeSelectClass} ${jefeModalAccentClass.emerald.selectFocus} disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400`}
+            >
+              {availableBodegaTargets.length === 0 ? (
+                <option value={1}>Sin posiciones libres</option>
+              ) : (
+                availableBodegaTargets.map((position) => (
+                  <option key={position} value={position}>
+                    Casillero {position}
+                  </option>
+                ))
+              )}
+            </select>
+            {availableBodegaTargets.length === 0 ? (
+              <JefeModalEmptyHint>
+                El mapa está lleno o no hay cupos libres. Liberá una posición o revisá la capacidad de la bodega.
+              </JefeModalEmptyHint>
+            ) : null}
+          </JefeModalField>
+        </JefeOrderModalShell>
       )}
       {isJefe && orderModalType === "bodega" && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4"
-          role="dialog"
-          aria-modal="true"
-          onClick={() => setOrderModalType(null)}
-        >
-          <div
-            className="w-full max-w-xl rounded-2xl bg-white p-6 shadow-xl"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h2 className="text-lg font-semibold text-slate-900 mb-4">
-              Transferir cajas
-            </h2>
-            {/* ...existing Bodega a Bodega form logic... */}
-            <div className="grid gap-3">
-              <label className="text-sm font-medium text-slate-600">
-                Destino
-              </label>
-              <select
-                value="a_bodega"
-                disabled
-                className="w-full rounded-lg border border-slate-200 bg-slate-100 px-3 py-2 text-sm"
+        <JefeOrderModalShell
+          id="jefe-modal-bodega"
+          title="Transferir cajas"
+          description="Mové mercancía de un casillero a otro dentro del mapa de bodega."
+          accent="blue"
+          icon={<FiRepeat className="h-6 w-6" strokeWidth={2} />}
+          onClose={() => setOrderModalType(null)}
+          footer={
+            <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end sm:gap-3">
+              <button type="button" onClick={() => setOrderModalType(null)} className={jefeBtnGhost}>
+                Cancelar
+              </button>
+              <button
+                type="button"
+                disabled={
+                  availableBodegaTargets.length === 0 ||
+                  (trasladoBodegaOrigenTipo === "bodega" && availableBodegaForOrders.length === 0) ||
+                  (trasladoBodegaOrigenTipo === "procesamiento" &&
+                    (solicitudesProcesamientoTerminadasDisponibles.length === 0 ||
+                      !trasladoProcesamientoKey))
+                }
+                onClick={() => {
+                  if (trasladoBodegaOrigenTipo === "bodega") {
+                    handleCreateOrder({
+                      destination: "a_bodega",
+                      sourceZone: "bodega",
+                      sourcePosition: bodegaOrderSourcePosition,
+                      targetPosition: bodegaOrderTargetPosition,
+                    });
+                  } else {
+                    const parts = trasladoProcesamientoKey.split("::");
+                    const cid = parts[0]?.trim() ?? "";
+                    const sid = parts[1]?.trim() ?? "";
+                    const row = solicitudesProcesamientoTerminadasDisponibles.find(
+                      (s) => s.clientId === cid && s.id === sid,
+                    );
+                    if (!row) return;
+                    const uv = row.unidadPrimarioVisualizacion;
+                    handleCreateOrder({
+                      destination: "a_bodega",
+                      sourceZone: "procesamiento",
+                      sourcePosition: 0,
+                      targetPosition: bodegaOrderTargetPosition,
+                      procesamientoOrigen: {
+                        cuentaClientId: row.clientId,
+                        solicitudId: row.id,
+                        numero: row.numero,
+                        productoPrimarioTitulo: row.productoPrimarioTitulo,
+                        productoSecundarioTitulo: row.productoSecundarioTitulo,
+                        productoPrimarioId: row.productoPrimarioId,
+                        cantidadPrimario: row.cantidadPrimario,
+                        unidadPrimarioVisualizacion:
+                          uv === "peso" || uv === "cantidad" ? uv : undefined,
+                        estimadoUnidadesSecundario:
+                          typeof row.estimadoUnidadesSecundario === "number" &&
+                          Number.isFinite(row.estimadoUnidadesSecundario)
+                            ? row.estimadoUnidadesSecundario
+                            : row.estimadoUnidadesSecundario === null
+                              ? null
+                              : undefined,
+                      },
+                    });
+                  }
+                }}
+                className={`inline-flex w-full items-center justify-center gap-2 rounded-xl px-5 py-2.5 text-sm font-bold text-white shadow-md transition focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-2 sm:w-auto disabled:pointer-events-none disabled:opacity-45 ${jefeModalAccentClass.blue.primary} ${jefeModalAccentClass.blue.primaryHover}`}
               >
-                <option value="a_bodega">Bodega</option>
-              </select>
-              <label className="text-sm font-medium text-slate-600">
-                Origen
-              </label>
-              <input
-                value="Bodega"
-                readOnly
-                className="w-full rounded-lg border border-slate-200 bg-slate-100 px-3 py-2 text-sm text-slate-600"
-              />
-              <label className="text-sm font-medium text-slate-600">
-                Caja en bodega
-              </label>
+                Crear orden
+              </button>
+            </div>
+          }
+        >
+          <JefeModalField label="Destino de la orden" icon={<FiMapPin className="h-4 w-4" />}>
+            <select
+              value="a_bodega"
+              disabled
+              className={`${jefeReadonlyClass} cursor-not-allowed opacity-90`}
+            >
+              <option value="a_bodega">Bodega (mapa interno)</option>
+            </select>
+          </JefeModalField>
+          <JefeModalField label="Origen" icon={<FiBox className="h-4 w-4" />}>
+            <select
+              value={trasladoBodegaOrigenTipo}
+              onChange={(e) =>
+                setTrasladoBodegaOrigenTipo(e.target.value === "procesamiento" ? "procesamiento" : "bodega")
+              }
+              className={`${jefeSelectClass} ${jefeModalAccentClass.blue.selectFocus}`}
+            >
+              <option value="bodega">Bodega (casillero ocupado)</option>
+              <option value="procesamiento">Procesamiento (solo órdenes terminadas)</option>
+            </select>
+          </JefeModalField>
+          {trasladoBodegaOrigenTipo === "bodega" ? (
+            <JefeModalField
+              label="Caja en bodega"
+              icon={<FiPackage className="h-4 w-4" />}
+              hint="Cajas ocupadas en el mapa que aún no tienen orden de traslado pendiente."
+            >
               <select
                 value={bodegaOrderSourcePosition}
                 onChange={(event) =>
                   setBodegaOrderSourcePosition(Number(event.target.value))
                 }
-                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                disabled={availableBodegaForOrders.length === 0}
+                className={`${jefeSelectClass} ${jefeModalAccentClass.blue.selectFocus} disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400`}
               >
                 {availableBodegaForOrders.length === 0 ? (
-                  <option value={1}>Sin cajas</option>
+                  <option value={1}>Sin cajas en bodega</option>
                 ) : (
                   sortByPosition(availableBodegaForOrders).map((box) => (
-                    <option
-                      key={box.position}
-                      value={box.position}
-                    >{`Bodega ${box.position} - ${box.name} (${box.autoId}) · ${box.client || "—"}`}</option>
-                  ))
-                )}
-              </select>
-              <label className="text-sm font-medium text-slate-600">
-                Posicion en bodega
-              </label>
-              <select
-                value={bodegaOrderTargetPosition}
-                onChange={(event) =>
-                  setBodegaOrderTargetPosition(Number(event.target.value))
-                }
-                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
-              >
-                {availableBodegaTargets.length === 0 ? (
-                  <option value={1}>Sin posiciones libres</option>
-                ) : (
-                  availableBodegaTargets.map((position) => (
-                    <option key={position} value={position}>
-                      {position}
+                    <option key={box.position} value={box.position}>
+                      {`Casillero ${box.position} — ${box.name} (${box.autoId}) · ${box.client || "—"}`}
                     </option>
                   ))
                 )}
               </select>
-              <button
-                type="button"
-                onClick={() =>
-                  handleCreateOrder({
-                    destination: "a_bodega",
-                    sourceZone: "bodega",
-                    sourcePosition: bodegaOrderSourcePosition,
-                    targetPosition: bodegaOrderTargetPosition,
-                  })
-                }
-                className="mt-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-500"
+              {availableBodegaForOrders.length === 0 ? (
+                <JefeModalEmptyHint>
+                  No hay cajas disponibles para trasladar. Verificá el mapa o si ya hay órdenes pendientes.
+                </JefeModalEmptyHint>
+              ) : null}
+            </JefeModalField>
+          ) : (
+            <JefeModalField
+              label="Orden terminada (procesamiento)"
+              icon={<FiCpu className="h-4 w-4" />}
+              hint="Solo aparecen solicitudes en estado Terminado y sin orden de devolución al mapa pendiente."
+            >
+              <select
+                value={trasladoProcesamientoKey}
+                onChange={(e) => setTrasladoProcesamientoKey(e.target.value)}
+                disabled={solicitudesProcesamientoTerminadasDisponibles.length === 0}
+                className={`${jefeSelectClass} ${jefeModalAccentClass.blue.selectFocus} disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400`}
               >
-                Crear orden
-              </button>
-            </div>
-          </div>
-        </div>
+                {solicitudesProcesamientoTerminadasDisponibles.length === 0 ? (
+                  <option value="">Sin órdenes terminadas disponibles</option>
+                ) : (
+                  solicitudesProcesamientoTerminadasDisponibles.map((row) => {
+                    const key = `${row.clientId}::${row.id}`;
+                    const u =
+                      row.unidadPrimarioVisualizacion === "peso"
+                        ? "Peso"
+                        : row.unidadPrimarioVisualizacion === "cantidad"
+                          ? "Cant."
+                          : "";
+                    const qty = Number(row.cantidadPrimario) || 0;
+                    const qtyStr = Number.isInteger(qty)
+                      ? String(qty)
+                      : qty.toLocaleString("es-CO", { maximumFractionDigits: 4 });
+                    return (
+                      <option key={key} value={key}>
+                        {`${row.numero} — ${qtyStr}${u ? ` · ${u}` : ""} · ${row.productoPrimarioTitulo.slice(0, 48)}${row.productoPrimarioTitulo.length > 48 ? "…" : ""}`}
+                      </option>
+                    );
+                  })
+                )}
+              </select>
+              {solicitudesProcesamientoTerminadasDisponibles.length === 0 ? (
+                <JefeModalEmptyHint>
+                  No hay órdenes de procesamiento terminadas para devolver, o ya tienen una orden de traslado
+                  pendiente.
+                </JefeModalEmptyHint>
+              ) : null}
+            </JefeModalField>
+          )}
+          <JefeModalField label="Nueva posición" icon={<FiGrid className="h-4 w-4" />}>
+            <select
+              value={bodegaOrderTargetPosition}
+              onChange={(event) =>
+                setBodegaOrderTargetPosition(Number(event.target.value))
+              }
+              disabled={availableBodegaTargets.length === 0}
+              className={`${jefeSelectClass} ${jefeModalAccentClass.blue.selectFocus} disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400`}
+            >
+              {availableBodegaTargets.length === 0 ? (
+                <option value={1}>Sin posiciones libres</option>
+              ) : (
+                availableBodegaTargets.map((position) => (
+                  <option key={position} value={position}>
+                    Casillero {position}
+                  </option>
+                ))
+              )}
+            </select>
+            {availableBodegaTargets.length === 0 ? (
+              <JefeModalEmptyHint>
+                No quedan casilleros libres. Liberá uno antes de crear la orden de traslado.
+              </JefeModalEmptyHint>
+            ) : null}
+          </JefeModalField>
+        </JefeOrderModalShell>
       )}
       {isJefe && orderModalType === "revisar" && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4"
-          role="dialog"
-          aria-modal="true"
-          onClick={() => setOrderModalType(null)}
-        >
-          <div
-            className="w-full max-w-xl rounded-2xl bg-white p-6 shadow-xl"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h2 className="text-lg font-semibold text-slate-900 mb-4">
-              Consultar inventario
-            </h2>
-            {/* Revisar cualquier caja: ingresos, bodega, salida */}
-            <div className="grid gap-3">
-              <label className="text-sm font-medium text-slate-600">Caja</label>
-              <select
-                value={reviewSourcePosition}
-                onChange={(event) =>
-                  setReviewSourcePosition(Number(event.target.value))
-                }
-                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
-              >
-                {/* Agrupar por zona */}
-                {[
-                  { label: "Ingresos", list: availableInboundForOrders },
-                  { label: "Bodega", list: reviewBodegaList },
-                  { label: "Salida", list: outboundBoxes },
-                ].map((group) =>
-                  group.list.length > 0 ? (
-                    <optgroup key={group.label} label={group.label}>
-                      {sortByPosition(group.list).map((box) => (
-                        <option
-                          key={`${group.label}-${box.position}`}
-                          value={box.position}
-                        >
-                          {`${group.label} ${box.position} - ${box.name} (${box.autoId}) · ${box.client || "—"}`}
-                        </option>
-                      ))}
-                    </optgroup>
-                  ) : null,
-                )}
-                {/* Si no hay cajas en ninguna zona */}
-                {availableInboundForOrders.length === 0 &&
-                  reviewBodegaList.length === 0 &&
-                  outboundBoxes.length === 0 && (
-                    <option value={1}>Sin cajas</option>
-                  )}
-              </select>
+        <JefeOrderModalShell
+          id="jefe-modal-revisar"
+          title="Consultar inventario"
+          description="Elegí una caja en ingreso, bodega o salida para que el operario la revise en detalle."
+          accent="orange"
+          icon={<FiSearch className="h-6 w-6" strokeWidth={2} />}
+          onClose={() => setOrderModalType(null)}
+          footer={
+            <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end sm:gap-3">
+              <button type="button" onClick={() => setOrderModalType(null)} className={jefeBtnGhost}>
+                Cancelar
+              </button>
               <button
                 type="button"
+                disabled={
+                  availableInboundForOrders.length === 0 &&
+                  reviewBodegaList.length === 0 &&
+                  outboundBoxes.length === 0
+                }
                 onClick={handleCreateReviewOrder}
-                className="mt-2 rounded-lg bg-orange-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-orange-500"
+                className={`inline-flex w-full items-center justify-center gap-2 rounded-xl px-5 py-2.5 text-sm font-bold text-white shadow-md transition focus:outline-none focus-visible:ring-2 focus-visible:ring-orange-400 focus-visible:ring-offset-2 sm:w-auto disabled:pointer-events-none disabled:opacity-45 ${jefeModalAccentClass.orange.primary} ${jefeModalAccentClass.orange.primaryHover}`}
               >
-                Crear revision
+                Crear revisión
               </button>
             </div>
-          </div>
-        </div>
+          }
+        >
+          <JefeModalField
+            label="Caja a revisar"
+            icon={<FiPackage className="h-4 w-4" />}
+            hint="Las opciones se agrupan por zona para ubicarla más rápido."
+          >
+            <select
+              value={reviewSourcePosition}
+              onChange={(event) =>
+                setReviewSourcePosition(Number(event.target.value))
+              }
+              disabled={
+                availableInboundForOrders.length === 0 &&
+                reviewBodegaList.length === 0 &&
+                outboundBoxes.length === 0
+              }
+              className={`${jefeSelectClass} ${jefeModalAccentClass.orange.selectFocus} disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400`}
+            >
+              {[
+                { label: "Ingresos", list: availableInboundForOrders },
+                { label: "Bodega", list: reviewBodegaList },
+                { label: "Salida", list: outboundBoxes },
+              ].map((group) =>
+                group.list.length > 0 ? (
+                  <optgroup key={group.label} label={group.label}>
+                    {sortByPosition(group.list).map((box) => (
+                      <option
+                        key={`${group.label}-${box.position}`}
+                        value={box.position}
+                      >
+                        {`${group.label} ${box.position} — ${box.name} (${box.autoId}) · ${box.client || "—"}`}
+                      </option>
+                    ))}
+                  </optgroup>
+                ) : null,
+              )}
+              {availableInboundForOrders.length === 0 &&
+                reviewBodegaList.length === 0 &&
+                outboundBoxes.length === 0 && <option value={1}>Sin cajas en el sistema</option>}
+            </select>
+            {availableInboundForOrders.length === 0 &&
+            reviewBodegaList.length === 0 &&
+            outboundBoxes.length === 0 ? (
+              <JefeModalEmptyHint>
+                No hay mercancía en ninguna zona todavía. Cuando existan cajas, vas a poder pedir una revisión acá.
+              </JefeModalEmptyHint>
+            ) : null}
+          </JefeModalField>
+        </JefeOrderModalShell>
       )}
       {isJefe && orderModalType === "salida" && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4"
-          role="dialog"
-          aria-modal="true"
-          onClick={() => setOrderModalType(null)}
-        >
-          <div
-            className="w-full max-w-xl rounded-2xl bg-white p-6 shadow-xl"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h2 className="text-lg font-semibold text-slate-900 mb-4">
-              Registrar salida
-            </h2>
-            {/* ...existing Crear Salida form logic... */}
-            <div className="grid gap-3">
-              <label className="text-sm font-medium text-slate-600">
-                Origen
-              </label>
-              <input
-                value="Bodega"
-                readOnly
-                className="w-full rounded-lg border border-slate-200 bg-slate-100 px-3 py-2 text-sm text-slate-600"
-              />
-              <label className="text-sm font-medium text-slate-600">
-                Caja en bodega
-              </label>
-              <select
-                value={salidaSourcePosition}
-                onChange={(event) =>
-                  setSalidaSourcePosition(Number(event.target.value))
-                }
-                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
-              >
-                {availableBodegaForOrders.length === 0 ? (
-                  <option value={1}>Sin cajas</option>
-                ) : (
-                  sortByPosition(availableBodegaForOrders).map((box) => (
-                    <option
-                      key={box.position}
-                      value={box.position}
-                    >{`Bodega ${box.position} - ${box.name} (${box.autoId}) · ${box.client || "—"}`}</option>
-                  ))
-                )}
-              </select>
-              <label className="text-sm font-medium text-slate-600">
-                Posicion en salida
-              </label>
-              <input
-                value={salidaTargetPosition}
-                type="number"
-                readOnly
-                className="w-full rounded-lg border border-slate-200 bg-slate-100 px-3 py-2 text-sm text-slate-600"
-              />
+        <JefeOrderModalShell
+          id="jefe-modal-salida"
+          title="Registrar salida"
+          description="La caja pasará del mapa a la zona de salida para preparar el despacho."
+          accent="pink"
+          icon={<FiBox className="h-6 w-6" strokeWidth={2} />}
+          onClose={() => setOrderModalType(null)}
+          footer={
+            <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end sm:gap-3">
+              <button type="button" onClick={() => setOrderModalType(null)} className={jefeBtnGhost}>
+                Cancelar
+              </button>
               <button
                 type="button"
+                disabled={availableBodegaForOrders.length === 0}
                 onClick={() =>
                   handleCreateOrder({
                     destination: "a_salida",
@@ -1538,14 +1942,67 @@ export default function OrdenesJefeSection(props: {
                     sourcePosition: salidaSourcePosition,
                   })
                 }
-                className="mt-2 rounded-lg bg-pink-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-pink-500"
+                className={`inline-flex w-full items-center justify-center gap-2 rounded-xl px-5 py-2.5 text-sm font-bold text-white shadow-md transition focus:outline-none focus-visible:ring-2 focus-visible:ring-pink-400 focus-visible:ring-offset-2 sm:w-auto disabled:pointer-events-none disabled:opacity-45 ${jefeModalAccentClass.pink.primary} ${jefeModalAccentClass.pink.primaryHover}`}
               >
                 Crear salida
               </button>
             </div>
-          </div>
-        </div>
+          }
+        >
+          <JefeModalField label="Origen" icon={<FiMapPin className="h-4 w-4" />}>
+            <input value="Bodega" readOnly className={jefeReadonlyClass} tabIndex={-1} />
+          </JefeModalField>
+          <JefeModalField
+            label="Caja en bodega"
+            icon={<FiPackage className="h-4 w-4" />}
+            hint="Solo cajas del mapa sin orden pendiente hacia salida."
+          >
+            <select
+              value={salidaSourcePosition}
+              onChange={(event) =>
+                setSalidaSourcePosition(Number(event.target.value))
+              }
+              disabled={availableBodegaForOrders.length === 0}
+              className={`${jefeSelectClass} ${jefeModalAccentClass.pink.selectFocus} disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400`}
+            >
+              {availableBodegaForOrders.length === 0 ? (
+                <option value={1}>Sin cajas disponibles</option>
+              ) : (
+                sortByPosition(availableBodegaForOrders).map((box) => (
+                  <option key={box.position} value={box.position}>
+                    {`Casillero ${box.position} — ${box.name} (${box.autoId}) · ${box.client || "—"}`}
+                  </option>
+                ))
+              )}
+            </select>
+            {availableBodegaForOrders.length === 0 ? (
+              <JefeModalEmptyHint>
+                No hay cajas en bodega para enviar a salida, o ya tienen una orden asignada.
+              </JefeModalEmptyHint>
+            ) : null}
+          </JefeModalField>
+          <JefeModalField
+            label="Posición en salida"
+            icon={<FiGrid className="h-4 w-4" />}
+            hint="Cupos en la columna de salida; se asigna automáticamente según disponibilidad."
+          >
+            <input
+              value={salidaTargetPosition}
+              type="number"
+              readOnly
+              className={`${jefeReadonlyClass} tabular-nums`}
+              tabIndex={-1}
+            />
+          </JefeModalField>
+        </JefeOrderModalShell>
       )}
+      <AsignarProcesadorProcesamientoModal
+        isOpen={modalAsignarProcesadorOpen}
+        onClose={() => setModalAsignarProcesadorOpen(false)}
+        clients={clients}
+        warehouseCodeCuenta={warehouseCodeCuenta}
+        slots={slots as Slot[]}
+      />
     </section>
   );
 }

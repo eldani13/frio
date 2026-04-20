@@ -45,8 +45,8 @@ export const CompradorService = {
         id: d.id, 
         ...d.data() 
       } as Comprador));
-    } catch (error: any) {
-      console.error("Error en CompradorService.getAll:", error.message);
+    } catch (error: unknown) {
+      console.error("Error en CompradorService.getAll:", error instanceof Error ? error.message : error);
       return [];
     }
   },
@@ -73,8 +73,8 @@ export const CompradorService = {
       };
 
       return await addDoc(getColRef(idCliente), newComprador);
-    } catch (error: any) {
-      console.error("Error en CompradorService.create:", error.message);
+    } catch (error: unknown) {
+      console.error("Error en CompradorService.create:", error instanceof Error ? error.message : error);
       throw error;
     }
   },
@@ -88,9 +88,9 @@ export const CompradorService = {
       const updateData: Partial<Comprador> = {};
       if (data.name) updateData.name = data.name.trim();
 
-      return await updateDoc(getCompradorDocRef(idCliente, id), updateData as any);
-    } catch (error: any) {
-      console.error("Error en CompradorService.update:", error.message);
+      return await updateDoc(getCompradorDocRef(idCliente, id), updateData);
+    } catch (error: unknown) {
+      console.error("Error en CompradorService.update:", error instanceof Error ? error.message : error);
       throw error;
     }
   },
@@ -99,8 +99,8 @@ export const CompradorService = {
     try {
       if (!idCliente?.trim()) throw new Error("idCliente requerido");
       return await deleteDoc(getCompradorDocRef(idCliente, id));
-    } catch (error: any) {
-      console.error("Error en CompradorService.delete:", error.message);
+    } catch (error: unknown) {
+      console.error("Error en CompradorService.delete:", error instanceof Error ? error.message : error);
       throw error;
     }
   }

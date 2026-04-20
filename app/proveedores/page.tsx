@@ -9,6 +9,8 @@ import {
   type ProveedorOrdenCompraRow,
 } from "@/app/components/ui/providers/ProviderOrdenesModal";
 import { OrdenCompraService } from "@/app/services/ordenCompraService";
+import { formatKgEs } from "@/app/lib/decimalEs";
+import { buildLineasRecepcionDiff } from "@/app/lib/ordenCompraRecepcionDiff";
 import { HiOutlinePlus, HiOutlineSquares2X2 } from "react-icons/hi2";
 import { useAuth } from "@/app/context/AuthContext";
 
@@ -47,14 +49,26 @@ export default function ProvidersPage() {
       .then((list) => {
         if (cancelled) return;
         setOrdenesList(
-          list.map((o) => ({
-            id: o.id ?? o.numero,
-            ordenCompra: o.numero,
-            estado: o.estado,
-            resumenProductos: (o.lineItems ?? [])
-              .map((li) => `${li.titleSnapshot} ×${li.cantidad}`)
-              .join(" · "),
-          })),
+          list.map((o) => {
+            const { lineasDiff, adicionales, tieneRecepcion } = buildLineasRecepcionDiff(o);
+            return {
+              id: o.id ?? o.numero,
+              ordenCompra: o.numero,
+              estado: o.estado,
+              resumenProductos: (o.lineItems ?? [])
+                .map((li) => {
+                  const medida =
+                    li.pesoKg != null && Number(li.pesoKg) > 0
+                      ? `${formatKgEs(Number(li.pesoKg))} kg`
+                      : `${li.cantidad} u.`;
+                  return `${li.titleSnapshot} · ${medida}`;
+                })
+                .join(" · "),
+              lineasDiff,
+              adicionales,
+              tieneRecepcion,
+            };
+          }),
         );
       })
       .catch(() => {
@@ -68,12 +82,22 @@ export default function ProvidersPage() {
     };
   }, [ordenesModalProvider?.id, idCliente, codeCuenta]);
 
-  const handleSuccess = async (name: string) => {
+  const handleSuccess = async (data: {
+    name: string;
+    nombre: string;
+    telefono: string;
+    email: string;
+  }) => {
     if (!idCliente) return;
     if (selectedProvider?.id) {
-      await ProviderService.update(idCliente, selectedProvider.id, { name });
+      await ProviderService.update(idCliente, selectedProvider.id, {
+        name: data.name,
+        nombre: data.nombre,
+        telefono: data.telefono,
+        email: data.email,
+      });
     } else {
-      await ProviderService.create(name, idCliente, codeCuenta);
+      await ProviderService.create(data, idCliente, codeCuenta);
     }
     await load();
   };
@@ -87,7 +111,7 @@ export default function ProvidersPage() {
   };
 
   return (
-    <main className="max-w-4xl mx-auto p-8 font-['Inter']">
+    <main className="max-w-6xl mx-auto p-8 font-['Inter']">
       <header className="mb-10 flex justify-between items-center">
         <div className="flex items-center gap-4">
           <div className="p-3 bg-[#f8edb1] rounded-2xl text-[#2D5A3F]">

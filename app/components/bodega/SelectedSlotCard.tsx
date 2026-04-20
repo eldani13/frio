@@ -1,12 +1,13 @@
-/* eslint-disable react-hooks/set-state-in-effect */
 import { useEffect, useState } from "react";
 import type { SelectedSlotCardProps } from "../../interfaces/bodega/SelectedSlotCard";
+import { clientLabelFromList, formatBoxQuantityKg } from "@/app/lib/bodegaDisplay";
 
 export default function SelectedSlotCard({
   slot,
   onClose,
   onSave,
   canEdit = true,
+  clients = [],
 }: SelectedSlotCardProps) {
   const [name, setName] = useState<string>("");
   const [temperature, setTemperature] = useState<string>("");
@@ -58,7 +59,12 @@ export default function SelectedSlotCard({
               <span className="font-semibold">Nombre:</span> {slot.name || "—"}
             </p>
             <p>
-              <span className="font-semibold">Cliente:</span> {slot.client || "—"}
+              <span className="font-semibold">Cliente:</span>{" "}
+              {clientLabelFromList(slot.client || "", clients)}
+            </p>
+            <p>
+              <span className="font-semibold">Cantidad:</span>{" "}
+              {formatBoxQuantityKg(slot.quantityKg)}
             </p>
             <p>
               <span className="font-semibold">Temperatura:</span> {slot.temperature !== null ? `${slot.temperature} °C` : "—"}

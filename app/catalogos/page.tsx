@@ -4,6 +4,7 @@ import { CatalogoService } from "@/app/services/catalogoService";
 import { Catalogo } from "@/app/types/catalogo";
 import { CatalogoTable } from "@/app/components/ui/catalogos/CatalogoTable";
 import { CatalogoForm } from "@/app/components/ui/catalogos/CatalogoForm";
+import { CatalogoSecundarioForm } from "@/app/components/ui/catalogos/CatalogoSecundarioForm";
 import { HiOutlinePlus, HiOutlineSquares2X2, HiOutlineMagnifyingGlass } from "react-icons/hi2";
 import { useAuth } from "@/app/context/AuthContext";
 import { ImportExcel } from "@/app/utils/importarExcelCatalogo";
@@ -11,6 +12,7 @@ import { ImportExcel } from "@/app/utils/importarExcelCatalogo";
 export default function CatalogoPage() {
   const [productos, setProductos] = useState<Catalogo[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isSecundarioOpen, setIsSecundarioOpen] = useState(false);
   const [selectedProducto, setSelectedProducto] = useState<Catalogo | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -82,14 +84,14 @@ export default function CatalogoPage() {
     setSortConfig({ key, direction });
   };
 
-  const handleImport = async (data: any[]) => {
+  const handleImport = async (data: Record<string, unknown>[]) => {
     if (data.length === 0 || !idCliente) return;
     setLoading(true);
     try {
       await CatalogoService.importMany(data, idCliente, codeCuenta);
       alert("¡Importación exitosa!");
       await load();
-    } catch (error) {
+    } catch (_error) {
       alert("Error al importar los datos.");
     } finally {
       setLoading(false);
@@ -102,13 +104,19 @@ export default function CatalogoPage() {
       if (selectedProducto?.id) {
         await CatalogoService.update(idCliente, selectedProducto.id, data);
       } else {
-        await CatalogoService.create(data as any, idCliente, codeCuenta);
+        await CatalogoService.create(data as Omit<Catalogo, "id" | "numericId" | "code" | "createdAt" | "codeCuenta">, idCliente, codeCuenta);
       }
       setIsModalOpen(false);
       await load();
-    } catch (error) {
+    } catch (_error) {
       alert("Hubo un error al procesar la solicitud.");
     }
+  };
+
+  const handleSecundarioSuccess = async (data: Partial<Catalogo>) => {
+    if (!idCliente) throw new Error("sin_cliente");
+    await CatalogoService.create(data as Omit<Catalogo, "id" | "numericId" | "code" | "createdAt" | "codeCuenta">, idCliente, codeCuenta);
+    await load();
   };
 
   const handleDelete = async (id: string) => {
@@ -147,11 +155,22 @@ export default function CatalogoPage() {
 
           <ImportExcel onDataLoaded={handleImport} />
 
-          <button 
-            onClick={() => { setSelectedProducto(null); setIsModalOpen(true); }}
-            className="bg-[#A8D5BA] text-[#2D5A3F] px-6 py-3 rounded-[14px] font-bold text-[14px] flex items-center gap-2 hover:bg-[#97c4a9] transition-all active:scale-95 shadow-sm w-full sm:w-auto justify-center"
+          <button
+            type="button"
+            onClick={() => {
+              setSelectedProducto(null);
+              setIsModalOpen(true);
+            }}
+            className="flex w-full items-center justify-center gap-2 rounded-[14px] bg-[#A8D5BA] px-6 py-3 text-[14px] font-bold text-[#2D5A3F] shadow-sm transition-all hover:bg-[#97c4a9] active:scale-95 sm:w-auto"
           >
-            <HiOutlinePlus strokeWidth={3} size={18} /> Nuevo Producto
+            <HiOutlinePlus strokeWidth={3} size={18} /> Nuevo producto
+          </button>
+          <button
+            type="button"
+            onClick={() => setIsSecundarioOpen(true)}
+            className="flex w-full items-center justify-center gap-2 rounded-[14px] border border-violet-200 bg-violet-50 px-6 py-3 text-[14px] font-bold text-violet-900 shadow-sm transition-all hover:bg-violet-100 active:scale-95 sm:w-auto"
+          >
+            <HiOutlinePlus strokeWidth={3} size={18} /> Crear producto secundario
           </button>
         </div>
       </header>
@@ -163,11 +182,15 @@ export default function CatalogoPage() {
         </div>
       ) : (
         <div className="space-y-4">
-          <CatalogoTable 
-            productos={paginatedData} 
-            onEdit={(p) => { setSelectedProducto(p); setIsModalOpen(true); }} 
+          <CatalogoTable
+            productos={paginatedData}
+            productosCatalogo={productos}
+            onEdit={(p) => {
+              setSelectedProducto(p);
+              setIsModalOpen(true);
+            }}
             onDelete={handleDelete}
-            onSort={handleSort} // <-- ESTA ES LA PROP QUE FALTABA
+            onSort={handleSort}
           />
 
           {/* Controles de Paginación */}
@@ -195,11 +218,19 @@ export default function CatalogoPage() {
         </div>
       )}
 
-      <CatalogoForm 
-        isOpen={isModalOpen} 
+      <CatalogoForm
+        isOpen={isModalOpen}
         producto={selectedProducto}
-        onClose={() => setIsModalOpen(false)} 
-        onSuccess={handleSuccess} 
+        productosCatalogo={productos}
+        onClose={() => setIsModalOpen(false)}
+        onSuccess={handleSuccess}
+      />
+
+      <CatalogoSecundarioForm
+        isOpen={isSecundarioOpen}
+        productosCatalogo={productos}
+        onClose={() => setIsSecundarioOpen(false)}
+        onSubmit={handleSecundarioSuccess}
       />
     </main>
   );
