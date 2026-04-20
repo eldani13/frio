@@ -1,8 +1,9 @@
 "use client";
 
 import React from "react";
-import { HiOutlineChevronDown } from "react-icons/hi2";
-import { FiCpu } from "react-icons/fi";
+import { HiOutlineChevronDown, HiOutlineXMark } from "react-icons/hi2";
+import { FiBox, FiCpu } from "react-icons/fi";
+import { MdPendingActions } from "react-icons/md";
 import type { Client, Role, Slot } from "@/app/interfaces/bodega";
 import { SolicitudProcesamientoService } from "@/app/services/solicitudProcesamientoService";
 import type { SolicitudProcesamiento } from "@/app/types/solicitudProcesamiento";
@@ -34,7 +35,7 @@ function opcionesEstadoParaSesion(row: SolicitudProcesamiento, sessionUid?: stri
 
 function formatCantidad(n: number): string {
   if (!Number.isFinite(n)) return "—";
-  return Number.isInteger(n) ? String(n) : n.toLocaleString("es-CO", { maximumFractionDigits: 4 });
+  return Math.round(n).toLocaleString("es-CO", { maximumFractionDigits: 0 });
 }
 
 function esActivaEnBodega(row: SolicitudProcesamiento): boolean {
@@ -52,6 +53,49 @@ function puedeGestionarAsignaciones(role?: Role): boolean {
   return role === "jefe" || role === "administrador";
 }
 
+function TarjetaOrdenProcesamientoCarrusel({
+  row,
+  anchoMedido,
+  onSelect,
+}: {
+  row: SolicitudProcesamiento;
+  anchoMedido: number | null;
+  onSelect: (row: SolicitudProcesamiento) => void;
+}) {
+  /** Misma huella visual que `SlotCard` ocupado: el carrusel reserva ancho y centra la caja (~140px). */
+  const anchoCelda =
+    anchoMedido !== null ? { width: anchoMedido, minWidth: anchoMedido } : { minWidth: 260 };
+  return (
+    <div
+      className="flex shrink-0 snap-start items-start justify-center py-1"
+      style={anchoCelda}
+    >
+      <button
+        type="button"
+        onClick={() => onSelect(row)}
+        className="relative flex w-full max-w-[140px] flex-col items-center justify-center rounded-3xl border border-slate-300 bg-cyan-100 p-2 text-slate-900 transition hover:ring-2 hover:ring-cyan-400 sm:p-4"
+        style={{ minHeight: 90, maxWidth: 140, width: "100%" }}
+      >
+        <span className="absolute left-1 top-1 rounded-full px-1 py-0.5 text-[9px] font-semibold text-slate-600">
+          {row.numero}
+        </span>
+        <div className="mb-1">
+          <FiBox className="h-4 w-4 text-cyan-400 sm:h-6 sm:w-6" aria-hidden />
+        </div>
+        <div className="w-full truncate text-center text-[clamp(0.65rem,1vw,0.85rem)] font-semibold">
+          {row.productoPrimarioTitulo?.trim() || "—"}
+        </div>
+        <div className="mt-1 w-full truncate text-center text-[clamp(0.7rem,1.5vw,0.85rem)]">
+          {row.productoSecundarioTitulo?.trim() || row.clientName?.trim() || row.clientId || "—"}
+        </div>
+        <div className="mt-2 inline-block max-w-full truncate rounded-full bg-cyan-200 px-1.5 py-0.5 text-[clamp(0.7rem,1.5vw,0.85rem)] font-medium sm:px-3">
+          {row.estado}
+        </div>
+      </button>
+    </div>
+  );
+}
+
 /**
  * Órdenes de procesamiento para la bodega interna actual: solo **Iniciado** y **En curso**.
  * `layout="cards"`: cuadrícula de tarjetas (vista mapa / jefe). `layout="table"`: tabla compacta.
@@ -66,6 +110,7 @@ export function ProcesamientoOrdenesActivasBodega({
   sessionUid,
   sessionRole,
   operariosBodega = [],
+  procesadoresBodega = [],
   tareasProcesamientoOperario = [],
   onPushTareaProcesamientoOperario,
   onProcesamientoTerminadoInventario,
@@ -80,6 +125,8 @@ export function ProcesamientoOrdenesActivasBodega({
   sessionUid?: string;
   sessionRole?: Role;
   operariosBodega?: Array<{ id: string; name: string; roleLabel?: string }>;
+  /** Reasignación en Firestore y cola local al pasar de «Iniciado» a «En curso» (primer procesador de la bodega). */
+  procesadoresBodega?: Array<{ id: string; name: string }>;
   tareasProcesamientoOperario?: Array<Record<string, unknown>>;
   onPushTareaProcesamientoOperario?: (tarea: Record<string, unknown>) => void;
   onProcesamientoTerminadoInventario?: (
@@ -122,6 +169,8 @@ export function ProcesamientoOrdenesActivasBodega({
       .filter(Boolean);
   }, [clients, warehouseCodeCuenta]);
 
+  const codeOk = Boolean(String(warehouseCodeCuenta ?? "").trim());
+
   React.useEffect(() => {
     setError(null);
     return SolicitudProcesamientoService.subscribeParaBodegaInterna(
@@ -133,7 +182,65 @@ export function ProcesamientoOrdenesActivasBodega({
   }, [clientIds, warehouseCodeCuenta]);
 
   const filasActivas = React.useMemo(() => rows.filter(esActivaEnBodega), [rows]);
+  const filasSoloIniciado = React.useMemo(
+    () => filasActivas.filter((r) => normalizeProcesamientoEstado(r.estado) === "Iniciado"),
+    [filasActivas],
+  );
+  /** Carrusel principal (vista mapa): solo **En curso** — Iniciado va al modal de tareas pendientes. */
+  const filasCarruselPrincipal = React.useMemo(
+    () => filasActivas.filter((r) => normalizeProcesamientoEstado(r.estado) === "En curso"),
+    [filasActivas],
+  );
+  const cantidadPendientesIniciado = filasSoloIniciado.length;
+  const [modalPendientesIniciadoAbierto, setModalPendientesIniciadoAbierto] = React.useState(false);
   const puedeAsignar = puedeGestionarAsignaciones(sessionRole);
+
+  /** Ancho de cada tarjeta en vista carrusel (máx. 3 visibles a la vez). */
+  const [anchoTarjetaCarrusel, setAnchoTarjetaCarrusel] = React.useState<number | null>(null);
+  const refCarruselProcesamiento = React.useRef<HTMLDivElement>(null);
+  const [anchoTarjetaModalIniciado, setAnchoTarjetaModalIniciado] = React.useState<number | null>(null);
+  const refCarruselModalIniciado = React.useRef<HTMLDivElement>(null);
+
+  React.useLayoutEffect(() => {
+    if (layout !== "cards") return;
+    const el = refCarruselProcesamiento.current;
+    if (!el) return;
+    const gapPx = 12;
+    const medir = () => {
+      const w = el.clientWidth;
+      if (w <= 0) return;
+      setAnchoTarjetaCarrusel(Math.max(200, Math.floor((w - 2 * gapPx) / 3)));
+    };
+    medir();
+    const ro = new ResizeObserver(medir);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [layout, warehouseCodeCuenta, filasCarruselPrincipal.length, codeOk, clientIds.length]);
+
+  React.useLayoutEffect(() => {
+    if (layout !== "cards" || !modalPendientesIniciadoAbierto) return;
+    const el = refCarruselModalIniciado.current;
+    if (!el) return;
+    const gapPx = 12;
+    const medir = () => {
+      const w = el.clientWidth;
+      if (w <= 0) return;
+      setAnchoTarjetaModalIniciado(Math.max(200, Math.floor((w - 2 * gapPx) / 3)));
+    };
+    medir();
+    const ro = new ResizeObserver(medir);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [layout, modalPendientesIniciadoAbierto, filasSoloIniciado.length, codeOk, clientIds.length]);
+
+  React.useEffect(() => {
+    if (!modalPendientesIniciadoAbierto) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setModalPendientesIniciadoAbierto(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [modalPendientesIniciadoAbierto]);
 
   React.useEffect(() => {
     setDetalle((d) => {
@@ -158,6 +265,46 @@ export function ProcesamientoOrdenesActivasBodega({
     setDetalle((d) => (d && d.clientId === row.clientId && d.id === row.id ? { ...d, estado: nextNorm } : d));
     try {
       await SolicitudProcesamientoService.actualizarEstado(row.clientId, row.id, nextNorm);
+      if (nextNorm === "En curso" && prevNorm === "Iniciado") {
+        const proc = procesadoresBodega[0];
+        if (proc) {
+          await SolicitudProcesamientoService.asignarOperarioBodega(row.clientId, row.id, {
+            operarioUid: proc.id,
+            operarioNombre: proc.name,
+          });
+          setRows((list) =>
+            list.map((r) =>
+              r.clientId === row.clientId && r.id === row.id
+                ? { ...r, operarioBodegaUid: proc.id, operarioBodegaNombre: proc.name }
+                : r,
+            ),
+          );
+          setDetalle((d) =>
+            d && d.clientId === row.clientId && d.id === row.id
+              ? { ...d, operarioBodegaUid: proc.id, operarioBodegaNombre: proc.name }
+              : d,
+          );
+          onPushTareaProcesamientoOperario?.({
+            tipo: "procesamiento",
+            clientId: row.clientId,
+            solicitudId: row.id,
+            numero: row.numero,
+            clientName: row.clientName,
+            codeCuenta: row.codeCuenta,
+            warehouseId: row.warehouseId,
+            productoPrimarioId: row.productoPrimarioId,
+            productoPrimarioTitulo: row.productoPrimarioTitulo,
+            productoSecundarioId: row.productoSecundarioId,
+            productoSecundarioTitulo: row.productoSecundarioTitulo,
+            cantidadPrimario: row.cantidadPrimario,
+            unidadPrimarioVisualizacion: row.unidadPrimarioVisualizacion,
+            estimadoUnidadesSecundario: row.estimadoUnidadesSecundario,
+            operarioUid: proc.id,
+            operarioNombre: proc.name,
+            faseCola: "en_curso",
+          });
+        }
+      }
       if (
         nextNorm === "En curso" &&
         prevNorm === "Iniciado" &&
@@ -252,7 +399,6 @@ export function ProcesamientoOrdenesActivasBodega({
     }
   };
 
-  const codeOk = Boolean(String(warehouseCodeCuenta ?? "").trim());
   const pad = variant === "compact" && layout === "table" ? "p-0" : layout === "cards" ? "p-0" : "p-1";
 
   const alerts = (
@@ -470,6 +616,89 @@ export function ProcesamientoOrdenesActivasBodega({
       </div>
     ) : null;
 
+  const modalPendientesIniciado =
+    layout === "cards" && modalPendientesIniciadoAbierto ? (
+      <div
+        className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-900/50 p-3 sm:p-6"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="modal-pendientes-iniciado-titulo"
+      >
+        <button
+          type="button"
+          className="absolute inset-0 cursor-default"
+          aria-label="Cerrar"
+          onClick={() => setModalPendientesIniciadoAbierto(false)}
+        />
+        <div className="relative z-10 flex max-h-[min(90vh,720px)] w-full max-w-4xl flex-col rounded-3xl border border-sky-200/90 bg-white shadow-2xl shadow-sky-900/10 overflow-hidden">
+          <div className="shrink-0 border-b border-sky-100 bg-gradient-to-r from-sky-50 via-white to-cyan-50/80 px-5 py-4 sm:px-6 sm:py-5">
+            <div className="flex items-start gap-3">
+              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-sky-100 text-sky-700 shadow-inner">
+                <MdPendingActions className="h-6 w-6" aria-hidden />
+              </span>
+              <div className="min-w-0 flex-1">
+                <h2
+                  id="modal-pendientes-iniciado-titulo"
+                  className="text-lg font-bold tracking-tight text-slate-900 sm:text-xl"
+                >
+                  Tareas pendientes
+                </h2>
+                <p className="mt-0.5 text-sm text-slate-600">
+                  Solo órdenes en estado <span className="font-semibold text-sky-800">Iniciado</span>
+                  {cantidadPendientesIniciado > 0 ? (
+                    <span className="tabular-nums">
+                      {" "}
+                      · {cantidadPendientesIniciado} orden{cantidadPendientesIniciado === 1 ? "" : "es"}
+                    </span>
+                  ) : null}
+                </p>
+                <p className="mt-2 text-xs text-slate-500">
+                  Deslizá horizontalmente para ver más (hasta 3 tarjetas visibles a la vez).
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setModalPendientesIniciadoAbierto(false)}
+                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 transition hover:bg-slate-50 hover:text-slate-900"
+                aria-label="Cerrar"
+              >
+                <HiOutlineXMark className="h-6 w-6" strokeWidth={2} />
+              </button>
+            </div>
+          </div>
+          <div className="min-h-0 flex-1 bg-white px-4 py-4 sm:px-6 sm:py-5">
+            {filasSoloIniciado.length === 0 ? (
+              <div className="flex min-h-[200px] items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-slate-50/60 px-4 py-12 text-center text-sm text-slate-500">
+                No hay órdenes en estado Iniciado en este momento.
+              </div>
+            ) : (
+              <div
+                ref={refCarruselModalIniciado}
+                className="w-full snap-x snap-mandatory overflow-x-auto px-2 py-3 pb-2 [-webkit-overflow-scrolling:touch] scroll-smooth [scrollbar-width:thin] sm:px-3"
+                role="region"
+                aria-label="Órdenes en Iniciado"
+              >
+                <div className="flex w-max min-w-full flex-nowrap gap-2 sm:gap-4">
+                  {filasSoloIniciado.map((row) => (
+                    <TarjetaOrdenProcesamientoCarrusel
+                      key={`${row.clientId}::${row.id}`}
+                      row={row}
+                      anchoMedido={anchoTarjetaModalIniciado}
+                      onSelect={(r) => {
+                        setError(null);
+                        setModalPendientesIniciadoAbierto(false);
+                        setDetalle(r);
+                      }}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    ) : null;
+
   if (layout === "cards") {
     return (
       <div className={pad}>
@@ -479,76 +708,59 @@ export function ProcesamientoOrdenesActivasBodega({
           </span>
           <div className="min-w-0 flex-1">
             <h3 className="text-sm font-bold tracking-tight text-slate-900">Procesamiento</h3>
-            <p className="text-[11px] leading-snug text-slate-600">
-              Iniciado y En curso. Tocá una tarjeta para ver el detalle y asignar al operario; el procesador, desde
-              Procesamiento en la barra del jefe.
-            </p>
           </div>
+          <button
+            type="button"
+            aria-label={`Abrir tareas pendientes en Iniciado (${cantidadPendientesIniciado})`}
+            title={`Ver en un panel las ${cantidadPendientesIniciado} orden${cantidadPendientesIniciado === 1 ? "" : "es"} en Iniciado`}
+            onClick={() => setModalPendientesIniciadoAbierto(true)}
+            className="relative flex h-9 shrink-0 items-center justify-center rounded-xl border border-sky-200/90 bg-white px-1.5 text-sky-700 shadow-sm transition-colors hover:border-sky-300 hover:bg-sky-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-400/80"
+          >
+            <MdPendingActions className="h-[20px] w-[20px] shrink-0" aria-hidden />
+            <span
+              className="ml-0.5 min-w-[1.125rem] rounded-md bg-sky-100 px-1 py-0.5 text-center text-[11px] font-bold tabular-nums leading-none text-sky-900"
+              aria-hidden
+            >
+              {cantidadPendientesIniciado}
+            </span>
+          </button>
         </div>
         <div className="mb-3 space-y-2">{alerts}</div>
         {codeOk && clientIds.length > 0 ? (
-          <div className="grid grid-cols-1 min-[520px]:grid-cols-2 xl:grid-cols-3 gap-3">
-            {filasActivas.length === 0 ? (
-              <div className="col-span-full rounded-2xl border border-dashed border-slate-200 bg-slate-50/60 py-10 text-center text-sm text-slate-500">
-                No hay órdenes pendientes de procesamiento.
-              </div>
-            ) : (
-              filasActivas.map((row) => {
-                const key = `${row.clientId}::${row.id}`;
-                const estim =
-                  row.estimadoUnidadesSecundario !== undefined &&
-                  row.estimadoUnidadesSecundario !== null &&
-                  Number.isFinite(row.estimadoUnidadesSecundario)
-                    ? formatCantidad(row.estimadoUnidadesSecundario)
-                    : "—";
-                return (
-                  <button
-                    key={key}
-                    type="button"
-                    onClick={() => {
+          <div
+            ref={refCarruselProcesamiento}
+            className="w-full snap-x snap-mandatory overflow-x-auto px-2 py-3 pb-2 [-webkit-overflow-scrolling:touch] scroll-smooth [scrollbar-width:thin] sm:px-3"
+            role="region"
+            aria-label="Órdenes en curso"
+          >
+            <div className="flex w-max min-w-full flex-nowrap gap-2 sm:gap-4">
+              {filasCarruselPrincipal.length === 0 ? (
+                <div className="w-full min-w-full shrink-0 rounded-2xl border border-dashed border-slate-200 bg-slate-50/60 px-3 py-10 text-center text-sm text-slate-500">
+                  {filasActivas.length === 0 ? (
+                    "No hay órdenes pendientes de procesamiento."
+                  ) : (
+                    <>
+                      No hay órdenes <strong className="text-slate-700">En curso</strong>.
+                    </>
+                  )}
+                </div>
+              ) : (
+                filasCarruselPrincipal.map((row) => (
+                  <TarjetaOrdenProcesamientoCarrusel
+                    key={`${row.clientId}::${row.id}`}
+                    row={row}
+                    anchoMedido={anchoTarjetaCarrusel}
+                    onSelect={(r) => {
                       setError(null);
-                      setDetalle(row);
+                      setDetalle(r);
                     }}
-                    className="flex aspect-[5/4] w-full min-w-0 flex-col rounded-2xl border border-sky-200/90 bg-gradient-to-b from-sky-50/95 to-white p-2.5 text-left text-slate-900 shadow-sm transition hover:border-sky-300/90 hover:shadow-md sm:p-3"
-                  >
-                    <div className="flex shrink-0 items-start justify-between gap-2">
-                      <span className="flex min-w-0 items-center gap-1.5 font-mono text-xs font-bold text-sky-950">
-                        <FiCpu className="h-3.5 w-3.5 shrink-0 text-sky-500" strokeWidth={2} aria-hidden />
-                        <span className="truncate">{row.numero}</span>
-                      </span>
-                      <span
-                        className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold leading-tight ${procesamientoEstadoBadgeClass(row.estado)}`}
-                      >
-                        {row.estado}
-                      </span>
-                    </div>
-                    <div className="mt-2 min-h-0 flex-1 space-y-1.5 overflow-y-auto overflow-x-hidden text-left">
-                      <p className="break-words text-[11px] font-semibold leading-snug text-slate-800">
-                        {row.clientName?.trim() || row.clientId}
-                      </p>
-                      <p className="break-words text-[11px] leading-snug text-slate-700">{row.productoPrimarioTitulo}</p>
-                      <p className="break-words text-[10px] leading-snug text-slate-600">
-                        <span className="font-medium text-slate-400">Secundario:</span> {row.productoSecundarioTitulo}
-                      </p>
-                      {row.operarioBodegaNombre || row.operarioBodegaUid ? (
-                        <p className="text-[10px] text-sky-800">
-                          Op.: {row.operarioBodegaNombre?.trim() || row.operarioBodegaUid}
-                        </p>
-                      ) : null}
-                    </div>
-                    <div className="mt-auto shrink-0 border-t border-sky-100/80 pt-1.5 text-center">
-                      <p className="text-[11px] tabular-nums text-slate-700">
-                        {formatCantidad(row.cantidadPrimario)} · {UnidadEtiqueta(row)}
-                        {estim !== "—" ? ` · est. ${estim}` : ""}
-                      </p>
-                      <p className="text-[10px] text-slate-400">{row.fecha || "—"}</p>
-                    </div>
-                  </button>
-                );
-              })
-            )}
+                  />
+                ))
+              )}
+            </div>
           </div>
         ) : null}
+        {modalPendientesIniciado}
         {detalleModal}
       </div>
     );

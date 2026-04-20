@@ -627,9 +627,11 @@ const ReportesSection: React.FC<ReportesSectionProps> = ({
       <VentasEnCursoOperadorPanel
         onBack={() => setViewMode("ventasOperadorHub")}
         idCliente={idCliente}
+        codeCuenta={codeCuenta}
         productos={catalogosOrden}
         compradores={compradoresCuenta}
         dataLoading={ordenesDataLoading}
+        warehousesFallback={warehousesFallback}
       />
     );
   }
@@ -1198,7 +1200,6 @@ const ReportesSection: React.FC<ReportesSectionProps> = ({
               className="inline-flex items-center justify-center gap-2 rounded-[10px] bg-cyan-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-cyan-700 active:scale-[0.98] disabled:pointer-events-none disabled:opacity-50"
             >
               <HiOutlinePlus strokeWidth={2.5} className="h-5 w-5" />
-              Nueva solicitud
             </button>
           </header>
 
@@ -1380,7 +1381,6 @@ const ReportesSection: React.FC<ReportesSectionProps> = ({
               className="inline-flex items-center justify-center gap-2 rounded-[10px] bg-[#A8D5BA] px-5 py-2.5 text-sm font-semibold text-[#2D5A3F] shadow-sm transition hover:bg-[#97c4a9] active:scale-[0.98] disabled:pointer-events-none disabled:opacity-50"
             >
               <HiOutlinePlus strokeWidth={2.5} className="h-5 w-5" />
-              Agregar orden de compra
             </button>
           </header>
 

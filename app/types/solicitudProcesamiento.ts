@@ -28,8 +28,13 @@ export type SolicitudProcesamiento = {
   unidadPrimarioVisualizacion?: "cantidad" | "peso" | string;
   /** Bodega interna elegida al crear (Firestore `warehouses`). */
   warehouseId?: string;
-  /** Estimación según regla de tres del secundario al momento del alta. */
+  /** Estimación según regla de tres al momento del alta (regla cargada por el operador de cuenta). */
   estimadoUnidadesSecundario?: number | null;
+  /** Regla usada al crear la solicitud: `cantidadPrimario` de insumo → `unidadesSecundario` esperadas. */
+  reglaConversionCantidadPrimario?: number;
+  reglaConversionUnidadesSecundario?: number;
+  /** % de merma (0–100) al crear la solicitud: tomado del catálogo del secundario (`mermaPct`). */
+  perdidaProcesamientoPct?: number;
   fecha: string;
   estado: ProcesamientoEstado;
   createdAt?: Timestamp | null;

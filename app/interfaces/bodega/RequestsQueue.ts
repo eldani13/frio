@@ -34,6 +34,11 @@ export type RequestsQueueProps = {
   ) => void | Promise<void>;
   /** Tras marcar Terminado: quitar tarea de la cola y persistir (el kg ya se descontó al pasar a En curso). */
   onProcesamientoTerminadoDesdeOperario?: (tarea: Record<string, unknown>) => void | Promise<void>;
+  /**
+   * Tarea «venta · salida»: descontar del mapa las cantidades del pedido (kg o u. según catálogo) y pasar a salida.
+   * Si devuelve false, la tarea no se quita de la cola.
+   */
+  onEjecutarSalidaVentaDesdeMapa?: (tarea: Record<string, unknown>) => boolean | Promise<boolean>;
   /** Al guardar temperatura desde el flujo de alerta (operario), persistir en slots / ingreso / salida. */
   onPersistTemperatureForAlert?: (
     position: number,

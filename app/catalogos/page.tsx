@@ -2,20 +2,17 @@
 import { useEffect, useState, useMemo } from "react";
 import { CatalogoService } from "@/app/services/catalogoService";
 import { Catalogo } from "@/app/types/catalogo";
-import type { WarehouseMeta } from "@/app/interfaces/bodega";
 import { CatalogoTable } from "@/app/components/ui/catalogos/CatalogoTable";
 import { CatalogoForm } from "@/app/components/ui/catalogos/CatalogoForm";
 import { CatalogoSecundarioForm } from "@/app/components/ui/catalogos/CatalogoSecundarioForm";
 import { HiOutlinePlus, HiOutlineSquares2X2, HiOutlineMagnifyingGlass } from "react-icons/hi2";
 import { useAuth } from "@/app/context/AuthContext";
 import { ImportExcel } from "@/app/utils/importarExcelCatalogo";
-import { AsignarBodegaService } from "@/app/services/asignarbodegaService";
 
 export default function CatalogoPage() {
   const [productos, setProductos] = useState<Catalogo[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isSecundarioOpen, setIsSecundarioOpen] = useState(false);
-  const [bodegasInternasSecundario, setBodegasInternasSecundario] = useState<WarehouseMeta[]>([]);
   const [selectedProducto, setSelectedProducto] = useState<Catalogo | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -44,23 +41,6 @@ export default function CatalogoPage() {
   useEffect(() => {
     void load();
   }, [idCliente, codeCuenta]);
-
-  useEffect(() => {
-    if (!isSecundarioOpen || !codeCuenta.trim()) {
-      setBodegasInternasSecundario([]);
-      return;
-    }
-    let cancelled = false;
-    void AsignarBodegaService.getWarehousesByCode(codeCuenta).then((raw) => {
-      if (cancelled) return;
-      setBodegasInternasSecundario(
-        raw.filter((w) => String(w.status ?? "").toLowerCase() === "interna"),
-      );
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [isSecundarioOpen, codeCuenta]);
 
   // --- LÓGICA DE PROCESAMIENTO (Memoizada para rendimiento) ---
   
@@ -249,8 +229,6 @@ export default function CatalogoPage() {
       <CatalogoSecundarioForm
         isOpen={isSecundarioOpen}
         productosCatalogo={productos}
-        clientIdFirestore={idCliente}
-        bodegasInternas={bodegasInternasSecundario}
         onClose={() => setIsSecundarioOpen(false)}
         onSubmit={handleSecundarioSuccess}
       />

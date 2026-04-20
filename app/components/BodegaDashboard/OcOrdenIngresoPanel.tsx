@@ -48,12 +48,14 @@ type Props = {
   warehouseId: string;
   isBodegaInterna: boolean;
   onRegistrar: (payload: IngresoDesdeOrdenCompraPayload) => Promise<void> | void;
+  /** Ej. `h-full min-h-0 overflow-y-auto` para igualar altura con otro panel en la misma columna. */
+  className?: string;
 };
 
 /**
  * Columna «Orden de ingreso»: elegir OC en transporte, checklist por línea, temp manual y kg del pedido.
  */
-export function OcOrdenIngresoPanel({ warehouseId, isBodegaInterna, onRegistrar }: Props) {
+export function OcOrdenIngresoPanel({ warehouseId, isBodegaInterna, onRegistrar, className }: Props) {
   const [ordenes, setOrdenes] = useState<OrdenCompraPendienteRecepcion[]>([]);
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -219,7 +221,9 @@ export function OcOrdenIngresoPanel({ warehouseId, isBodegaInterna, onRegistrar 
 
   if (!isBodegaInterna) {
     return (
-      <div className="flex h-full min-h-0 flex-col gap-3 rounded-2xl border border-amber-200 bg-amber-50/90 p-4 sm:p-6">
+      <div
+        className={`flex flex-col gap-3 rounded-2xl border border-amber-200 bg-amber-50/90 p-4 sm:p-6${className ? ` ${className}` : ""}`}
+      >
         <p className="text-sm font-medium text-amber-950">
           El ingreso desde orden de compra aplica solo en <strong>bodegas internas</strong>.
         </p>
@@ -228,7 +232,9 @@ export function OcOrdenIngresoPanel({ warehouseId, isBodegaInterna, onRegistrar 
   }
 
   return (
-    <div className="flex h-full min-h-0 w-full min-w-0 flex-col gap-4 rounded-2xl border border-green-200 bg-white p-4 shadow-lg sm:p-6 lg:p-8">
+    <div
+      className={`flex w-full min-w-0 flex-col gap-4 rounded-2xl border border-green-200 bg-white p-4 shadow-lg sm:p-6 lg:p-8${className ? ` ${className}` : ""}`}
+    >
       <div className="flex items-start gap-3">
         <span className="shrink-0 rounded-full bg-emerald-600 p-2 text-white">
           <FiArchive className="h-5 w-5" />
@@ -278,7 +284,7 @@ export function OcOrdenIngresoPanel({ warehouseId, isBodegaInterna, onRegistrar 
             : "Seleccioná una orden para ver el checklist de productos."}
         </p>
       ) : (
-        <div className="flex min-h-0 flex-1 flex-col gap-3">
+        <div className="flex flex-col gap-3">
           <p className="text-xs text-slate-600">
             <span className="font-semibold">{selected.numero}</span>
             {selected.fechaLlegadaEstipulada ? (

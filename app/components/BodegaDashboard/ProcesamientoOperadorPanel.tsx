@@ -188,7 +188,6 @@ export function ProcesamientoOperadorPanel({
             className="inline-flex items-center justify-center gap-2 rounded-[10px] bg-sky-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-sky-700 active:scale-[0.98] disabled:pointer-events-none disabled:opacity-50"
           >
             <HiOutlinePlus strokeWidth={2.5} className="h-5 w-5" />
-            Nueva orden
           </button>
         </header>
 
@@ -391,6 +390,9 @@ export function ProcesamientoOperadorPanel({
             unidadPrimarioVisualizacion: draft.unidadPrimarioVisualizacion,
             warehouseId: draft.warehouseId,
             estimadoUnidadesSecundario: draft.estimadoUnidadesSecundario,
+            reglaConversionCantidadPrimario: draft.reglaConversionCantidadPrimario,
+            reglaConversionUnidadesSecundario: draft.reglaConversionUnidadesSecundario,
+            perdidaProcesamientoPct: draft.perdidaProcesamientoPct,
             fecha: draft.fecha,
             estado: draft.estado,
           });
@@ -431,6 +433,22 @@ export function ProcesamientoOperadorPanel({
                 <span className="font-semibold tabular-nums">
                   {formatCantidad(detalle.estimadoUnidadesSecundario)}
                 </span>
+              </p>
+            ) : null}
+            {Number(detalle.reglaConversionCantidadPrimario) > 0 &&
+            Number(detalle.reglaConversionUnidadesSecundario) > 0 ? (
+              <p className="mt-1 text-xs text-slate-600">
+                Regla al crear: {detalle.reglaConversionCantidadPrimario} (primario) →{" "}
+                {detalle.reglaConversionUnidadesSecundario} (secundario)
+              </p>
+            ) : null}
+            {detalle.perdidaProcesamientoPct !== undefined &&
+            detalle.perdidaProcesamientoPct !== null &&
+            Number(detalle.perdidaProcesamientoPct) > 0 ? (
+              <p className="mt-1 text-xs text-slate-600">
+                Pérdida / merma declarada:{" "}
+                <span className="font-semibold tabular-nums">{formatCantidad(detalle.perdidaProcesamientoPct)}</span>{" "}
+                % (sobre estimado teórico de uds. secundario)
               </p>
             ) : null}
             <p className="mt-2 text-xs text-slate-400">

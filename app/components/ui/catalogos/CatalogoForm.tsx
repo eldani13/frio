@@ -3,7 +3,12 @@
 import React, { Fragment, useEffect, useMemo, useState } from "react";
 import { HiOutlineXMark } from "react-icons/hi2";
 import type { Catalogo } from "@/app/types/catalogo";
-import { esCatalogoSecundario } from "@/lib/catalogoProcesamiento";
+import {
+  esCatalogoSecundario,
+  gramosPorUnidadDesdeReglaConversion,
+  REGLA_PRIMARIO_BASE_GRAMOS,
+} from "@/lib/catalogoProcesamiento";
+import { UNIDAD_VIS_CATALOGO_OPCIONES } from "@/lib/unidadVisualizacionCatalogo";
 
 interface CatalogoFormProps {
   isOpen: boolean;
@@ -23,9 +28,9 @@ type FormFieldConfig = {
   inputType?: "number" | "text";
 };
 
-function normalizeUnidadVisualizacion(p: Partial<Catalogo>): "cantidad" | "peso" {
-  const u = p.unidadVisualizacion;
-  if (u === "cantidad" || u === "peso") return u;
+function normalizeUnidadVisualizacion(p: Partial<Catalogo>): string {
+  const u = String(p.unidadVisualizacion ?? "").trim().toLowerCase();
+  if (UNIDAD_VIS_CATALOGO_OPCIONES.some((o) => o.value === u)) return u;
   const w = String(p.weightUnit ?? "").trim().toLowerCase();
   if (w === "cantidad") return "cantidad";
   if (w === "peso") return "peso";
@@ -83,6 +88,8 @@ export const CatalogoForm = ({
 }: CatalogoFormProps) => {
   const [formData, setFormData] = useState<Partial<Catalogo>>({});
   const [loading, setLoading] = useState(false);
+  /** Edición regla secundario: gramos netos por unidad (base fija 1000 g de primario). */
+  const [gramosPorUnidadSecundario, setGramosPorUnidadSecundario] = useState("");
 
   useEffect(() => {
     if (producto) {
@@ -90,7 +97,22 @@ export const CatalogoForm = ({
         ...producto,
         unidadVisualizacion: normalizeUnidadVisualizacion(producto),
         includedPrimarioCatalogoId: producto.includedPrimarioCatalogoId ?? "",
+        conversionCantidadPrimario:
+          producto.conversionCantidadPrimario ?? producto.reglaConversionCantidadPrimario,
+        conversionUnidadesSecundario:
+          producto.conversionUnidadesSecundario ?? producto.reglaConversionUnidadesSecundario,
+        mermaPct: producto.mermaPct,
       });
+      const tipoSec = esCatalogoSecundario(producto);
+      const primId = String(producto.includedPrimarioCatalogoId ?? "").trim();
+      if (tipoSec && primId) {
+        const a = Number(producto.conversionCantidadPrimario ?? producto.reglaConversionCantidadPrimario);
+        const b = Number(producto.conversionUnidadesSecundario ?? producto.reglaConversionUnidadesSecundario);
+        const g = gramosPorUnidadDesdeReglaConversion(a, b);
+        setGramosPorUnidadSecundario(g !== null && g > 0 ? String(g) : "");
+      } else {
+        setGramosPorUnidadSecundario("");
+      }
     } else {
       setFormData({
         publishedOnline: false,
@@ -101,9 +123,21 @@ export const CatalogoForm = ({
         status: "draft",
         unidadVisualizacion: "cantidad",
         includedPrimarioCatalogoId: "",
+        mermaPct: undefined,
       });
+      setGramosPorUnidadSecundario("");
     }
   }, [producto, isOpen]);
+
+  /** Alta manual: si deja de ser secundario o sin primario, limpiar gramos (no pisar lo que el usuario escribe). */
+  useEffect(() => {
+    if (!isOpen || producto) return;
+    const tipoSec = esCatalogoSecundario(formData as Catalogo);
+    const primId = String(formData.includedPrimarioCatalogoId ?? "").trim();
+    if (!tipoSec || !primId) {
+      setGramosPorUnidadSecundario("");
+    }
+  }, [isOpen, producto, formData.productType, formData.includedPrimarioCatalogoId]);
 
   const opcionesPrimario = useMemo(
     () => productosCatalogo.filter((p) => esPrimarioEnLista(p, producto?.id)),
@@ -120,28 +154,51 @@ export const CatalogoForm = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const uv = formData.unidadVisualizacion;
-    if (uv !== "cantidad" && uv !== "peso") {
-      return;
-    }
+    const uv = String(formData.unidadVisualizacion ?? "cantidad").trim().toLowerCase();
+    if (!uv) return;
     const tipoSec = esCatalogoSecundario(formData as Catalogo);
     const primId = String(formData.includedPrimarioCatalogoId ?? "").trim();
     if (tipoSec && primId) {
-      const c1 = Number(formData.conversionCantidadPrimario);
-      const c2 = Number(formData.conversionUnidadesSecundario);
-      if (!Number.isFinite(c1) || c1 <= 0 || !Number.isFinite(c2) || c2 <= 0) {
-        alert("Para productos secundarios con primario, completá la regla de conversión (ambos valores > 0).");
+      const g = Number(String(gramosPorUnidadSecundario).replace(",", ".").trim());
+      if (!Number.isFinite(g) || g <= 0) {
+        alert(
+          `Para productos secundarios con primario, indicá los gramos por unidad del secundario (peso neto; base ${REGLA_PRIMARIO_BASE_GRAMOS} g de primario).`,
+        );
         return;
       }
     }
     setLoading(true);
     try {
+      const tipoSecundario = esCatalogoSecundario(formData as Catalogo);
+      const gRegla =
+        tipoSecundario && primId
+          ? Number(String(gramosPorUnidadSecundario).replace(",", ".").trim())
+          : NaN;
+      const c1n =
+        tipoSecundario && primId && Number.isFinite(gRegla) && gRegla > 0 ? 1 : Number(formData.conversionCantidadPrimario);
+      const c2n =
+        tipoSecundario && primId && Number.isFinite(gRegla) && gRegla > 0
+          ? REGLA_PRIMARIO_BASE_GRAMOS / gRegla
+          : Number(formData.conversionUnidadesSecundario);
+      const merma =
+        tipoSecundario && primId && Number.isFinite(Number(formData.mermaPct))
+          ? Math.min(100, Math.max(0, Number(formData.mermaPct)))
+          : undefined;
       const payload: Partial<Catalogo> = {
         ...formData,
         unidadVisualizacion: uv,
-        weightUnit: uv,
+        weightUnit: uv === "peso" ? "peso" : "cantidad",
         includedPrimarioCatalogoId: primId || undefined,
         includedPrimary: Boolean(primId),
+        ...(tipoSecundario && primId && Number.isFinite(c1n) && c1n > 0 && Number.isFinite(c2n) && c2n > 0
+          ? {
+              reglaConversionCantidadPrimario: c1n,
+              reglaConversionUnidadesSecundario: c2n,
+              conversionCantidadPrimario: c1n,
+              conversionUnidadesSecundario: c2n,
+            }
+          : {}),
+        ...(merma !== undefined ? { mermaPct: merma } : {}),
       };
       await onSuccess(payload);
       onClose();
@@ -229,18 +286,19 @@ export const CatalogoForm = ({
                       </label>
                       <select
                         value={formData.unidadVisualizacion ?? "cantidad"}
-                        onChange={(e) =>
-                          handleChange("unidadVisualizacion", e.target.value as "cantidad" | "peso")
-                        }
+                        onChange={(e) => handleChange("unidadVisualizacion", e.target.value)}
                         required
                         className="w-full rounded-[12px] border border-gray-200 bg-white px-4 py-3 text-[14px] shadow-sm focus:border-[#A8D5BA] focus:outline-none focus:ring-1 focus:ring-[#A8D5BA]"
                       >
-                        <option value="cantidad">Cantidad</option>
-                        <option value="peso">Peso</option>
+                        {UNIDAD_VIS_CATALOGO_OPCIONES.map((o) => (
+                          <option key={o.value} value={o.value}>
+                            {o.label}
+                          </option>
+                        ))}
                       </select>
                       <p className="mt-1 text-[11px] text-gray-500">
-                        Define si las cantidades del producto se entienden en unidades o en peso en pantallas y
-                        reportes.
+                        Etiqueta de cantidad en pantallas. Solo «Peso (kg)» usa kilogramos en mapa de bodega; el resto
+                        cuenta como unidades discretas.
                       </p>
                     </div>
                     <div>
@@ -268,49 +326,58 @@ export const CatalogoForm = ({
                       <div className="grid grid-cols-1 gap-4 md:col-span-2 md:grid-cols-2 lg:col-span-3 lg:grid-cols-2">
                         <div className="rounded-[12px] border border-violet-100 bg-violet-50/40 p-4 md:col-span-2 lg:col-span-2">
                           <p className="text-[10px] font-bold uppercase tracking-widest text-violet-900">
-                            Regla de conversión (regla de tres)
+                            Regla de conversión (base {REGLA_PRIMARIO_BASE_GRAMOS} g de primario)
                           </p>
                           <p className="mt-1 text-[11px] text-violet-950/90">
-                            Con la cantidad de insumo del <strong>primario</strong> (en su unidad de visualización)
-                            obtenés cuántas <strong>unidades de este secundario</strong> salen.
+                            El insumo de referencia es siempre <strong>{REGLA_PRIMARIO_BASE_GRAMOS} g</strong> (1 kg).
+                            Indicá los <strong>gramos netos por unidad</strong> de este secundario. Unidades por kg de
+                            primario: <strong>{REGLA_PRIMARIO_BASE_GRAMOS} ÷ gramos por unidad</strong>.
                           </p>
                           <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
                             <div>
                               <label className="mb-1 block text-[10px] font-bold uppercase tracking-widest text-gray-500">
-                                Insumo primario (cantidad) <span className="text-red-400">*</span>
+                                Insumo primario (fijo)
                               </label>
-                              <input
-                                type="number"
-                                min={0}
-                                step="any"
-                                value={formData.conversionCantidadPrimario ?? ""}
-                                onChange={(e) =>
-                                  handleChange(
-                                    "conversionCantidadPrimario",
-                                    e.target.value === "" ? "" : Number(e.target.value),
-                                  )
-                                }
-                                className="w-full rounded-[12px] border border-gray-200 bg-white px-4 py-3 text-[14px] shadow-sm"
-                              />
+                              <div className="rounded-[12px] border border-violet-200 bg-violet-100/60 px-4 py-3 text-[14px] font-semibold tabular-nums text-violet-950">
+                                {REGLA_PRIMARIO_BASE_GRAMOS} g
+                              </div>
                             </div>
                             <div>
                               <label className="mb-1 block text-[10px] font-bold uppercase tracking-widest text-gray-500">
-                                Unidades de este secundario <span className="text-red-400">*</span>
+                                Gramos por unidad de este secundario <span className="text-red-400">*</span>
                               </label>
                               <input
-                                type="number"
-                                min={0}
-                                step="any"
-                                value={formData.conversionUnidadesSecundario ?? ""}
-                                onChange={(e) =>
-                                  handleChange(
-                                    "conversionUnidadesSecundario",
-                                    e.target.value === "" ? "" : Number(e.target.value),
-                                  )
-                                }
+                                type="text"
+                                inputMode="decimal"
+                                value={gramosPorUnidadSecundario}
+                                onChange={(e) => setGramosPorUnidadSecundario(e.target.value)}
                                 className="w-full rounded-[12px] border border-gray-200 bg-white px-4 py-3 text-[14px] shadow-sm"
+                                placeholder="Ej. 200"
                               />
                             </div>
+                          </div>
+                          <div className="mt-3">
+                            <label className="mb-1 block text-[10px] font-bold uppercase tracking-widest text-gray-500">
+                              Merma típica (%)
+                            </label>
+                            <input
+                              type="number"
+                              min={0}
+                              max={100}
+                              step="any"
+                              value={formData.mermaPct ?? ""}
+                              onChange={(e) =>
+                                handleChange(
+                                  "mermaPct",
+                                  e.target.value === "" ? "" : Number(e.target.value),
+                                )
+                              }
+                              className="w-full max-w-[12rem] rounded-[12px] border border-gray-200 bg-white px-4 py-3 text-[14px] shadow-sm"
+                              placeholder="0"
+                            />
+                            <p className="mt-1 text-[11px] text-violet-950/80">
+                              Se aplica al crear solicitudes de procesamiento con este secundario (0–100). Opcional.
+                            </p>
                           </div>
                         </div>
                       </div>

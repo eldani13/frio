@@ -5,6 +5,8 @@ import SlotsGrid from "../bodega/SlotsGrid";
 import SelectedSlotCard from "../bodega/SelectedSlotCard";
 import type { Box, Client, Slot, Role } from "../../interfaces/bodega";
 import type { SolicitudProcesamiento } from "@/app/types/solicitudProcesamiento";
+import BodegaZonaCajaCard from "../bodega/BodegaZonaCajaCard";
+import VentasEnCursoMapButton from "../bodega/VentasEnCursoMapButton";
 import EntradaAlertButton from "../common/EntradaAlertButton";
 import { clientLabelFromList, formatBoxQuantityKg } from "@/app/lib/bodegaDisplay";
 import { ProcesamientoOrdenesActivasBodega } from "@/app/components/BodegaDashboard/ProcesamientoOrdenesActivasBodega";
@@ -28,6 +30,8 @@ type Props = {
   sessionUid?: string;
   sessionRole?: Role;
   operariosBodega?: Array<{ id: string; name: string; roleLabel?: string }>;
+  /** Usuarios con rol `procesador` — reasignación automática al pasar la orden a «En curso». */
+  procesadoresBodega?: Array<{ id: string; name: string }>;
   tareasProcesamientoOperario?: Array<Record<string, unknown>>;
   onPushTareaProcesamientoOperario?: (tarea: Record<string, unknown>) => void;
   warehouseId?: string;
@@ -60,6 +64,7 @@ export default function EstadoBodegaSection(props: Props) {
     sessionUid,
     sessionRole,
     operariosBodega = [],
+    procesadoresBodega = [],
     tareasProcesamientoOperario = [],
     onPushTareaProcesamientoOperario,
     warehouseId = "",
@@ -224,7 +229,7 @@ export default function EstadoBodegaSection(props: Props) {
                   </div>
                 </div>
               )}
-        <div className="w-full flex flex-col gap-1 sm:gap-2">
+        <div className="w-full flex flex-col gap-2 sm:gap-4">
           {sortedInboundBoxes.length === 0 ? (
             <div className="text-xs text-emerald-500">
               No hay cajas en ingreso.
@@ -234,25 +239,12 @@ export default function EstadoBodegaSection(props: Props) {
               {inboundPageItems.map((box, idx) => {
                 const isHighTemp = typeof box.temperature === "number" && box.temperature > 5;
                 return (
-                  <div
+                  <BodegaZonaCajaCard
                     key={`${box.position}-${box.autoId ?? "no-id"}-${idx}`}
-                    className="rounded-xl border border-emerald-200 bg-white p-1 sm:p-2 text-[11px] sm:text-xs text-emerald-700 w-full"
-                  >
-                    <div className="font-semibold">
-                      {box.name || "Sin nombre"}
-                    </div>
-                    <div>Id: {box.autoId}</div>
-                    <div>Cliente: {clientLabelFromList(box.client || "", clients)}</div>
-                    <div>Cantidad: {formatBoxQuantityKg(box.quantityKg)}</div>
-                    <div>
-                      Temp:{" "}
-                      {typeof box.temperature === "number"
-                        ? <span className={isHighTemp ? "text-green-700 font-bold" : undefined}>
-                            {box.temperature} °C
-                          </span>
-                        : "Sin temperatura"}
-                    </div>
-                  </div>
+                    box={box}
+                    variant="entrada"
+                    alertaTemperaturaAlta={isHighTemp}
+                  />
                 );
               })}
               {sortedInboundBoxes.length > ITEMS_PER_PAGE ? (
@@ -292,6 +284,17 @@ export default function EstadoBodegaSection(props: Props) {
           slots={slots}
           selectedPosition={selectedPosition}
           onSelect={handleSelectSlot}
+          titleActions={
+            warehouseCodeCuenta.trim() ? (
+              <VentasEnCursoMapButton
+                clients={clients}
+                warehouseCodeCuenta={warehouseCodeCuenta}
+                operariosBodega={operariosBodega}
+                tareasProcesamientoOperario={tareasProcesamientoOperario}
+                onPushTareaProcesamientoOperario={onPushTareaProcesamientoOperario}
+              />
+            ) : null
+          }
           headerActions={renderStatusButtons("bodega")}
           occupiedCount={slots.filter((s) => s.autoId && s.autoId.trim() !== "").length}
           totalSlots={slots.length}
@@ -311,6 +314,7 @@ export default function EstadoBodegaSection(props: Props) {
               sessionUid={sessionUid}
               sessionRole={sessionRole}
               operariosBodega={operariosBodega}
+              procesadoresBodega={procesadoresBodega}
               tareasProcesamientoOperario={tareasProcesamientoOperario}
               onPushTareaProcesamientoOperario={onPushTareaProcesamientoOperario}
               onProcesamientoTerminadoInventario={onProcesamientoTerminadoInventario}
@@ -334,7 +338,7 @@ export default function EstadoBodegaSection(props: Props) {
           Salida
         </h3>
 
-        <div className="w-full flex flex-col gap-2">
+        <div className="w-full flex flex-col gap-2 sm:gap-4">
           {sortedOutboundBoxes.length === 0 ? (
             <p className="text-xs text-pink-500">
               No hay cajas en salida.
@@ -342,23 +346,11 @@ export default function EstadoBodegaSection(props: Props) {
           ) : (
             <>
               {outboundPageItems.map((box, idx) => (
-                <div
+                <BodegaZonaCajaCard
                   key={`${box.position}-${box.autoId ?? "no-id"}-${idx}`}
-                  className="rounded-xl border border-pink-200 bg-white p-2 text-xs text-pink-700 w-full"
-                >
-                  <div className="font-semibold">
-                    {box.name || "Sin nombre"}
-                  </div>
-                  <div>Id: {box.autoId}</div>
-                  <div>Cliente: {clientLabelFromList(box.client || "", clients)}</div>
-                  <div>Cantidad: {formatBoxQuantityKg(box.quantityKg)}</div>
-                  <div>
-                    Temp:{" "}
-                    {typeof box.temperature === "number"
-                      ? `${box.temperature} °C`
-                      : "Sin temperatura"}
-                  </div>
-                </div>
+                  box={box}
+                  variant="salida"
+                />
               ))}
               {sortedOutboundBoxes.length > ITEMS_PER_PAGE ? (
                 <div className="flex items-center justify-between mt-2 text-[11px] sm:text-xs text-pink-700">

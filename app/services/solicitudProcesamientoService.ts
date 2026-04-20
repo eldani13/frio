@@ -1,5 +1,5 @@
 import { auth, db } from "@/lib/firebaseClient";
-import type { SolicitudProcesamiento } from "@/app/types/solicitudProcesamiento";
+import type { ProcesamientoEstado, SolicitudProcesamiento } from "@/app/types/solicitudProcesamiento";
 import { normalizeProcesamientoEstado } from "@/app/types/solicitudProcesamiento";
 import {
   addDoc,
@@ -58,6 +58,15 @@ function mapDoc(clientId: string, id: string, data: Record<string, unknown>): So
         : Number.isFinite(Number(data.estimadoUnidadesSecundario))
           ? Number(data.estimadoUnidadesSecundario)
           : undefined,
+    reglaConversionCantidadPrimario: Number.isFinite(Number(data.reglaConversionCantidadPrimario))
+      ? Number(data.reglaConversionCantidadPrimario)
+      : undefined,
+    reglaConversionUnidadesSecundario: Number.isFinite(Number(data.reglaConversionUnidadesSecundario))
+      ? Number(data.reglaConversionUnidadesSecundario)
+      : undefined,
+    perdidaProcesamientoPct: Number.isFinite(Number(data.perdidaProcesamientoPct))
+      ? Math.min(100, Math.max(0, Number(data.perdidaProcesamientoPct)))
+      : undefined,
     fecha: String(data.fecha ?? ""),
     estado: normalizeProcesamientoEstado(String(data.estado ?? "Iniciado")),
     createdAt: data.createdAt as Timestamp | null | undefined,
@@ -84,6 +93,9 @@ export const SolicitudProcesamientoService = {
       unidadPrimarioVisualizacion?: "cantidad" | "peso";
       warehouseId?: string;
       estimadoUnidadesSecundario?: number | null;
+      reglaConversionCantidadPrimario?: number;
+      reglaConversionUnidadesSecundario?: number;
+      perdidaProcesamientoPct?: number;
     },
   ) {
     const cid = String(clientId ?? "").trim();
@@ -122,6 +134,21 @@ export const SolicitudProcesamientoService = {
       Number.isFinite(Number(params.estimadoUnidadesSecundario))
         ? { estimadoUnidadesSecundario: Number(params.estimadoUnidadesSecundario) }
         : {}),
+      ...(Number.isFinite(Number(params.reglaConversionCantidadPrimario)) &&
+      Number(params.reglaConversionCantidadPrimario) > 0
+        ? { reglaConversionCantidadPrimario: Number(params.reglaConversionCantidadPrimario) }
+        : {}),
+      ...(Number.isFinite(Number(params.reglaConversionUnidadesSecundario)) &&
+      Number(params.reglaConversionUnidadesSecundario) > 0
+        ? { reglaConversionUnidadesSecundario: Number(params.reglaConversionUnidadesSecundario) }
+        : {}),
+      perdidaProcesamientoPct: Math.min(
+        100,
+        Math.max(
+          0,
+          Number.isFinite(Number(params.perdidaProcesamientoPct)) ? Number(params.perdidaProcesamientoPct) : 0,
+        ),
+      ),
       fecha: String(params.fecha ?? "").trim(),
       estado,
       createdAt: serverTimestamp(),
@@ -194,6 +221,18 @@ export const SolicitudProcesamientoService = {
     });
 
     return () => unsubs.forEach((u) => u());
+  },
+
+  /** Estado actual en Firestore (útil si `actualizarEstado` falló por red pero el cambio llegó a aplicarse). */
+  async obtenerEstadoSolicitud(clientId: string, solicitudId: string): Promise<ProcesamientoEstado | null> {
+    const cid = String(clientId ?? "").trim();
+    const sid = String(solicitudId ?? "").trim();
+    if (!cid || !sid) return null;
+    const ref = doc(db, "clientes", cid, COL, sid);
+    const snap = await getDoc(ref);
+    if (!snap.exists()) return null;
+    const cur = mapDoc(cid, sid, snap.data() as Record<string, unknown>);
+    return normalizeProcesamientoEstado(cur.estado);
   },
 
   async actualizarEstado(clientId: string, solicitudId: string, estado: string) {

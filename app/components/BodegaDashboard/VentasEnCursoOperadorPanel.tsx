@@ -12,6 +12,9 @@ import { compareOrdenCompraByCodigoDesc } from "@/lib/ordenCompraSort";
 import type { Catalogo } from "@/app/types/catalogo";
 import type { Comprador } from "@/app/types/comprador";
 import { VentaManualFormModal } from "@/app/components/ui/ventas/VentaManualFormModal";
+import { OrdenVentaService } from "@/app/services/ordenVentaService";
+import { AsignarBodegaService } from "@/app/services/asignarbodegaService";
+import type { WarehouseMeta } from "@/app/interfaces/bodega";
 
 function productosResumen(v: VentaEnCurso): string {
   const items = v.lineItems ?? [];
@@ -36,23 +39,130 @@ function compareVentasByNumeroDesc(a: VentaEnCurso, b: VentaEnCurso): number {
   );
 }
 
+function mergeWarehousesForClient(
+  byCode: WarehouseMeta[],
+  fallback: WarehouseMeta[],
+  clientId: string,
+  accountCode: string,
+): WarehouseMeta[] {
+  const map = new Map<string, WarehouseMeta>();
+  const add = (w: WarehouseMeta) => {
+    if (!w?.id || w.disabled) return;
+    map.set(w.id, w);
+  };
+  byCode.forEach(add);
+  const codeTrim = accountCode.trim();
+  fallback.forEach((w) => {
+    const cc = (w.codeCuenta ?? "").trim();
+    if (!cc) return;
+    if (codeTrim && cc === codeTrim) add(w);
+    if (cc === clientId) add(w);
+  });
+  return Array.from(map.values()).sort((a, b) =>
+    (a.name ?? a.id).localeCompare(b.name ?? b.id, "es", { sensitivity: "base" }),
+  );
+}
+
+function isInterna(w: WarehouseMeta) {
+  const s = (w.status ?? "").toLowerCase().trim();
+  return s === "interna";
+}
+
+/** Misma presentación que OC-#### en órdenes de compra: consecutivo automático, solo lectura. */
+function numeroVentaMostrado(v: VentaEnCurso): string {
+  const n = String(v.numero ?? "").trim();
+  if (n) return n;
+  const id = Number(v.numericId);
+  if (Number.isFinite(id) && id > 0) return `V-${String(id).padStart(4, "0")}`;
+  return "—";
+}
+
 export function VentasEnCursoOperadorPanel({
   onBack,
   idCliente,
+  codeCuenta,
   productos,
   compradores,
   dataLoading,
+  warehousesFallback = [],
 }: {
   onBack: () => void;
   idCliente: string;
+  codeCuenta: string;
   productos: Catalogo[];
   compradores: Comprador[];
   dataLoading: boolean;
+  warehousesFallback?: WarehouseMeta[];
 }) {
   const [ventas, setVentas] = React.useState<VentaEnCurso[]>([]);
+  const [ventasLoading, setVentasLoading] = React.useState(false);
   const [detalle, setDetalle] = React.useState<VentaEnCurso | null>(null);
   const [page, setPage] = React.useState(1);
   const [ventaModalOpen, setVentaModalOpen] = React.useState(false);
+  const [bodegasInternas, setBodegasInternas] = React.useState<WarehouseMeta[]>([]);
+  const [pendienteTransporte, setPendienteTransporte] = React.useState<VentaEnCurso | null>(null);
+  const [whTransporteId, setWhTransporteId] = React.useState("");
+  const [transporteSaving, setTransporteSaving] = React.useState(false);
+  const [iniciarVentaSaving, setIniciarVentaSaving] = React.useState(false);
+
+  React.useEffect(() => {
+    const cid = idCliente.trim();
+    if (!cid) {
+      setVentas([]);
+      setVentasLoading(false);
+      return;
+    }
+    setVentasLoading(true);
+    const unsub = OrdenVentaService.subscribe(
+      cid,
+      (list) => {
+        setVentas(list);
+        setVentasLoading(false);
+      },
+      () => {
+        setVentasLoading(false);
+      },
+    );
+    return () => unsub();
+  }, [idCliente]);
+
+  React.useEffect(() => {
+    setDetalle((d) => {
+      if (!d) return d;
+      const f = ventas.find((v) => v.id === d.id);
+      return f ?? d;
+    });
+  }, [ventas]);
+
+  React.useEffect(() => {
+    if (!pendienteTransporte) {
+      setWhTransporteId("");
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      try {
+        const byCode = await AsignarBodegaService.getWarehousesByCode(codeCuenta.trim());
+        const merged = mergeWarehousesForClient(
+          byCode,
+          warehousesFallback,
+          idCliente.trim(),
+          codeCuenta.trim(),
+        ).filter(isInterna);
+        if (cancelled) return;
+        setBodegasInternas(merged);
+        setWhTransporteId((prev) => {
+          if (prev && merged.some((w) => w.id === prev)) return prev;
+          return merged[0]?.id ?? "";
+        });
+      } catch {
+        if (!cancelled) setBodegasInternas([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [pendienteTransporte, codeCuenta, idCliente, warehousesFallback]);
 
   const tabla = React.useMemo(() => [...ventas].sort(compareVentasByNumeroDesc), [ventas]);
   const pageCount = Math.max(1, Math.ceil(tabla.length / PAGE_SIZE));
@@ -67,12 +177,52 @@ export function VentasEnCursoOperadorPanel({
     [tabla, currentPage],
   );
 
-  const handleEstado = (v: VentaEnCurso, next: string) => {
+  const handleEstado = async (v: VentaEnCurso, next: string) => {
     if (next === v.estado) return;
-    setVentas((list) =>
-      list.map((row) => (row.id === v.id ? { ...row, estado: next } : row)),
-    );
+    if (next === "Transporte" && v.estado !== "Transporte") {
+      setPendienteTransporte(v);
+      return;
+    }
+    const prev = v.estado;
+    setVentas((list) => list.map((row) => (row.id === v.id ? { ...row, estado: next } : row)));
     setDetalle((d) => (d?.id === v.id ? { ...d, estado: next } : d));
+    try {
+      await OrdenVentaService.updateEstado(idCliente.trim(), v.id, next);
+    } catch {
+      setVentas((list) => list.map((row) => (row.id === v.id ? { ...row, estado: prev } : row)));
+      setDetalle((d) => (d?.id === v.id ? { ...d, estado: prev } : d));
+      window.alert("No se pudo guardar el estado en la base de datos. Reintentá.");
+    }
+  };
+
+  const confirmarTransporteBodega = async () => {
+    const v = pendienteTransporte;
+    if (!v?.id || !whTransporteId.trim()) return;
+    const wh = bodegasInternas.find((w) => w.id === whTransporteId.trim());
+    setTransporteSaving(true);
+    try {
+      await OrdenVentaService.marcarEnTransporteInterna(idCliente.trim(), v.id, {
+        destinoWarehouseId: whTransporteId.trim(),
+        destinoWarehouseNombre: (wh?.name ?? whTransporteId).trim(),
+      });
+      setPendienteTransporte(null);
+    } catch (e) {
+      window.alert(e instanceof Error ? e.message : "No se pudo marcar el envío a bodega.");
+    } finally {
+      setTransporteSaving(false);
+    }
+  };
+
+  const handleIniciarVenta = async () => {
+    if (!detalle?.id) return;
+    const e = String(detalle.estado ?? "").trim();
+    if (e !== "Iniciado") return;
+    setIniciarVentaSaving(true);
+    try {
+      await handleEstado(detalle, "En curso");
+    } finally {
+      setIniciarVentaSaving(false);
+    }
   };
 
   const compradoresConId = React.useMemo(
@@ -120,10 +270,11 @@ export function VentasEnCursoOperadorPanel({
               setVentaModalOpen(true);
             }}
             disabled={!puedeCrearVenta}
+            aria-label="Nueva venta manual"
+            title="Nueva venta manual"
             className="inline-flex items-center justify-center gap-2 rounded-[10px] bg-[#A8D5BA] px-5 py-2.5 text-sm font-semibold text-[#2D5A3F] shadow-sm transition hover:bg-[#97c4a9] active:scale-[0.98] disabled:pointer-events-none disabled:opacity-50"
           >
             <HiOutlinePlus strokeWidth={2.5} className="h-5 w-5" />
-            
           </button>
         </header>
 
@@ -165,16 +316,18 @@ export function VentasEnCursoOperadorPanel({
                 </tr>
               </thead>
               <tbody>
-                {dataLoading ? (
+                {dataLoading || ventasLoading ? (
                   <tr>
                     <td colSpan={5} className="px-4 py-12 text-center text-slate-500">
-                      Cargando datos de cuenta…
+                      {dataLoading ? "Cargando datos de cuenta…" : "Cargando órdenes de venta…"}
                     </td>
                   </tr>
                 ) : tabla.length === 0 ? (
                   <tr>
                     <td colSpan={5} className="px-4 py-12 text-center text-slate-500">
-                      No hay órdenes de venta. Usá &quot;Agregar venta manual&quot; para crear la primera.
+                      No hay órdenes de venta en la base de datos. Usá el botón <strong className="text-slate-700">Nueva
+                      venta</strong> para crear la primera (se guarda en{" "}
+                      <span className="font-mono text-xs">clientes/…/ordenesVenta</span>).
                     </td>
                   </tr>
                 ) : (
@@ -191,10 +344,10 @@ export function VentasEnCursoOperadorPanel({
                         }
                       }}
                       className="cursor-pointer border-b border-slate-100 transition-colors hover:bg-emerald-50/70 focus-visible:bg-emerald-50/70 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-emerald-400"
-                      aria-label={`Ver detalle de venta ${v.numero}`}
+                      aria-label={`Ver detalle de venta ${numeroVentaMostrado(v)}`}
                     >
                       <td className="whitespace-nowrap px-4 py-3 font-mono text-[13px] font-semibold text-slate-900">
-                        {v.numero}
+                        {numeroVentaMostrado(v)}
                       </td>
                       <td className="max-w-[160px] px-4 py-3 text-slate-800">
                         <span className="line-clamp-2 text-[13px]" title={v.compradorNombre}>
@@ -217,10 +370,10 @@ export function VentasEnCursoOperadorPanel({
                       >
                         <div className="relative inline-flex max-w-full align-middle">
                           <select
-                            aria-label={`Estado de la venta ${v.numero}`}
+                            aria-label={`Estado de la venta ${numeroVentaMostrado(v)}`}
                             title="Cambiar estado"
                             value={v.estado}
-                            onChange={(e) => handleEstado(v, e.target.value)}
+                            onChange={(e) => void handleEstado(v, e.target.value)}
                             className={`inline-flex max-w-[12rem] cursor-pointer truncate rounded-full border-0 py-0.5 pl-2.5 pr-7 text-left text-xs font-semibold shadow-none outline-none ring-0 focus-visible:ring-2 focus-visible:ring-emerald-400/50 [appearance:none] ${ordenCompraEstadoBadgeClass(v.estado)}`}
                           >
                             {opcionesEstadoSelect(v.estado).map((opt) => (
@@ -244,7 +397,7 @@ export function VentasEnCursoOperadorPanel({
               </tbody>
             </table>
           </div>
-          {!dataLoading && tabla.length > 0 ? (
+          {!dataLoading && !ventasLoading && tabla.length > 0 ? (
             <div className="flex flex-col gap-3 border-t border-slate-100 bg-white px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
               <span className="text-xs text-slate-500 tabular-nums">
                 {tabla.length} {tabla.length === 1 ? "registro" : "registros"} · Página {currentPage} de{" "}
@@ -281,28 +434,15 @@ export function VentasEnCursoOperadorPanel({
         onClose={() => setVentaModalOpen(false)}
         productos={productos}
         compradores={compradores}
-        onCreate={(draft) => {
-          setVentas((prev) => {
-            const nextNum = Math.max(0, ...prev.map((x) => x.numericId)) + 1;
-            const nuevo: VentaEnCurso = {
-              id: `local-${Date.now()}`,
-              numero: `V-${String(nextNum).padStart(4, "0")}`,
-              numericId: nextNum,
-              compradorId: draft.compradorId,
-              compradorNombre: draft.compradorNombre,
-              fecha: draft.fecha,
-              estado: draft.estado,
-              lineItems: draft.lineItems,
-            };
-            return [nuevo, ...prev];
-          });
+        onCreate={async (draft) => {
+          await OrdenVentaService.create(idCliente.trim(), codeCuenta.trim(), draft);
           setPage(1);
         }}
       />
 
       {detalle ? (
         <div
-          className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/40 p-4 sm:items-center"
+          className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/50 p-4 backdrop-blur-[2px] sm:items-center"
           role="dialog"
           aria-modal="true"
           aria-labelledby="venta-detalle-titulo"
@@ -313,42 +453,159 @@ export function VentasEnCursoOperadorPanel({
             aria-label="Cerrar"
             onClick={() => setDetalle(null)}
           />
-          <div className="relative z-10 w-full max-w-lg rounded-2xl border border-slate-200 bg-white p-6 shadow-xl">
-            <h2 id="venta-detalle-titulo" className="text-lg font-bold text-slate-900">
-              {detalle.numero}
-            </h2>
-            <p className="mt-2 text-sm text-slate-700">
-              <span className="text-xs font-bold uppercase tracking-wide text-slate-500">Comprador</span>
-              <br />
-              <span className="font-medium text-slate-900">{detalle.compradorNombre || "—"}</span>
-            </p>
-            <p className="mt-2 text-xs text-slate-400">Fecha: {detalle.fecha}</p>
-            <span
-              className={`mt-3 inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold ${ordenCompraEstadoBadgeClass(detalle.estado)}`}
-            >
-              {detalle.estado}
-            </span>
-            <div className="mt-4 border-t border-slate-100 pt-4">
-              <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Productos</p>
-              <ul className="mt-2 space-y-2 text-sm text-slate-800">
-                {(detalle.lineItems ?? []).map((li, i) => (
-                  <li
-                    key={`${detalle.id}-${i}`}
-                    className="flex justify-between gap-3 rounded-lg bg-slate-50 px-3 py-2"
-                  >
-                    <span className="font-medium">{li.titleSnapshot}</span>
-                    <span className="shrink-0 tabular-nums text-slate-600">× {li.cantidad}</span>
-                  </li>
-                ))}
-              </ul>
+          <div className="relative z-10 w-full max-w-md overflow-hidden rounded-3xl border border-slate-200/90 bg-white shadow-2xl sm:max-w-lg">
+            {/* Cabecera tipo documento */}
+            <div className="border-b border-slate-200 bg-linear-to-br from-slate-50 via-white to-emerald-50/30 px-6 pb-5 pt-6">
+              <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-slate-500">Orden de venta</p>
+              <h2
+                id="venta-detalle-titulo"
+                className="mt-1 font-mono text-2xl font-bold tracking-tight text-slate-900"
+              >
+                {numeroVentaMostrado(detalle)}
+              </h2>
+              <div className="mt-4 flex flex-wrap items-center gap-3 border-t border-slate-200/80 pt-4">
+                <span
+                  className={`inline-flex rounded-full px-3 py-1 text-xs font-bold ${ordenCompraEstadoBadgeClass(detalle.estado)}`}
+                >
+                  {detalle.estado}
+                </span>
+                <span className="text-sm text-slate-600">
+                  <span className="font-medium text-slate-400">Fecha</span>{" "}
+                  <span className="font-semibold text-slate-800">{detalle.fecha}</span>
+                </span>
+              </div>
             </div>
-            <button
-              type="button"
-              onClick={() => setDetalle(null)}
-              className="mt-6 w-full rounded-xl bg-slate-900 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800"
-            >
-              Cerrar
-            </button>
+
+            <div className="max-h-[min(55vh,420px)] space-y-0 overflow-y-auto px-6 py-5">
+              {/* Comprador */}
+              <div className="rounded-2xl border border-slate-100 bg-slate-50/80 px-4 py-4">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Comprador</p>
+                <p className="mt-1.5 text-base font-semibold leading-snug text-slate-900">
+                  {detalle.compradorNombre || "—"}
+                </p>
+              </div>
+
+              {detalle.destinoWarehouseNombre ? (
+                <p className="mt-4 text-xs text-slate-600">
+                  Bodega destino:{" "}
+                  <span className="font-semibold text-slate-800">{detalle.destinoWarehouseNombre}</span>
+                </p>
+              ) : null}
+
+              {/* Tabla de productos */}
+              <div className="mt-5">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Productos</p>
+                <div className="mt-2 overflow-hidden rounded-2xl border border-slate-200">
+                  <table className="w-full text-left text-sm">
+                    <thead>
+                      <tr className="border-b border-slate-200 bg-slate-50/90">
+                        <th className="px-4 py-2.5 text-[10px] font-bold uppercase tracking-wide text-slate-500">
+                          Descripción
+                        </th>
+                        <th className="w-20 px-4 py-2.5 text-right text-[10px] font-bold uppercase tracking-wide text-slate-500">
+                          Cant.
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(detalle.lineItems ?? []).length === 0 ? (
+                        <tr>
+                          <td colSpan={2} className="px-4 py-6 text-center text-sm text-slate-500">
+                            Sin líneas en esta venta.
+                          </td>
+                        </tr>
+                      ) : (
+                        (detalle.lineItems ?? []).map((li, i) => (
+                          <tr
+                            key={`${detalle.id}-${i}`}
+                            className={i % 2 === 0 ? "bg-white" : "bg-slate-50/50"}
+                          >
+                            <td className="px-4 py-3 text-[13px] font-medium leading-snug text-slate-800">
+                              {li.titleSnapshot}
+                            </td>
+                            <td className="px-4 py-3 text-right font-mono text-[13px] tabular-nums text-slate-700">
+                              × {li.cantidad}
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-3 border-t border-slate-100 bg-slate-50/50 px-6 py-5">
+              {String(detalle.estado ?? "").trim() === "Iniciado" ? (
+                <button
+                  type="button"
+                  disabled={iniciarVentaSaving || !(detalle.lineItems ?? []).length}
+                  onClick={() => void handleIniciarVenta()}
+                  className="w-full rounded-2xl border-2 border-emerald-400 bg-linear-to-b from-emerald-50 to-emerald-100/80 py-3.5 text-sm font-bold text-emerald-950 shadow-sm transition hover:border-emerald-500 hover:from-emerald-100 hover:to-emerald-100 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {iniciarVentaSaving ? "Guardando…" : "Iniciar venta"}
+                </button>
+              ) : null}
+              <button
+                type="button"
+                onClick={() => setDetalle(null)}
+                className="w-full rounded-2xl border border-slate-200 bg-white py-3 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50"
+              >
+                Cerrar
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {pendienteTransporte ? (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/50 p-4"
+          role="dialog"
+          aria-modal="true"
+        >
+          <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-xl">
+            <h3 className="text-lg font-bold text-slate-900">Enviar a bodega interna</h3>
+            <p className="mt-2 text-sm text-slate-600">
+              Venta <span className="font-mono font-semibold">{numeroVentaMostrado(pendienteTransporte)}</span>: se
+              pondrá en <strong>Transporte</strong> hacia la bodega elegida (el custodio registrará las cajas en
+              ingreso).
+            </p>
+            <label className="mt-4 block text-xs font-semibold text-slate-600">
+              Bodega interna
+              <select
+                value={whTransporteId}
+                onChange={(e) => setWhTransporteId(e.target.value)}
+                className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+              >
+                {bodegasInternas.length === 0 ? (
+                  <option value="">No hay bodegas internas vinculadas</option>
+                ) : (
+                  bodegasInternas.map((w) => (
+                    <option key={w.id} value={w.id}>
+                      {w.name?.trim() || w.id}
+                    </option>
+                  ))
+                )}
+              </select>
+            </label>
+            <div className="mt-6 flex gap-2">
+              <button
+                type="button"
+                onClick={() => setPendienteTransporte(null)}
+                className="flex-1 rounded-xl border border-slate-200 py-2.5 text-sm font-semibold text-slate-700"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                disabled={!whTransporteId.trim() || transporteSaving}
+                onClick={() => void confirmarTransporteBodega()}
+                className="flex-1 rounded-xl bg-emerald-600 py-2.5 text-sm font-semibold text-white hover:bg-emerald-500 disabled:opacity-50"
+              >
+                {transporteSaving ? "Guardando…" : "Confirmar"}
+              </button>
+            </div>
           </div>
         </div>
       ) : null}

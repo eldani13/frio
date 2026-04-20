@@ -20,6 +20,8 @@ export type Slot = {
 	/** Misma caja que en ingreso/salida: trazabilidad hasta despacho. */
 	ordenCompraId?: string;
 	ordenCompraClienteId?: string;
+	ordenVentaId?: string;
+	ordenVentaClienteId?: string;
 	/** Ubicación desde procesamiento: nombre del producto resultado (secundario). */
 	procesamientoSecundarioTitulo?: string;
 	/** Ubicación desde procesamiento: cantidad estimada en unidades del secundario (p. ej. lonchas). */
@@ -36,7 +38,8 @@ export type Role =
 	| "jefe"
 	| "cliente"
 	| "configurador"
-	| "operadorCuentas";
+	| "operadorCuentas"
+	| "transporte";
 
 export type Client = {
 	id: string;
@@ -77,6 +80,8 @@ export type Box = {
 	/** Ingreso desde OC: al ubicar la última caja en bodega se cierra la orden. */
 	ordenCompraId?: string;
 	ordenCompraClienteId?: string;
+	ordenVentaId?: string;
+	ordenVentaClienteId?: string;
 };
 
 export type OrderType = "a_bodega" | "a_salida" | "revisar";

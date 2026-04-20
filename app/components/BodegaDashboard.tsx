@@ -8,15 +8,23 @@ import OrdenesJefeSection from "./BodegaDashboard/OrdenesJefeSection";
 import DespachadosSection from "./BodegaDashboard/DespachadosSection";
 import ReportesSection from "./BodegaDashboard/ReportesSection";
 import CustodioOrdenesCompraTab from "./BodegaDashboard/CustodioOrdenesCompraTab";
+import CustodioOrdenesVentaTab from "./BodegaDashboard/CustodioOrdenesVentaTab";
+import { TransporteViajesPanel } from "./BodegaDashboard/TransporteViajesPanel";
 import { OrdenCompraService } from "@/app/services/ordenCompraService";
+import { OrdenVentaService } from "@/app/services/ordenVentaService";
+import { ViajeVentaTransporteService } from "@/app/services/viajeVentaTransporteService";
+import type { VentaPendienteCartonaje } from "@/app/types/ventaCuenta";
 import { SolicitudProcesamientoService } from "@/app/services/solicitudProcesamientoService";
 import type { SolicitudProcesamiento } from "@/app/types/solicitudProcesamiento";
 import { normalizeProcesamientoEstado } from "@/app/types/solicitudProcesamiento";
 import {
   deductSlotsAfterProcesamientoTerminado,
   tareaColaOperarioToSolicitudInventario,
+  type ResultadoDescuentoProcesamiento,
 } from "@/lib/procesamientoInventarioBodega";
+import { planSalidaVentaDesdeMapa } from "@/lib/ventaSalidaBodegaMatch";
 import type { IngresoDesdeOrdenCompraPayload } from "./BodegaDashboard/OcOrdenIngresoPanel";
+import type { IngresoDesdeOrdenVentaPayload } from "./BodegaDashboard/OcOrdenVentaIngresoPanel";
 import { AiTwotoneAppstore } from "react-icons/ai";
 import { SlGraph } from "react-icons/sl";
 import { FaBoxOpen } from "react-icons/fa6";
@@ -81,6 +89,8 @@ import {
   getLoginRoleShortcuts,
   loginRoleShortcutsEnabled,
 } from "../../lib/loginRolePresets";
+import { BiTask } from "react-icons/bi";
+import { MdOutlinePointOfSale } from "react-icons/md";
 
 // --- SESION DESDE FIREBASE ---
 type Session = {
@@ -191,6 +201,8 @@ const CLEARED_BODEGA_SLOT_PATCH: Partial<Slot> = {
   quantityKg: undefined,
   ordenCompraId: undefined,
   ordenCompraClienteId: undefined,
+  ordenVentaId: undefined,
+  ordenVentaClienteId: undefined,
   rd: undefined,
   renglon: undefined,
   lote: undefined,
@@ -233,7 +245,8 @@ const isValidRole = (value: unknown): value is Role =>
   value === "jefe" ||
   value === "cliente" ||
   value === "configurador" ||
-  value === "operadorCuentas";
+  value === "operadorCuentas" ||
+  value === "transporte";
 
 const normalizeSlots = (value: unknown, expectedSize = DEFAULT_TOTAL_SLOTS): Slot[] | null => {
   if (!Array.isArray(value)) {
@@ -293,6 +306,14 @@ const normalizeSlots = (value: unknown, expectedSize = DEFAULT_TOTAL_SLOTS): Slo
       typeof record.ordenCompraClienteId === "string" && record.ordenCompraClienteId.trim()
         ? record.ordenCompraClienteId.trim()
         : undefined;
+    const ordenVentaId =
+      typeof record.ordenVentaId === "string" && record.ordenVentaId.trim()
+        ? record.ordenVentaId.trim()
+        : undefined;
+    const ordenVentaClienteId =
+      typeof record.ordenVentaClienteId === "string" && record.ordenVentaClienteId.trim()
+        ? record.ordenVentaClienteId.trim()
+        : undefined;
 
     map.set(position, {
       position,
@@ -307,6 +328,8 @@ const normalizeSlots = (value: unknown, expectedSize = DEFAULT_TOTAL_SLOTS): Slo
       ...(procSolId ? { procesamientoSolicitudId: procSolId } : {}),
       ...(ordenCompraId ? { ordenCompraId } : {}),
       ...(ordenCompraClienteId ? { ordenCompraClienteId } : {}),
+      ...(ordenVentaId ? { ordenVentaId } : {}),
+      ...(ordenVentaClienteId ? { ordenVentaClienteId } : {}),
     });
   }
 
@@ -347,6 +370,22 @@ const readOrdenCompraRefs = (
       : "";
   if (!oid || !cid) return null;
   return { ordenCompraId: oid, ordenCompraClienteId: cid };
+};
+
+const readOrdenVentaRefs = (
+  item: Box | Slot | undefined,
+): { ordenVentaId: string; ordenVentaClienteId: string } | null => {
+  if (!item) return null;
+  const oid =
+    "ordenVentaId" in item && typeof item.ordenVentaId === "string"
+      ? item.ordenVentaId.trim()
+      : "";
+  const cid =
+    "ordenVentaClienteId" in item && typeof item.ordenVentaClienteId === "string"
+      ? item.ordenVentaClienteId.trim()
+      : "";
+  if (!oid || !cid) return null;
+  return { ordenVentaId: oid, ordenVentaClienteId: cid };
 };
 
 const filterBoxesByCapacity = (items: Box[], capacity: number) =>
@@ -401,6 +440,14 @@ const normalizeBoxes = (value: unknown): Box[] | null => {
       typeof record.ordenCompraClienteId === "string" && record.ordenCompraClienteId.trim()
         ? record.ordenCompraClienteId.trim()
         : undefined;
+    const ordenVentaId =
+      typeof record.ordenVentaId === "string" && record.ordenVentaId.trim()
+        ? record.ordenVentaId.trim()
+        : undefined;
+    const ordenVentaClienteId =
+      typeof record.ordenVentaClienteId === "string" && record.ordenVentaClienteId.trim()
+        ? record.ordenVentaClienteId.trim()
+        : undefined;
 
     boxes.push({
       position: positionNum,
@@ -416,6 +463,8 @@ const normalizeBoxes = (value: unknown): Box[] | null => {
       ...(quantityKg !== undefined ? { quantityKg } : {}),
       ...(ordenCompraId ? { ordenCompraId } : {}),
       ...(ordenCompraClienteId ? { ordenCompraClienteId } : {}),
+      ...(ordenVentaId ? { ordenVentaId } : {}),
+      ...(ordenVentaClienteId ? { ordenVentaClienteId } : {}),
     });
   }
 
@@ -708,6 +757,7 @@ export default function BodegaDashboard() {
     | "estado"
     | "ingresos"
     | "ordenesCompraCustodio"
+    | "ordenesVentaCustodio"
     | "salida"
     | "ordenes"
     | "solicitudes"
@@ -1288,7 +1338,10 @@ export default function BodegaDashboard() {
         createdByRole: session.role,
         disabled: false,
       };
-      setUsers((prev) => [newUser, ...prev]);
+      setUsers((prev) => {
+        const rest = prev.filter((u) => u.id !== newUser.id);
+        return [newUser, ...rest];
+      });
       setNewUserName("");
       setNewUserCode("");
       setNewUserClientId("");
@@ -1844,11 +1897,20 @@ export default function BodegaDashboard() {
         .filter((o) => o.type === "a_bodega" && o.sourceZone === "procesamiento" && o.procesamientoOrigen)
         .map(
           (o) =>
-            `${o.procesamientoOrigen!.cuentaClientId}::${o.procesamientoOrigen!.solicitudId}`,
+            `${String(o.procesamientoOrigen!.cuentaClientId).trim()}::${String(o.procesamientoOrigen!.solicitudId).trim()}`,
         ),
     );
-    return solicitudesProcTerminadas.filter((s) => !pend.has(`${s.clientId}::${s.id}`));
-  }, [solicitudesProcTerminadas, orders]);
+    const yaEnMapa = new Set<string>();
+    for (const slot of slots) {
+      const sol = String(slot.procesamientoSolicitudId ?? "").trim();
+      const cli = String(slot.client ?? "").trim();
+      if (sol && cli) yaEnMapa.add(`${cli}::${sol}`);
+    }
+    return solicitudesProcTerminadas.filter((s) => {
+      const key = `${String(s.clientId).trim()}::${String(s.id).trim()}`;
+      return !pend.has(key) && !yaEnMapa.has(key);
+    });
+  }, [solicitudesProcTerminadas, orders, slots]);
 
   const reviewBodegaList = useMemo(() => availableBodegaForOrders, [availableBodegaForOrders]);
 
@@ -2298,6 +2360,7 @@ export default function BodegaDashboard() {
   const isJefe = role === "jefe";
   const isCliente = role === "cliente";
   const isOperadorCuentas = role === "operadorCuentas";
+  const isTransporte = role === "transporte";
   const isCuentaUsuario = isCliente || isOperadorCuentas;
   const isConfigurator = role === "configurador";
   const clientId = session?.clientId ?? null;
@@ -2417,12 +2480,23 @@ export default function BodegaDashboard() {
   }, [users]);
 
   const handlePushTareaProcesamientoOperario = useCallback((tarea: Record<string, unknown>) => {
+    const tipo = String(tarea.tipo ?? "procesamiento").trim();
     const cid = String(tarea.clientId ?? "").trim();
-    const sid = String(tarea.solicitudId ?? "").trim();
+    const sid =
+      tipo === "venta_salida"
+        ? String(tarea.ventaId ?? tarea.ordenVentaId ?? "").trim()
+        : String(tarea.solicitudId ?? "").trim();
+    if (!cid || !sid) return;
     setTareasProcesamientoOperario((prev) => {
-      const idx = prev.findIndex(
-        (x) => String(x.clientId ?? "").trim() === cid && String(x.solicitudId ?? "").trim() === sid,
-      );
+      const idx = prev.findIndex((x) => {
+        const xt = String(x.tipo ?? "procesamiento").trim();
+        const xcid = String(x.clientId ?? "").trim();
+        const xsid =
+          xt === "venta_salida"
+            ? String(x.ventaId ?? x.ordenVentaId ?? "").trim()
+            : String(x.solicitudId ?? "").trim();
+        return xcid === cid && xsid === sid;
+      });
       if (idx === -1) return [...prev, tarea];
       const next = [...prev];
       next[idx] = { ...prev[idx], ...tarea };
@@ -2618,6 +2692,107 @@ export default function BodegaDashboard() {
       const estadoMsg = sinDiferencias ? "Cerrado(ok)" : "Cerrado(no ok)";
       setMessage(
         `Ingreso desde ${payload.orden.numero}: ${created.length} caja(s) en zona de ingreso. La orden quedó en «${estadoMsg}».`,
+      );
+    },
+    [
+      role,
+      session?.uid,
+      session?.displayName,
+      warehouseCapacity,
+      warehouseId,
+      inboundBoxes,
+      sortByPosition,
+      addIngreso,
+    ],
+  );
+
+  const handleIngresoDesdeOrdenVenta = useCallback(
+    async (payload: IngresoDesdeOrdenVentaPayload) => {
+      if (role !== "custodio") {
+        throw new Error("Solo el custodio registra ingresos.");
+      }
+      if (!session?.uid) {
+        throw new Error("No hay sesión para registrar el cierre de la venta.");
+      }
+      if (warehouseCapacity <= 0) {
+        throw new Error("Configurá una capacidad mayor a 0 para esta bodega.");
+      }
+      const destWh = (payload.orden.destinoWarehouseId ?? "").trim();
+      if (destWh && destWh !== warehouseId.trim()) {
+        throw new Error("Esta venta no está destinada a la bodega seleccionada en el panel.");
+      }
+      const clientId = payload.orden.idClienteDueno.trim();
+      if (!clientId) {
+        throw new Error("La venta no tiene cuenta dueña válida.");
+      }
+
+      const lines = payload.lineas;
+      const created: Box[] = [];
+      let acc = [...inboundBoxes];
+      const pushBox = (row: {
+        name: string;
+        temperature: number;
+        quantityKg: number;
+        ordenVentaId?: string;
+      }) => {
+        const nextPosition = getNextIngresoPosition(acc, warehouseCapacity);
+        if (nextPosition <= 0 || nextPosition > warehouseCapacity) {
+          throw new Error("No hay cupos suficientes en ingreso.");
+        }
+        if (Number.isNaN(row.temperature)) {
+          throw new Error("Revisá la temperatura de cada producto verificado.");
+        }
+        if (Number.isNaN(row.quantityKg) || row.quantityKg <= 0) {
+          throw new Error("Revisá la cantidad (kg) de cada producto verificado.");
+        }
+        const newBox: Box = {
+          position: nextPosition,
+          autoId: createAutoId("CAJ"),
+          name: row.name.trim(),
+          temperature: row.temperature,
+          client: clientId,
+          quantityKg: row.quantityKg,
+          ...(row.ordenVentaId
+            ? {
+                ordenVentaId: row.ordenVentaId,
+                ordenVentaClienteId: clientId,
+              }
+            : {}),
+        };
+        created.push(newBox);
+        acc = sortByPosition([newBox, ...acc]);
+      };
+
+      for (const row of lines) {
+        pushBox({
+          name: row.name,
+          temperature: row.temperature,
+          quantityKg: row.quantityKg,
+          ordenVentaId: payload.orden.id,
+        });
+      }
+
+      if (created.length) {
+        setInboundBoxes(acc);
+        const now = Date.now();
+        created.forEach((b) => addIngreso({ ...b, historialAtMs: now }));
+        setStats((prev) => ({ ...prev, ingresos: prev.ingresos + created.length }));
+      }
+
+      const { sinDiferencias } = await OrdenVentaService.finalizarIngresoCustodioVenta(
+        clientId,
+        payload.orden.id,
+        {
+          kgEsperadosPorLinea: payload.kgEsperadosPorLinea,
+          kgRecibidosPorLinea: payload.kgRecibidosPorLinea,
+          cerradaPorUid: session.uid,
+          cerradaPorNombre: session.displayName,
+        },
+      );
+
+      const estadoMsg = sinDiferencias ? "Cerrado(ok)" : "Cerrado(no ok)";
+      setMessage(
+        `Ingreso desde venta ${payload.orden.numero}: ${created.length} caja(s) en zona de ingreso. La venta quedó en «${estadoMsg}».`,
       );
     },
     [
@@ -2836,6 +3011,92 @@ export default function BodegaDashboard() {
     [isExternalWarehouse, setMessage, warehouseId],
   );
 
+  /** Custodio: todas las cajas en salida de una OV → una sola acción; venta «Transporte» + viaje para el rol transporte. */
+  const handleDespachoPaqueteOrdenVenta = useCallback(
+    async (orden: VentaPendienteCartonaje) => {
+      if (role !== "custodio") {
+        setMessage("Solo el custodio puede despachar paquetes.");
+        return;
+      }
+      const clientId = String(orden.idClienteDueno ?? "").trim();
+      const ventaId = String(orden.id ?? "").trim();
+      if (!clientId || !ventaId) {
+        setMessage("Datos de venta incompletos.");
+        return;
+      }
+      const boxes = outboundBoxes.filter(
+        (b) =>
+          String(b.ordenVentaId ?? "").trim() === ventaId &&
+          String(b.ordenVentaClienteId ?? "").trim() === clientId,
+      );
+      if (boxes.length === 0) {
+        setMessage("No hay cajas en salida vinculadas a esta venta.");
+        return;
+      }
+      const positions = new Set(boxes.map((b) => b.position));
+      const nextOutbound = outboundBoxes.filter((b) => !positions.has(b.position));
+      const nextDispatched = sortByPosition([...boxes, ...dispatchedBoxes]);
+      const baseAt = Date.now();
+      boxes.forEach((box, i) => {
+        addDespachado({
+          id: `desp-${baseAt}-${i}-${box.autoId}-${box.position}`,
+          box,
+          atMs: baseAt,
+          fromSalidaPosition: box.position,
+        });
+      });
+      setOutboundBoxes(nextOutbound);
+      setDispatchedBoxes(nextDispatched);
+      try {
+        await OrdenVentaService.updateEstado(clientId, ventaId, "Transporte");
+        await ViajeVentaTransporteService.crearDesdeVenta(clientId, ventaId, orden.lineItems ?? []);
+      } catch (e: unknown) {
+        console.error("[despacho paquete venta]", e);
+        setMessage(
+          e instanceof Error ? e.message : "No se pudo actualizar la venta o crear el viaje de transporte.",
+        );
+        return;
+      }
+      persistWarehouseStateNow({
+        slots,
+        inboundBoxes,
+        outboundBoxes: nextOutbound,
+        dispatchedBoxes: nextDispatched,
+        orders,
+        stats,
+        warehouseName,
+        alerts,
+        assignedAlerts,
+        alertasOperario,
+        alertasOperarioSolved,
+        tareasProcesamientoOperario,
+        llamadasJefe,
+      });
+      setMessage(
+        `Paquete ${orden.numero}: ${boxes.length} caja(s) despachada(s). La venta pasó a «Transporte» y el transportista verá el viaje en su panel.`,
+      );
+    },
+    [
+      role,
+      outboundBoxes,
+      dispatchedBoxes,
+      slots,
+      inboundBoxes,
+      orders,
+      stats,
+      warehouseName,
+      alerts,
+      assignedAlerts,
+      alertasOperario,
+      alertasOperarioSolved,
+      tareasProcesamientoOperario,
+      llamadasJefe,
+      persistWarehouseStateNow,
+      addDespachado,
+      sortByPosition,
+    ],
+  );
+
   const handleProcesamientoTerminadoInventarioMapa = useCallback(
     async (
       nextSlots: Slot[],
@@ -2907,19 +3168,55 @@ export default function BodegaDashboard() {
 
   const handleProcesamientoEnCursoDesdeColaOperario = useCallback(
     async (tarea: Record<string, unknown>, nextTareas: Array<Record<string, unknown>>) => {
-      const like = tareaColaOperarioToSolicitudInventario(tarea);
-      const r = deductSlotsAfterProcesamientoTerminado(slots, like, warehouseId);
-      setSlots(r.slots);
-      setTareasProcesamientoOperario(nextTareas);
-      setMessage(
-        r.warning
-          ? `Orden ${like.numero} en curso (material retirado de bodega). ${r.warning}`
-          : r.deductedKg > 0
-            ? `Orden ${like.numero} en curso. Descontados ${r.deductedKg.toLocaleString("es-CO", { maximumFractionDigits: 4 })} kg en bodega.`
-            : `Orden ${like.numero} en curso.`,
-      );
+      const wid = String(warehouseId ?? "").trim();
+      const tareaMerged: Record<string, unknown> = {
+        ...tarea,
+        warehouseId: String(tarea.warehouseId ?? "").trim() || wid,
+      };
+      const like = tareaColaOperarioToSolicitudInventario(tareaMerged);
+      let resultado!: ResultadoDescuentoProcesamiento;
+      setSlots((prev) => {
+        resultado = deductSlotsAfterProcesamientoTerminado(prev, like, wid);
+        return resultado.slots;
+      });
+
+      const cid = String(tarea.clientId ?? "").trim();
+      const sid = String(tarea.solicitudId ?? "").trim();
+      const proc = procesadoresBodega[0];
+      let tareasFinales = nextTareas;
+      let reasignacionFallo = false;
+      if (cid && sid && proc) {
+        try {
+          await SolicitudProcesamientoService.asignarOperarioBodega(cid, sid, {
+            operarioUid: proc.id,
+            operarioNombre: proc.name,
+          });
+          tareasFinales = nextTareas.map((x) =>
+            String(x.clientId ?? "").trim() === cid && String(x.solicitudId ?? "").trim() === sid
+              ? { ...x, faseCola: "en_curso", operarioUid: proc.id, operarioNombre: proc.name }
+              : x,
+          );
+        } catch (e) {
+          console.error("[BodegaDashboard] Reasignación al procesador tras «En curso»:", e);
+          reasignacionFallo = true;
+        }
+      }
+
+      setTareasProcesamientoOperario(tareasFinales);
+      const baseMsg = resultado.warning
+        ? `Orden ${like.numero} en curso (material retirado de bodega). ${resultado.warning}`
+        : resultado.deductedKg > 0
+          ? `Orden ${like.numero} en curso. Descontados ${resultado.deductedKg.toLocaleString("es-CO", { maximumFractionDigits: 4 })} kg en bodega.`
+          : `Orden ${like.numero} en curso.`;
+      const sufijoProc =
+        reasignacionFallo
+          ? " No se pudo reasignar al procesador en la nube; revisá la conexión."
+          : !proc && cid && sid
+            ? " No hay usuario con rol «procesador»: la tarea en cola sigue asignada al operario hasta que exista un procesador."
+            : "";
+      setMessage(`${baseMsg}${sufijoProc}`);
       persistWarehouseStateNow({
-        slots: r.slots,
+        slots: resultado.slots,
         inboundBoxes,
         outboundBoxes,
         dispatchedBoxes,
@@ -2930,13 +3227,13 @@ export default function BodegaDashboard() {
         assignedAlerts,
         alertasOperario,
         alertasOperarioSolved,
-        tareasProcesamientoOperario: nextTareas,
+        tareasProcesamientoOperario: tareasFinales,
         llamadasJefe,
       });
     },
     [
-      slots,
       warehouseId,
+      procesadoresBodega,
       persistWarehouseStateNow,
       inboundBoxes,
       outboundBoxes,
@@ -3187,6 +3484,7 @@ export default function BodegaDashboard() {
       const boxClient = sourceBox?.client ?? "";
       const qtyToSlot = readQuantityKg(sourceBox as Box | Slot);
       const ocToSlot = readOrdenCompraRefs(sourceBox as Box | Slot);
+      const ovToSlot = readOrdenVentaRefs(sourceBox as Box | Slot);
 
       const srcRec = sourceBox as unknown as Record<string, unknown>;
       const srcSlot = sourceBox as Slot;
@@ -3219,6 +3517,15 @@ export default function BodegaDashboard() {
           : {
             ordenCompraId: undefined,
             ordenCompraClienteId: undefined,
+          }),
+        ...(ovToSlot
+          ? {
+            ordenVentaId: ovToSlot.ordenVentaId,
+            ordenVentaClienteId: ovToSlot.ordenVentaClienteId,
+          }
+          : {
+            ordenVentaId: undefined,
+            ordenVentaClienteId: undefined,
           }),
       };
 
@@ -3330,6 +3637,7 @@ export default function BodegaDashboard() {
     const ocToSalida = readOrdenCompraRefs(
       sourceIsBodega ? boxFromBodega : boxFromIngreso,
     );
+    const ovToSalida = readOrdenVentaRefs(sourceIsBodega ? boxFromBodega : boxFromIngreso);
 
     const newBox: Box = {
       position: target,
@@ -3342,6 +3650,12 @@ export default function BodegaDashboard() {
         ? {
           ordenCompraId: ocToSalida.ordenCompraId,
           ordenCompraClienteId: ocToSalida.ordenCompraClienteId,
+        }
+        : {}),
+      ...(ovToSalida
+        ? {
+          ordenVentaId: ovToSalida.ordenVentaId,
+          ordenVentaClienteId: ovToSalida.ordenVentaClienteId,
         }
         : {}),
     };
@@ -3390,6 +3704,158 @@ export default function BodegaDashboard() {
 
     setMessage("Orden ejecutada correctamente.");
   };
+
+  /**
+   * Cola «venta · salida»: descuenta del mapa la cantidad pedida (kg o u. según catálogo) y crea en salida
+   * una caja por posición con ese peso; si sobra stock en mapa, la posición queda con el remanente.
+   */
+  const ejecutarSalidaVentaDesdeMapa = useCallback(
+    async (tarea: Record<string, unknown>): Promise<boolean> => {
+      if (!isOperario) {
+        setMessage("Solo el operario ejecuta esta tarea.");
+        return false;
+      }
+      const clientId = String(tarea.clientId ?? "").trim();
+      const ventaId = String(tarea.ventaId ?? tarea.ordenVentaId ?? "").trim();
+      if (!clientId || !ventaId) return false;
+
+      const plan = planSalidaVentaDesdeMapa(slots, tarea);
+      if (!plan.ok) {
+        setMessage(plan.message);
+        return false;
+      }
+
+      const { movimientos, slotsTrasDescuento } = plan;
+
+      const occupiedOrReserved = new Set<number>();
+      outboundBoxes.forEach((b) => occupiedOrReserved.add(b.position));
+      reservedSalidaTargets.forEach((p) => occupiedOrReserved.add(p));
+      let cuposLibres = 0;
+      const cap = warehouseCapacity > 0 ? warehouseCapacity : 0;
+      for (let p = 1; p <= cap; p++) {
+        if (!occupiedOrReserved.has(p)) cuposLibres++;
+      }
+      if (movimientos.length > cuposLibres) {
+        setMessage(
+          `No hay cupos suficientes en salida (${movimientos.length} caja(s), ${cuposLibres} posiciones libres). Liberá salida o despachá cajas.`,
+        );
+        return false;
+      }
+
+      let nextOutbound = [...outboundBoxes];
+      let nextSlots = slotsTrasDescuento;
+      let salidasCount = 0;
+      const extraReserved = new Set(reservedSalidaTargets);
+
+      const meta = {
+        warehouseName,
+        alerts,
+        assignedAlerts,
+        alertasOperario,
+        alertasOperarioSolved,
+        tareasProcesamientoOperario,
+        llamadasJefe,
+      };
+
+      for (const mov of movimientos) {
+        const slotOrig = slots.find((s) => s.position === mov.position);
+        const live = slotOrig;
+        if (!live || !String(live.autoId ?? "").trim()) continue;
+
+        const target = getNextSalidaPosition(nextOutbound, extraReserved, warehouseCapacity);
+        if (target <= 0) {
+          setMessage("No hay posición libre en salida.");
+          return false;
+        }
+
+        const qtyToSalida = mov.kgSalida;
+        const ocToSalida = readOrdenCompraRefs(live);
+        const ovToSalida = readOrdenVentaRefs(live);
+        const ovSalidaFinal = ovToSalida ?? {
+          ordenVentaId: ventaId,
+          ordenVentaClienteId: clientId,
+        };
+
+        const newBox: Box = {
+          position: target,
+          autoId: live.autoId,
+          name: live.name,
+          temperature: live.temperature ?? 0,
+          client: live.client,
+          ...(qtyToSalida > 0 ? { quantityKg: qtyToSalida } : {}),
+          ...(ocToSalida
+            ? {
+                ordenCompraId: ocToSalida.ordenCompraId,
+                ordenCompraClienteId: ocToSalida.ordenCompraClienteId,
+              }
+            : {}),
+          ordenVentaId: ovSalidaFinal.ordenVentaId,
+          ordenVentaClienteId: ovSalidaFinal.ordenVentaClienteId,
+        };
+
+        nextOutbound = sortByPosition([newBox, ...nextOutbound]);
+        salidasCount += 1;
+
+        const syntheticOrder: BodegaOrder = {
+          id: createOrderId(),
+          type: "a_salida",
+          sourcePosition: mov.position,
+          sourceZone: "bodega",
+          targetPosition: target,
+          createdAt: new Date().toLocaleString("es-CO"),
+          createdAtMs: Date.now(),
+          createdBy: role,
+          client: live.client,
+          autoId: live.autoId,
+          boxName: live.name,
+        };
+        addSalida({ ...syntheticOrder, targetPosition: target, completadoAtMs: Date.now() });
+      }
+
+      if (salidasCount === 0) {
+        setMessage("No se pudo mover ninguna caja (posiciones vacías o sin stock).");
+        return false;
+      }
+
+      const nextStats = { ...stats, salidas: stats.salidas + salidasCount };
+      persistWarehouseStateNow({
+        slots: nextSlots,
+        inboundBoxes,
+        outboundBoxes: nextOutbound,
+        dispatchedBoxes,
+        orders,
+        stats: nextStats,
+        ...meta,
+      });
+      setSlots(nextSlots);
+      setOutboundBoxes(nextOutbound);
+      setStats(nextStats);
+      setMessage(`Listo: ${salidasCount} caja(s) pasada(s) de bodega a salida (cantidad según el pedido).`);
+      return true;
+    },
+    [
+      isOperario,
+      role,
+      slots,
+      outboundBoxes,
+      reservedSalidaTargets,
+      warehouseCapacity,
+      warehouseName,
+      alerts,
+      assignedAlerts,
+      alertasOperario,
+      alertasOperarioSolved,
+      tareasProcesamientoOperario,
+      llamadasJefe,
+      inboundBoxes,
+      dispatchedBoxes,
+      orders,
+      stats,
+      persistWarehouseStateNow,
+      addSalida,
+      sortByPosition,
+    ],
+  );
 
   const handleSearch = () => {
     const id = searchId.trim();
@@ -3725,6 +4191,11 @@ export default function BodegaDashboard() {
           visible: isCustodio,
         },
         {
+          key: "ordenesVentaCustodio",
+          label: "Orden de venta",
+          visible: isCustodio,
+        },
+        {
           key: "ordenes",
           label: "Orden de trabajo",
           visible: canUseOrderForm && !isJefe,
@@ -3936,11 +4407,42 @@ export default function BodegaDashboard() {
     });
   }
 
+  if (isTransporte) {
+    return (
+      <div className="min-h-screen bg-slate-50 px-6 py-10 text-slate-900">
+        <main className="mx-auto flex w-full max-w-4xl flex-col gap-8">
+          <Header
+            occupiedCount={0}
+            totalSlots={0}
+            dateLabel={dateLabel}
+            warehouseId=""
+            warehouseName=""
+            warehouses={[]}
+            onSelectWarehouse={() => undefined}
+            showIntro={false}
+            showMeta={false}
+            canSearch={false}
+            searchValue=""
+            onSearchChange={() => undefined}
+            onSearchSubmit={() => undefined}
+            userDisplayName={session.displayName}
+            onLogout={handleLogout}
+            role={role}
+          />
+          <TransporteViajesPanel uid={session.uid} displayName={session.displayName} />
+        </main>
+      </div>
+    );
+  }
+
   return (
-    <div className="min-h-screen bg-slate-50 px-6 py-10 text-slate-900">
+    <div className="min-h-screen bg-slate-50 px-6 pt-10 pb-24 text-slate-900">
       <main
         className={`mx-auto flex w-full flex-col gap-8 ${
-          isCustodio && (activeTab === "ingresos" || activeTab === "ordenesCompraCustodio")
+          isCustodio &&
+            (activeTab === "ingresos" ||
+              activeTab === "ordenesCompraCustodio" ||
+              activeTab === "ordenesVentaCustodio")
             ? "max-w-[min(100%,100rem)]"
             : "max-w-6xl"
         }`}
@@ -3995,6 +4497,8 @@ export default function BodegaDashboard() {
                     let icon = null;
                     if (tab.key === "estado") icon = <span className="mr-2"><AiTwotoneAppstore /></span>;
                     if (tab.key === "ingresos") icon = <span className="mr-2"><FaBoxOpen /></span>;
+                    if (tab.key === "ordenesCompraCustodio") icon = <span className="mr-2"><BiTask /></span>;
+                    if (tab.key === "ordenesVentaCustodio") icon = <span className="mr-2"><MdOutlinePointOfSale /></span>;
                     if (tab.key === "ordenes") icon = <span className="mr-2">📝</span>;
                     if (tab.key === "solicitudes") icon = <span className="mr-2">⏳</span>;
                     if (tab.key === "reportes") icon = <span className="mr-2"><SlGraph /></span>;
@@ -4038,6 +4542,7 @@ export default function BodegaDashboard() {
                 sessionUid={session?.uid}
                 sessionRole={role}
                 operariosBodega={operariosBodega}
+                procesadoresBodega={procesadoresBodega}
                 tareasProcesamientoOperario={tareasProcesamientoOperario}
                 onPushTareaProcesamientoOperario={handlePushTareaProcesamientoOperario}
                 warehouseId={warehouseId}
@@ -4114,11 +4619,17 @@ export default function BodegaDashboard() {
                 warehouseId={warehouseId}
                 isBodegaInterna={!isExternalWarehouse}
                 onIngresoDesdeOrdenCompra={handleIngresoDesdeOrdenCompra}
+                onIngresoDesdeOrdenVenta={handleIngresoDesdeOrdenVenta}
+                onDespachoPaqueteOrdenVenta={handleDespachoPaqueteOrdenVenta}
               />
             ) : null}
 
             {activeTab === "ordenesCompraCustodio" && isCustodio ? (
               <CustodioOrdenesCompraTab warehousesFallback={warehouses} />
+            ) : null}
+
+            {activeTab === "ordenesVentaCustodio" && isCustodio ? (
+              <CustodioOrdenesVentaTab warehousesFallback={warehouses} />
             ) : null}
 
             {(activeTab === "ordenes" || isJefe) && canUseOrderForm ? (
@@ -4292,6 +4803,7 @@ export default function BodegaDashboard() {
                   operarioSessionUid={session?.uid}
                   onProcesamientoEnCursoDesdeOperario={handleProcesamientoEnCursoDesdeColaOperario}
                   onProcesamientoTerminadoDesdeOperario={handleProcesamientoTerminadoDesdeColaOperario}
+                  onEjecutarSalidaVentaDesdeMapa={ejecutarSalidaVentaDesdeMapa}
                 />
               </section>
             ) : null}

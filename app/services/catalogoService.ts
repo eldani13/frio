@@ -1,15 +1,16 @@
 import { db } from "@/lib/firebaseClient";
-import { 
-  collection, 
-  addDoc, 
-  getDocs, 
-  deleteDoc, 
-  doc, 
-  updateDoc, 
-  query, 
+import {
+  collection,
+  addDoc,
+  getDocs,
+  getDoc,
+  deleteDoc,
+  doc,
+  updateDoc,
+  query,
   where, // Agregado para filtrar por cuenta
   orderBy,
-  limit
+  limit,
 } from "firebase/firestore";
 import { Catalogo } from "@/app/types/catalogo";
 
@@ -32,6 +33,18 @@ export const CatalogoService = {
    * Obtiene los productos filtrados por codeCuenta.
    * Sin orderBy para evitar el error de índice compuesto.
    */
+  async getById(idCliente: string, id: string): Promise<Catalogo | null> {
+    try {
+      if (!idCliente?.trim() || !id?.trim()) return null;
+      const snap = await getDoc(getProductoDocRef(idCliente, id));
+      if (!snap.exists()) return null;
+      return { id: snap.id, ...snap.data() } as Catalogo;
+    } catch (e: unknown) {
+      console.error("Error en CatalogoService.getById:", e);
+      return null;
+    }
+  },
+
   async getAll(idCliente: string, codeCuenta: string): Promise<Catalogo[]> {
     try {
       if (!idCliente?.trim()) return [];

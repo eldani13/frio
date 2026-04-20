@@ -39,6 +39,27 @@ export function slotLooksLikeProcesamiento(
   return !!slot.autoId?.trim().toUpperCase().startsWith("PROC-");
 }
 
+/**
+ * Mapa de bodega: cyan claro = inventario primario; azul más intenso = salida de procesamiento (producto secundario).
+ * Usa la misma heurística que `slotLooksLikeProcesamiento`.
+ */
+export function occupiedSlotVisualClasses(
+  slot: Pick<Slot, "autoId" | "procesamientoSecundarioTitulo" | "procesamientoUnidadesSecundario">,
+): { card: string; icon: string; pill: string } {
+  if (slotLooksLikeProcesamiento(slot)) {
+    return {
+      card: "bg-sky-400 border-sky-600 text-slate-900 cursor-pointer hover:ring-2 hover:ring-sky-600",
+      icon: "text-sky-950",
+      pill: "bg-sky-700 text-white",
+    };
+  }
+  return {
+    card: "bg-cyan-100 border-slate-300 text-slate-900 cursor-pointer hover:ring-2 hover:ring-cyan-400",
+    icon: "text-cyan-400",
+    pill: "bg-cyan-200 text-slate-900",
+  };
+}
+
 /** Título del producto secundario persistido o inferido del nombre «primario → secundario». */
 export type SlotCantidadContext = {
   solicitudesTerminadas?: Pick<

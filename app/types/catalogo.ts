@@ -38,10 +38,19 @@ export interface Catalogo {
     /** @deprecated Preferir `unidadVisualizacion`. Se mantiene por datos antiguos. */
     weightUnit?: string;
     /**
-     * Cómo mostrar cantidades del producto en la app (obligatorio en formularios nuevos).
-     * Valores: `cantidad` | `peso`
+     * Cómo mostrar cantidades del producto en la app.
+     * Incluye presets (`cantidad`, `peso`, `bolsas`, …); ver `UNIDAD_VIS_CATALOGO_OPCIONES`.
      */
-    unidadVisualizacion?: "cantidad" | "peso";
+    unidadVisualizacion?: string;
+    /**
+     * Regla de conversión primario → secundario (alta desde «Crear secundario» o edición).
+     * En bodega el insumo se trabaja en kg: `cantidadPrimario` = kg de referencia (típ. 1) y
+     * `unidadesSecundario` = unidades de secundario por esa referencia (= 1000 / g por unidad).
+     */
+    reglaConversionCantidadPrimario?: number;
+    reglaConversionUnidadesSecundario?: number;
+    /** % de merma típica (0–100) asociada al secundario; referencia al crear procesamiento. */
+    mermaPct?: number;
     requiresShipping?: boolean;
     logisticService?: string;
     
@@ -51,8 +60,7 @@ export interface Catalogo {
     /** Id de documento en `clientes/{id}/productos` del producto primario vinculado (p. ej. secundarios). */
     includedPrimarioCatalogoId?: string;
     /**
-     * Regla de tres (solo secundario): con esta cantidad de insumo del primario (en la unidad de visualización del primario)
-     * se obtienen `conversionUnidadesSecundario` unidades de este producto.
+     * Regla de tres legacy (opcional): la regla vigente para nuevas solicitudes se define al crear la orden de procesamiento.
      */
     conversionCantidadPrimario?: number;
     conversionUnidadesSecundario?: number;

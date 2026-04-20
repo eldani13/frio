@@ -22,7 +22,7 @@ interface Props {
   onClose: () => void;
   productos: Catalogo[];
   compradores: Comprador[];
-  onCreate: (draft: VentaManualDraft) => void;
+  onCreate: (draft: VentaManualDraft) => void | Promise<void>;
 }
 
 function etiquetaComprador(c: Comprador): string {
@@ -39,6 +39,7 @@ export function VentaManualFormModal({ isOpen, onClose, productos, compradores, 
   const [pickProductId, setPickProductId] = useState("");
   const [pickCantidad, setPickCantidad] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
 
   const compradoresConId = useMemo(
     () => compradores.filter((c): c is Comprador & { id: string } => Boolean(c.id?.trim())),
@@ -62,6 +63,7 @@ export function VentaManualFormModal({ isOpen, onClose, productos, compradores, 
     setPickProductId("");
     setPickCantidad("");
     setError(null);
+    setSaving(false);
   }, [isOpen]);
 
   useEffect(() => {
@@ -100,7 +102,7 @@ export function VentaManualFormModal({ isOpen, onClose, productos, compradores, 
     setLines((prev) => prev.filter((_, i) => i !== index));
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
     const comp = compradoresConId.find((c) => c.id === compradorId);
@@ -113,14 +115,24 @@ export function VentaManualFormModal({ isOpen, onClose, productos, compradores, 
       return;
     }
     const nombre = (comp.name || "").trim() || "Sin nombre";
-    onCreate({
-      compradorId: comp.id,
-      compradorNombre: nombre,
-      fecha,
-      estado,
-      lineItems: lines,
-    });
-    onClose();
+    setSaving(true);
+    try {
+      await Promise.resolve(
+        onCreate({
+          compradorId: comp.id,
+          compradorNombre: nombre,
+          fecha,
+          estado,
+          lineItems: lines,
+        }),
+      );
+      onClose();
+    } catch (err) {
+      console.error(err);
+      setError("No se pudo guardar la venta. Reintentá.");
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -159,7 +171,7 @@ export function VentaManualFormModal({ isOpen, onClose, productos, compradores, 
           <p className="mb-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>
         ) : null}
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={(e) => void handleSubmit(e)} className="space-y-4">
           <div>
             <label
               htmlFor="venta-comprador"
@@ -240,12 +252,14 @@ export function VentaManualFormModal({ isOpen, onClose, productos, compradores, 
                   className="w-full rounded-[8px] border border-gray-200 bg-white px-3 py-2 text-sm focus:border-[#A8D5BA] focus:outline-none"
                 >
                   <option value="">Elegí producto del catálogo…</option>
-                  {productos.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.title}
-                      {c.sku ? ` · SKU ${c.sku}` : ""}
-                    </option>
-                  ))}
+                  {productos
+                    .filter((c) => Boolean(c.id?.trim()))
+                    .map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.title}
+                        {c.sku ? ` · SKU ${c.sku}` : ""}
+                      </option>
+                    ))}
                 </select>
               </div>
               <div className="w-full sm:w-28">
@@ -312,9 +326,10 @@ export function VentaManualFormModal({ isOpen, onClose, productos, compradores, 
             </button>
             <button
               type="submit"
-              className="rounded-[8px] bg-[#A8D5BA] px-5 py-2 text-sm font-semibold text-[#2D5A3F] transition hover:bg-[#97c4a9] active:scale-[0.98]"
+              disabled={saving}
+              className="rounded-[8px] bg-[#A8D5BA] px-5 py-2 text-sm font-semibold text-[#2D5A3F] transition hover:bg-[#97c4a9] active:scale-[0.98] disabled:opacity-50"
             >
-              Guardar venta
+              {saving ? "Guardando…" : "Guardar venta"}
             </button>
           </div>
         </form>

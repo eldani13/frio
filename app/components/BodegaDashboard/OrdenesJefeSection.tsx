@@ -16,6 +16,7 @@ import React, { useState, useMemo } from "react";
 import {
   clientLabelFromList,
   formatSlotCantidadDisplay,
+  occupiedSlotVisualClasses,
   secondaryTitleFromSlot,
   slotLooksLikeProcesamiento,
   type SlotCantidadContext,
@@ -24,6 +25,8 @@ import type { Client, Role, Slot } from "@/app/interfaces/bodega";
 import type { SolicitudProcesamiento } from "@/app/types/solicitudProcesamiento";
 import { ProcesamientoOrdenesActivasBodega } from "@/app/components/BodegaDashboard/ProcesamientoOrdenesActivasBodega";
 import { AsignarProcesadorProcesamientoModal } from "@/app/components/BodegaDashboard/AsignarProcesadorProcesamientoModal";
+import BodegaZonaCajaCard from "../bodega/BodegaZonaCajaCard";
+import VentasEnCursoMapButton from "../bodega/VentasEnCursoMapButton";
 import EntradaAlertButton from "../common/EntradaAlertButton";
 import { RiUserReceivedLine } from "react-icons/ri";
 import { temperatureStringFromAnalyzeResponse } from "@/app/lib/imageAnalyzeApi";
@@ -519,7 +522,7 @@ export default function OrdenesJefeSection(props: {
                 Consultar inventario
               </span>
             </button>
-            {/* Procesamiento: asignar órdenes en curso al rol procesador */}
+            {/* Procesamiento: órdenes ya terminadas (solo consulta) */}
             <button
               type="button"
               className="flex flex-col items-start rounded-xl p-3 shadow-sm bg-white text-slate-900 h-20 border border-slate-200 group transition hover:bg-slate-50"
@@ -529,7 +532,7 @@ export default function OrdenesJefeSection(props: {
                 <FiCpu className="w-5 h-5 text-slate-500" />
                 <span className="text-base font-semibold">Procesamiento</span>
               </div>
-              <span className="text-[11px] text-slate-500">Asignar al procesador</span>
+              <span className="text-[11px] text-slate-500">Finalizados</span>
             </button>
             {/* Crear Salida */}
             <button
@@ -1031,34 +1034,26 @@ export default function OrdenesJefeSection(props: {
                   </div>
                 </div>
               ) : null}
-              <div className="w-full flex flex-col gap-1 sm:gap-2">
+              <div className="w-full flex flex-col gap-2 sm:gap-4">
                 {sortedInboundBoxes.length === 0 ? (
                   <div className="text-xs text-emerald-500">
                     No hay cajas en ingreso.
                   </div>
                 ) : (
                   <>
-                    {inboundPageItems.map((box, idx) => (
-                      <div
-                        key={`${box.position}-${box.autoId ?? "no-id"}-${idx}`}
-                        className="rounded-xl border border-emerald-200 bg-white p-1 sm:p-2 text-[11px] sm:text-xs text-emerald-700 w-full"
-                      >
-                        <div className="font-semibold">
-                          {box.name || "Sin nombre"}
-                        </div>
-                        <div>Id: {box.autoId}</div>
-                        <div>Cliente: {clientLabelFromList(box.client || "", clients)}</div>
-                        <div>
-                          Cantidad: {formatSlotCantidadDisplay(box, slotCantidadProcesamientoCtx)}
-                        </div>
-                        <div>
-                          Temp:{" "}
-                          {typeof box.temperature === "number"
-                            ? `${box.temperature} °C`
-                            : "Sin temperatura"}
-                        </div>
-                      </div>
-                    ))}
+                    {inboundPageItems.map((box, idx) => {
+                      const isHighTemp =
+                        typeof box.temperature === "number" &&
+                        box.temperature > HIGH_TEMP_THRESHOLD;
+                      return (
+                        <BodegaZonaCajaCard
+                          key={`${box.position}-${box.autoId ?? "no-id"}-${idx}`}
+                          box={box}
+                          variant="entrada"
+                          alertaTemperaturaAlta={isHighTemp}
+                        />
+                      );
+                    })}
                     {sortedInboundBoxes.length > ITEMS_PER_PAGE ? (
                       <div className="flex items-center justify-between mt-2 text-[11px] sm:text-xs text-emerald-700">
                         <button
@@ -1092,13 +1087,24 @@ export default function OrdenesJefeSection(props: {
             </div>
             <div className="min-w-0 flex flex-col">
             <div className="self-start w-full rounded-2xl border border-blue-200 bg-white p-2 sm:p-4 shadow-md relative">
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-2 sm:mb-4">
-                <h2 className="text-sm sm:text-lg font-semibold text-slate-900 flex items-center gap-1 sm:gap-2">
-                  <span className="inline-block">
-                    <FiArchive className="w-4 h-4 sm:w-5 sm:h-5 text-cyan-400" />
-                  </span>
-                  Mapa de Bodega
-                </h2>
+              <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 mb-2 sm:mb-4">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h2 className="text-sm sm:text-lg font-semibold text-slate-900 flex items-center gap-1 sm:gap-2">
+                    <span className="inline-block">
+                      <FiArchive className="w-4 h-4 sm:w-5 sm:h-5 text-cyan-400" />
+                    </span>
+                    Mapa de Bodega
+                  </h2>
+                  {warehouseCodeCuenta.trim() ? (
+                    <VentasEnCursoMapButton
+                      clients={clients}
+                      warehouseCodeCuenta={warehouseCodeCuenta}
+                      operariosBodega={operariosBodega}
+                      tareasProcesamientoOperario={tareasProcesamientoOperario}
+                      onPushTareaProcesamientoOperario={onPushTareaProcesamientoOperario}
+                    />
+                  ) : null}
+                </div>
                 {/* Indicadores de alertas y ocupadas para jefe */}
                 <div className="flex items-center gap-2 sm:justify-end sm:ml-auto">
                   {bodegaHighTempAlerts.length > 0 && (
@@ -1407,20 +1413,25 @@ export default function OrdenesJefeSection(props: {
               <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-4">
                 {slots.slice(0, 12).map((slot) => {
                   const isOccupied = slot.autoId && slot.autoId.trim() !== "";
+                  const tone = isOccupied ? occupiedSlotVisualClasses(slot as Slot) : null;
                   return (
                     <div
                       key={slot.position}
-                      className={`relative flex flex-col items-center justify-center rounded-3xl border border-slate-300 p-2 sm:p-4 transition ${isOccupied ? "bg-cyan-100 text-slate-900 cursor-pointer hover:ring-2 hover:ring-cyan-400" : "bg-slate-50 text-slate-400"}`}
+                      className={`relative flex flex-col items-center justify-center rounded-3xl border p-2 sm:p-4 transition ${
+                        isOccupied && tone
+                          ? tone.card
+                          : "border border-slate-300 bg-slate-50 text-slate-400"
+                      }`}
                       style={{ minHeight: 90, maxWidth: 140 }}
                       onClick={() => isOccupied && setSelectedBoxModal(slot)}
                     >
                       <span className="absolute top-1 left-1 text-[9px] font-semibold rounded-full px-1 py-0.5  text-slate-600">
                         {slot.position}
                       </span>
-                      {isOccupied ? (
+                      {isOccupied && tone ? (
                         <>
                           <div className="mb-1">
-                            <FiBox className="w-4 h-4 sm:w-6 sm:h-6 text-cyan-400" />
+                            <FiBox className={`w-4 h-4 sm:w-6 sm:h-6 ${tone.icon}`} />
                           </div>
                           <div className="font-semibold text-[clamp(0.65rem,1vw,0.85rem)] text-center truncate w-full">
                             {slot.name || "Sin nombre"}
@@ -1428,7 +1439,9 @@ export default function OrdenesJefeSection(props: {
                           <div className="text-[clamp(0.7rem,1.5vw,0.85rem)] mt-1 text-center truncate w-full">
                             {slot.autoId}
                           </div>
-                          <div className="mt-2 text-[clamp(0.7rem,1.5vw,0.85rem)] font-medium bg-cyan-200 rounded-full px-1.5 sm:px-3 py-0.5 inline-block">
+                          <div
+                            className={`mt-2 text-[clamp(0.7rem,1.5vw,0.85rem)] font-medium rounded-full px-1.5 sm:px-3 py-0.5 inline-block ${tone.pill}`}
+                          >
                             {typeof slot.temperature === "number"
                               ? `${slot.temperature} °C`
                               : "Sin temperatura"}
@@ -1448,12 +1461,14 @@ export default function OrdenesJefeSection(props: {
                   );
                 })}
               </div>
-              <div className="flex flex-wrap items-center justify-end mt-2 sm:mt-4 gap-1 sm:gap-3">
+              <div className="flex flex-wrap items-center justify-end mt-2 sm:mt-4 gap-x-3 gap-y-1 sm:gap-3">
                 <div className="flex items-center gap-1">
-                  <span className="w-2 h-2 sm:w-3 sm:h-3 rounded-full bg-cyan-400 inline-block"></span>
-                  <span className="text-[10px] sm:text-xs text-slate-600">
-                    Ocupada
-                  </span>
+                  <span className="h-2.5 w-3 sm:h-3 sm:w-4 rounded-sm bg-cyan-200 border border-cyan-400 inline-block" />
+                  <span className="text-[10px] sm:text-xs text-slate-600">Ocupada (primario)</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <span className="h-2.5 w-3 sm:h-3 sm:w-4 rounded-sm bg-sky-500 border border-sky-700 inline-block" />
+                  <span className="text-[10px] sm:text-xs text-slate-600">Ocupada (procesado)</span>
                 </div>
                 <div className="flex items-center gap-1">
                   <span className="w-2 h-2 sm:w-3 sm:h-3 rounded-full bg-slate-300 inline-block"></span>
@@ -1473,6 +1488,7 @@ export default function OrdenesJefeSection(props: {
                 sessionUid={sessionUid}
                 sessionRole={sessionRole}
                 operariosBodega={operariosBodega}
+                procesadoresBodega={procesadoresBodega}
                 tareasProcesamientoOperario={tareasProcesamientoOperario}
                 onPushTareaProcesamientoOperario={onPushTareaProcesamientoOperario}
                 onProcesamientoTerminadoInventario={onProcesamientoTerminadoInventario}
@@ -1486,7 +1502,7 @@ export default function OrdenesJefeSection(props: {
                 </span>
                 Salida
               </h3>
-              <div className="w-full flex flex-col gap-2">
+              <div className="w-full flex flex-col gap-2 sm:gap-4">
                 {sortedOutboundBoxes.length === 0 ? (
                   <div className="text-xs text-pink-500">
                     No hay cajas en salida.
@@ -1494,25 +1510,11 @@ export default function OrdenesJefeSection(props: {
                 ) : (
                   <>
                     {outboundPageItems.map((box, idx) => (
-                      <div
+                      <BodegaZonaCajaCard
                         key={`${box.position}-${box.autoId ?? "no-id"}-${idx}`}
-                        className="rounded-xl border border-pink-200 bg-white p-2 text-xs text-pink-700 w-full"
-                      >
-                        <div className="font-semibold">
-                          {box.name || "Sin nombre"}
-                        </div>
-                        <div>Id: {box.autoId}</div>
-                        <div>Cliente: {clientLabelFromList(box.client || "", clients)}</div>
-                        <div>
-                          Cantidad: {formatSlotCantidadDisplay(box, slotCantidadProcesamientoCtx)}
-                        </div>
-                        <div>
-                          Temp:{" "}
-                          {typeof box.temperature === "number"
-                            ? `${box.temperature} °C`
-                            : "Sin temperatura"}
-                        </div>
-                      </div>
+                        box={box}
+                        variant="salida"
+                      />
                     ))}
                     {sortedOutboundBoxes.length > ITEMS_PER_PAGE ? (
                       <div className="flex items-center justify-between mt-2 text-[11px] sm:text-xs text-pink-700">
@@ -1999,8 +2001,7 @@ export default function OrdenesJefeSection(props: {
         onClose={() => setModalAsignarProcesadorOpen(false)}
         clients={clients}
         warehouseCodeCuenta={warehouseCodeCuenta}
-        procesadoresBodega={procesadoresBodega}
-        onPushTareaProcesamientoOperario={onPushTareaProcesamientoOperario}
+        slots={slots as Slot[]}
       />
     </section>
   );

@@ -8,9 +8,12 @@ import { PROCESAMIENTO_ESTADOS } from "@/app/types/solicitudProcesamiento";
 import {
   catalogosPrimarios,
   catalogosSecundariosDePrimario,
-  unidadVisualizacionDe,
+  estimadoSecundarioAplicarPerdidaPct,
+  mermaPctDesdeCatalogoSecundario,
+  reglaConversionDesdeCatalogoSecundario,
   unidadesSecundarioPorRegla,
 } from "@/lib/catalogoProcesamiento";
+import { etiquetaUnidadVisualizacion } from "@/lib/unidadVisualizacionCatalogo";
 import { subscribeWarehouseState } from "@/lib/bodegaCloudState";
 import { stockPrimarioDesdeSlotsPreferirKgCuandoExisten } from "@/lib/stockPrimarioBodega";
 
@@ -25,6 +28,11 @@ export interface OrdenProcesamientoDraft {
   codeCuenta: string;
   warehouseId?: string;
   estimadoUnidadesSecundario: number | null;
+  /** Regla de tres definida al crear la solicitud (misma unidad de visualización del primario). */
+  reglaConversionCantidadPrimario: number;
+  reglaConversionUnidadesSecundario: number;
+  /** % de merma (0–100): copiado del catálogo del secundario al crear la solicitud. */
+  perdidaProcesamientoPct: number;
   fecha: string;
   estado: string;
 }
@@ -48,14 +56,8 @@ function etiquetaProducto(p: Catalogo): string {
   return code ? `${t} · ${code}` : t;
 }
 
-function etiquetaBodega(w: WarehouseMeta): string {
-  const name = String(w.name ?? "").trim();
-  const code = String(w.codeCuenta ?? "").trim();
-  if (name && code) return `${name} · ${code}`;
-  if (name) return name;
-  if (code) return code;
-  return w.id;
-}
+/** Lado primario de la relación fijado a 1 (1 kg o 1 ud., según el mapa). */
+const RELACION_PRIMARIO_BASE = 1;
 
 export function OrdenProcesamientoFormModal({
   isOpen,
@@ -73,6 +75,8 @@ export function OrdenProcesamientoFormModal({
   const [slotsBodega, setSlotsBodega] = useState<Slot[]>([]);
   const [mapaBodegaLoading, setMapaBodegaLoading] = useState(false);
   const [cantidadElegida, setCantidadElegida] = useState(1);
+  /** Unidades de secundario que salen de 1 unidad de insumo del primario (1 kg si el mapa usa peso, 1 ud. si usa cantidad). */
+  const [unidadesSecundarioPorUnoPrimarioInput, setUnidadesSecundarioPorUnoPrimarioInput] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -84,10 +88,36 @@ export function OrdenProcesamientoFormModal({
     [bodegasInternas],
   );
 
-  const primarios = useMemo(() => catalogosPrimarios(productos), [productos]);
+  const warehouseFirestoreId = bodegaWarehouseId.trim();
+
+  const primariosCatalogo = useMemo(() => catalogosPrimarios(productos), [productos]);
+
+  /** Primarios con stock mayor que 0 en el mapa de la bodega elegida y con al menos un secundario en catálogo. */
+  const primariosElegibles = useMemo(() => {
+    const cid = clientIdFirestore.trim();
+    const wid = warehouseFirestoreId.trim();
+    if (!cid || !wid || mapaBodegaLoading) return [];
+    return primariosCatalogo.filter((p) => {
+      if (!p.id?.trim()) return false;
+      if (catalogosSecundariosDePrimario(productos, p.id).length === 0) return false;
+      const { total } = stockPrimarioDesdeSlotsPreferirKgCuandoExisten(slotsBodega, cid, p);
+      return Number.isFinite(total) && total > 0;
+    });
+  }, [
+    primariosCatalogo,
+    productos,
+    clientIdFirestore,
+    warehouseFirestoreId,
+    slotsBodega,
+    mapaBodegaLoading,
+  ]);
+
   const primariosOrdenados = useMemo(
-    () => [...primarios].sort((a, b) => (a.title || "").localeCompare(b.title || "", "es", { sensitivity: "base" })),
-    [primarios],
+    () =>
+      [...primariosElegibles].sort((a, b) =>
+        (a.title || "").localeCompare(b.title || "", "es", { sensitivity: "base" }),
+      ),
+    [primariosElegibles],
   );
 
   const secundariosDelPrimario = useMemo(
@@ -109,12 +139,17 @@ export function OrdenProcesamientoFormModal({
     setSecundarioId("");
     setBodegaWarehouseId("");
     setCantidadElegida(1);
+    setUnidadesSecundarioPorUnoPrimarioInput("");
     setError(null);
     setSaving(false);
   }, [isOpen]);
 
   useEffect(() => {
-    if (!isOpen || primariosOrdenados.length === 0) return;
+    if (!isOpen) return;
+    if (primariosOrdenados.length === 0) {
+      setPrimarioId("");
+      return;
+    }
     setPrimarioId((cur) => (cur && primariosOrdenados.some((p) => p.id === cur) ? cur : primariosOrdenados[0]?.id ?? ""));
   }, [isOpen, primariosOrdenados]);
 
@@ -127,6 +162,23 @@ export function OrdenProcesamientoFormModal({
     });
   }, [isOpen, secundariosOrdenados]);
 
+  /** Si el secundario tiene regla en catálogo, precargar relación (se puede editar). La merma sale solo del catálogo. */
+  useEffect(() => {
+    if (!isOpen) return;
+    const s = secundariosOrdenados.find((p) => p.id === secundarioId);
+    if (!s?.id) {
+      setUnidadesSecundarioPorUnoPrimarioInput("");
+      return;
+    }
+    const regla = reglaConversionDesdeCatalogoSecundario(s);
+    if (regla) {
+      const perOne = (regla.unidadesSecundario / regla.cantidadPrimario) * RELACION_PRIMARIO_BASE;
+      setUnidadesSecundarioPorUnoPrimarioInput(String(perOne));
+    } else {
+      setUnidadesSecundarioPorUnoPrimarioInput("");
+    }
+  }, [isOpen, secundarioId, secundariosOrdenados]);
+
   useEffect(() => {
     if (!isOpen) return;
     if (bodegasConCodigo.length === 0) {
@@ -138,8 +190,6 @@ export function OrdenProcesamientoFormModal({
       return bodegasConCodigo[0]?.id ?? "";
     });
   }, [isOpen, bodegasConCodigo]);
-
-  const warehouseFirestoreId = bodegaWarehouseId.trim();
 
   useEffect(() => {
     if (!isOpen) {
@@ -162,7 +212,10 @@ export function OrdenProcesamientoFormModal({
     };
   }, [isOpen, warehouseFirestoreId]);
 
-  const primario = useMemo(() => primarios.find((p) => p.id === primarioId), [primarios, primarioId]);
+  const primario = useMemo(
+    () => primariosCatalogo.find((p) => p.id === primarioId),
+    [primariosCatalogo, primarioId],
+  );
   const secundario = useMemo(
     () => secundariosDelPrimario.find((p) => p.id === secundarioId),
     [secundariosDelPrimario, secundarioId],
@@ -184,27 +237,44 @@ export function OrdenProcesamientoFormModal({
       const m = Math.floor(stockPrim);
       return m > 0 ? m : 0;
     }
-    return stockPrim;
+    return Math.max(0, Math.floor(stockPrim));
   }, [stockPrim, unidadPrim]);
 
   useEffect(() => {
     if (!isOpen || !primario?.id) return;
     setCantidadElegida((prev) => {
       if (maxCantidad <= 0) return unidadPrim === "cantidad" ? 1 : 0;
-      const clamped =
-        unidadPrim === "cantidad"
-          ? Math.min(Math.max(1, Math.floor(prev)), maxCantidad)
-          : Math.min(Math.max(0.0001, prev), maxCantidad);
+      if (unidadPrim === "cantidad") {
+        return Math.min(Math.max(1, Math.floor(prev)), maxCantidad);
+      }
+      const clamped = Math.min(Math.max(1, Math.round(prev)), maxCantidad);
       return clamped;
     });
   }, [isOpen, primario?.id, maxCantidad, unidadPrim, secundarioId]);
 
-  const reglaA = secundario?.conversionCantidadPrimario;
-  const reglaB = secundario?.conversionUnidadesSecundario;
-  const estimado = useMemo(() => {
+  const unidadesSecundarioPorUnoPrimarioNum = useMemo(() => {
+    const n = Number(String(unidadesSecundarioPorUnoPrimarioInput).replace(",", "."));
+    return Number.isFinite(n) && n > 0 ? n : null;
+  }, [unidadesSecundarioPorUnoPrimarioInput]);
+
+  const estimadoTeorico = useMemo(() => {
     if (!secundario) return null;
-    return unidadesSecundarioPorRegla(cantidadElegida, reglaA, reglaB);
-  }, [cantidadElegida, reglaA, reglaB, secundario]);
+    return unidadesSecundarioPorRegla(
+      cantidadElegida,
+      RELACION_PRIMARIO_BASE,
+      unidadesSecundarioPorUnoPrimarioNum ?? undefined,
+    );
+  }, [cantidadElegida, unidadesSecundarioPorUnoPrimarioNum, secundario]);
+
+  const perdidaPctDelCatalogo = useMemo(() => {
+    if (!secundario) return 0;
+    const mp = mermaPctDesdeCatalogoSecundario(secundario);
+    return mp !== null ? mp : 0;
+  }, [secundario]);
+
+  const estimado = useMemo(() => {
+    return estimadoSecundarioAplicarPerdidaPct(estimadoTeorico, perdidaPctDelCatalogo);
+  }, [estimadoTeorico, perdidaPctDelCatalogo]);
 
   const codeCuentaDestino = useMemo(() => {
     const w = bodegasConCodigo.find((x) => x.id === bodegaWarehouseId);
@@ -217,7 +287,9 @@ export function OrdenProcesamientoFormModal({
       e.preventDefault();
       setError(null);
       if (!primario?.id) {
-        setError("No hay productos primarios en el catálogo. Creá productos que no sean de tipo «Secundario».");
+        setError(
+          "No hay primarios elegibles: necesitás stock en el mapa de esta bodega para tu cuenta y al menos un producto secundario vinculado en catálogo.",
+        );
         return;
       }
       if (!secundario?.id) {
@@ -233,23 +305,30 @@ export function OrdenProcesamientoFormModal({
       if (maxCantidad <= 0) {
         setError(
           !warehouseFirestoreId
-            ? "Elegí una bodega interna asignada a la cuenta para leer el mapa y validar stock."
+            ? "No hay bodega interna vinculada a la cuenta para leer el mapa y validar stock (asigná una en «Asignar bodegas»)."
             : "No hay stock de este primario en el mapa de bodega para tu cuenta (o las cajas no tienen kg/piezas). Revisá que el nombre en mapa coincida con el título del catálogo.",
         );
         return;
       }
-      const a = Number(secundario.conversionCantidadPrimario);
-      const b = Number(secundario.conversionUnidadesSecundario);
-      if (!Number.isFinite(a) || a <= 0 || !Number.isFinite(b) || b <= 0) {
-        setError("El secundario debe tener regla de conversión (cantidad primario y unidades secundario) en catálogo.");
+      const a = RELACION_PRIMARIO_BASE;
+      const b = unidadesSecundarioPorUnoPrimarioNum;
+      if (b === null) {
+        setError(
+          unidadPrim === "peso"
+            ? "Indicá cuántas unidades de secundario obtenés con 1 kg de primario."
+            : "Indicá cuántas unidades de secundario obtenés con 1 unidad de primario.",
+        );
         return;
       }
-      const q = cantidadElegida;
+      const q =
+        unidadPrim === "cantidad"
+          ? Math.round(cantidadElegida)
+          : Math.round(cantidadElegida);
       if (!Number.isFinite(q) || q <= 0) {
         setError("Elegí una cantidad válida en primario.");
         return;
       }
-      if (q > maxCantidad + 1e-9) {
+      if (q > maxCantidad) {
         setError("La cantidad supera el stock disponible en bodega para este primario.");
         return;
       }
@@ -257,9 +336,15 @@ export function OrdenProcesamientoFormModal({
         setError("Con unidad «Cantidad» usá solo números enteros.");
         return;
       }
-      const est = unidadesSecundarioPorRegla(q, a, b);
-      if (est === null) {
+      const estTeo = unidadesSecundarioPorRegla(q, a, b);
+      if (estTeo === null) {
         setError("No se pudo calcular el estimado del secundario. Revisá la regla de conversión.");
+        return;
+      }
+      const pct = mermaPctDesdeCatalogoSecundario(secundario) ?? 0;
+      const est = estimadoSecundarioAplicarPerdidaPct(estTeo, pct);
+      if (est === null) {
+        setError("No se pudo aplicar la pérdida al estimado. Revisá los valores.");
         return;
       }
       setSaving(true);
@@ -270,11 +355,14 @@ export function OrdenProcesamientoFormModal({
             productoPrimarioTitulo: (primario.title || "").trim() || "Sin título",
             productoSecundarioId: secundario.id,
             productoSecundarioTitulo: (secundario.title || "").trim() || "Sin título",
-            cantidadPrimario: unidadPrim === "cantidad" ? Math.round(q) : q,
+            cantidadPrimario: q,
             unidadPrimarioVisualizacion: unidadPrim,
             codeCuenta: codeCuentaDestino,
             warehouseId: warehouseFirestoreId || undefined,
             estimadoUnidadesSecundario: est,
+            reglaConversionCantidadPrimario: a,
+            reglaConversionUnidadesSecundario: b,
+            perdidaProcesamientoPct: pct,
             fecha,
             estado: PROCESAMIENTO_ESTADOS[0],
           }),
@@ -298,6 +386,7 @@ export function OrdenProcesamientoFormModal({
       primario,
       secundario,
       unidadPrim,
+      unidadesSecundarioPorUnoPrimarioNum,
     ],
   );
 
@@ -308,11 +397,8 @@ export function OrdenProcesamientoFormModal({
     maxCantidad > 0 &&
     Number.isFinite(cantidadElegida) &&
     cantidadElegida > 0 &&
-    cantidadElegida <= maxCantidad + 1e-9 &&
-    Number(secundario?.conversionCantidadPrimario) > 0 &&
-    Number(secundario?.conversionUnidadesSecundario) > 0;
-
-  const stepSlider = unidadPrim === "cantidad" ? 1 : Math.min(0.01, maxCantidad / 100 || 0.01);
+    Math.round(cantidadElegida) <= maxCantidad &&
+    unidadesSecundarioPorUnoPrimarioNum !== null;
 
   if (!isOpen) return null;
 
@@ -337,13 +423,7 @@ export function OrdenProcesamientoFormModal({
           </button>
         </div>
 
-        <p className="mb-4 rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600">
-          Elegí la <strong>bodega interna</strong> (se lee el mapa en vivo), el par primario/secundario del catálogo y
-          la <strong>cantidad en primario</strong> hasta el <strong>stock en bodega</strong> (no usa inventario del
-          catálogo). El estimado del secundario sale de la <strong>regla de conversión</strong> del catálogo.
-        </p>
-
-        <form onSubmit={(e) => void handleSubmit(e)} className="flex flex-col gap-4">
+        <form onSubmit={(e) => void handleSubmit(e)} className="flex flex-col gap-5">
           <div>
             <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-gray-500">Fecha</label>
             <input
@@ -356,37 +436,46 @@ export function OrdenProcesamientoFormModal({
           </div>
 
           {bodegasConCodigo.length > 0 ? (
-            <div>
-              <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-gray-500">
-                Bodega interna de destino
-              </label>
-              <select
-                value={bodegaWarehouseId}
-                onChange={(e) => setBodegaWarehouseId(e.target.value)}
-                className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm"
-              >
-                {bodegasConCodigo.map((w) => (
-                  <option key={w.id} value={w.id}>
-                    {etiquetaBodega(w)}
-                  </option>
-                ))}
-              </select>
-            </div>
+            <p className="text-xs text-gray-500">
+              Inventario:{" "}
+              <span className="font-medium text-gray-800">
+                {String(bodegasConCodigo.find((w) => w.id === bodegaWarehouseId)?.name ?? "").trim() ||
+                  bodegasConCodigo.find((w) => w.id === bodegaWarehouseId)?.codeCuenta ||
+                  "—"}
+              </span>
+            </p>
           ) : (
             <p className="rounded-lg border border-amber-100 bg-amber-50/80 px-3 py-2 text-xs text-amber-900">
-              No hay bodegas internas en la lista de la cuenta. Se usará el código de sesión{" "}
-              <span className="font-mono font-semibold">{fallbackCodeCuenta || "—"}</span> como destino (asigná
-              bodegas en «Asignar bodegas» si hace falta).
+              Sin bodega interna en la cuenta. Destino:{" "}
+              <span className="font-mono font-semibold">{fallbackCodeCuenta || "—"}</span>
             </p>
           )}
 
           <div>
             <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-gray-500">
-              Producto primario (insumo)
+              Insumo
             </label>
-            {primariosOrdenados.length === 0 ? (
+            {primariosCatalogo.length === 0 ? (
               <p className="rounded-lg border border-amber-100 bg-amber-50 px-3 py-2 text-sm text-amber-900">
-                No hay productos primarios. El catálogo solo puede listar aquí ítems cuyo tipo no sea «Secundario».
+                No hay productos primarios en el catálogo. Creá ítems cuyo tipo no sea «Secundario».
+              </p>
+            ) : !clientIdFirestore.trim() ? (
+              <p className="rounded-lg border border-amber-100 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                Falta el cliente de la sesión para cruzar inventario con el mapa.
+              </p>
+            ) : !warehouseFirestoreId ? (
+              <p className="rounded-lg border border-amber-100 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                Sin bodega interna vinculada no se puede leer el mapa ni listar primarios con stock.
+              </p>
+            ) : mapaBodegaLoading ? (
+              <p className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2 text-sm text-slate-700">
+                Consultando inventario en bodega…
+              </p>
+            ) : primariosOrdenados.length === 0 ? (
+              <p className="rounded-lg border border-amber-100 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                No hay primarios con <strong>stock en esta bodega</strong> para tu cuenta{" "}
+                <strong>y</strong> con al menos un <strong>secundario</strong> creado en catálogo (Incluido primario).
+                Revisá nombres en mapa vs. título del producto y que exista el derivado.
               </p>
             ) : (
               <select
@@ -403,31 +492,26 @@ export function OrdenProcesamientoFormModal({
             )}
             {primario ? (
               <p className="mt-1 text-xs text-gray-500">
-                Unidad de visualización del catálogo:{" "}
-                <span className="font-semibold text-gray-800">
-                  {unidadVisualizacionDe(primario) === "peso" ? "Peso (kg en mapa)" : "Cantidad (piezas o cajas)"}
-                </span>
                 {mapaBodegaLoading ? (
-                  <> · Leyendo mapa de bodega…</>
+                  "Leyendo inventario…"
                 ) : warehouseFirestoreId ? (
                   <>
-                    {" "}
-                    · Stock en bodega:{" "}
-                    <span className="font-semibold tabular-nums">
+                    Stock:{" "}
+                    <span className="font-medium tabular-nums text-gray-800">
                       {unidadPrim === "peso"
-                        ? `${stockPrim.toLocaleString("es-CO", { maximumFractionDigits: 4 })} kg`
+                        ? `${Math.floor(stockPrim).toLocaleString("es-CO")} kg`
                         : `${stockPrim} ud.`}
                     </span>
                     {stockDesdeMapa.cajasCoincidentes > 0 ? (
                       <span className="text-gray-400">
                         {" "}
-                        ({stockDesdeMapa.cajasCoincidentes}{" "}
-                        {stockDesdeMapa.cajasCoincidentes === 1 ? "caja" : "cajas"} en mapa)
+                        · {stockDesdeMapa.cajasCoincidentes}{" "}
+                        {stockDesdeMapa.cajasCoincidentes === 1 ? "caja" : "cajas"}
                       </span>
                     ) : null}
                   </>
                 ) : (
-                  <> · Elegí bodega interna para ver stock del mapa</>
+                  "Sin bodega para leer inventario"
                 )}
               </p>
             ) : null}
@@ -435,12 +519,16 @@ export function OrdenProcesamientoFormModal({
 
           <div>
             <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-gray-500">
-              Producto secundario (resultado esperado)
+              Resultado
             </label>
-            {secundariosOrdenados.length === 0 ? (
+            {!primarioId ? (
+              <p className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2 text-sm text-slate-600">
+                Elegí primero un primario con stock en bodega.
+              </p>
+            ) : secundariosOrdenados.length === 0 ? (
               <p className="rounded-lg border border-amber-100 bg-amber-50 px-3 py-2 text-sm text-amber-900">
                 No hay secundarios vinculados a este primario. En <strong>Catálogo → Crear secundario</strong> elegí
-                este producto en «Incluido primario» y la regla de conversión.
+                este producto en «Incluido primario».
               </p>
             ) : (
               <select
@@ -457,76 +545,96 @@ export function OrdenProcesamientoFormModal({
             )}
           </div>
 
-          <div className="rounded-xl border border-sky-100 bg-sky-50/80 px-4 py-3">
-            <p className="text-xs font-bold uppercase tracking-wide text-sky-900">
-              Cantidad en primario a transformar
-              {unidadPrim === "peso" ? " (kg en bodega / alinear regla en kg)" : " (unidades en bodega)"}
-            </p>
-            {!warehouseFirestoreId ? (
-              <p className="mt-2 text-sm text-amber-900">
-                Asigná al menos una bodega interna a la cuenta (con código) para leer el mapa y calcular el tope desde
-                bodega.
+          <div className="rounded-lg border border-gray-200 bg-gray-50/50 px-4 py-3">
+            <p className="text-xs font-bold uppercase tracking-wide text-gray-600">Conversión</p>
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <span className="text-sm font-semibold tabular-nums text-gray-900">
+                {unidadPrim === "peso" ? "1 kg" : "1 ud."} →
+              </span>
+              <input
+                type="text"
+                inputMode="decimal"
+                value={unidadesSecundarioPorUnoPrimarioInput}
+                onChange={(e) => setUnidadesSecundarioPorUnoPrimarioInput(e.target.value)}
+                placeholder={unidadPrim === "peso" ? "0" : "0"}
+                className="min-w-[5rem] flex-1 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-semibold tabular-nums"
+                required
+                aria-label={
+                  unidadPrim === "peso"
+                    ? "Unidades de secundario por 1 kg de primario"
+                    : "Unidades de secundario por 1 unidad de primario"
+                }
+              />
+              <span className="text-sm text-gray-600">
+                {etiquetaUnidadVisualizacion(secundario?.unidadVisualizacion)}
+              </span>
+            </div>
+          </div>
+
+          <div className="rounded-lg border border-gray-200 bg-gray-50/50 px-4 py-3">
+            <div className="flex flex-wrap items-baseline justify-between gap-2">
+              <p className="text-xs font-bold uppercase tracking-wide text-gray-600">
+                Cantidad a procesar{unidadPrim === "peso" ? " (kg)" : ""}
               </p>
-            ) : mapaBodegaLoading ? (
-              <p className="mt-2 text-sm text-slate-600">Cargando posiciones del mapa…</p>
-            ) : maxCantidad <= 0 ? (
-              <p className="mt-2 text-sm text-amber-900">
-                No hay stock de este primario en el mapa para tu cuenta, o las cajas no tienen kg/piezas. Verificá que
-                el <strong>nombre en el mapa</strong> coincida con el <strong>título del catálogo</strong> y que las
-                cajas estén asociadas a tu cuenta.
-              </p>
-            ) : (
-              <>
-                <div className="mt-3 flex items-center gap-3">
-                  <input
-                    type="range"
-                    min={unidadPrim === "cantidad" ? 1 : 0.0001}
-                    max={maxCantidad}
-                    step={stepSlider}
-                    value={Math.min(cantidadElegida, maxCantidad)}
-                    onChange={(e) => setCantidadElegida(Number(e.target.value))}
-                    className="min-w-0 flex-1 accent-sky-600"
-                  />
-                  <span className="w-24 shrink-0 text-right text-lg font-extrabold tabular-nums text-slate-900">
-                    {unidadPrim === "cantidad"
-                      ? String(Math.round(cantidadElegida))
-                      : cantidadElegida.toLocaleString("es-CO", { maximumFractionDigits: 4 })}
-                  </span>
-                </div>
-                <p className="mt-1 text-[11px] text-slate-600">
-                  Máximo según stock en bodega:{" "}
-                  <span className="font-semibold tabular-nums">
+              {!warehouseFirestoreId || mapaBodegaLoading || maxCantidad <= 0 ? null : (
+                <span className="text-xs text-gray-500">
+                  Máx.{" "}
+                  <span className="font-medium tabular-nums text-gray-800">
                     {unidadPrim === "peso"
-                      ? `${maxCantidad.toLocaleString("es-CO", { maximumFractionDigits: 4 })} kg`
+                      ? `${maxCantidad.toLocaleString("es-CO")} kg`
                       : maxCantidad}
                   </span>
-                </p>
-              </>
-            )}
-          </div>
-
-          <div className="rounded-xl border border-violet-100 bg-violet-50/70 px-4 py-3">
-            <p className="text-xs font-bold uppercase tracking-wide text-violet-900">Estimado de unidades (secundario)</p>
-            {estimado !== null && estimado !== undefined && Number.isFinite(estimado) ? (
-              <p className="mt-2 text-2xl font-extrabold tabular-nums text-slate-900">
-                {estimado.toLocaleString("es-CO", { maximumFractionDigits: 4 })}
+                </span>
+              )}
+            </div>
+            {!warehouseFirestoreId ? (
+              <p className="mt-2 text-sm text-amber-900">Necesitás una bodega interna en la cuenta.</p>
+            ) : mapaBodegaLoading ? (
+              <p className="mt-2 text-sm text-gray-500">Cargando…</p>
+            ) : maxCantidad <= 0 ? (
+              <p className="mt-2 text-sm text-amber-900">
+                Sin stock de este insumo en el mapa o sin datos en las cajas.
               </p>
             ) : (
-              <p className="mt-2 text-sm text-amber-900">
-                Definí la regla de conversión en el secundario del catálogo (regla de tres).
-              </p>
+              <div className="mt-3 flex items-center gap-3">
+                <input
+                  type="range"
+                  min={1}
+                  max={maxCantidad}
+                  step={1}
+                  value={Math.min(Math.round(cantidadElegida), maxCantidad)}
+                  onChange={(e) => {
+                    const v = Math.round(Number(e.target.value));
+                    setCantidadElegida(v);
+                  }}
+                  className="min-w-0 flex-1 accent-sky-600"
+                />
+                <span className="w-24 shrink-0 text-right text-lg font-bold tabular-nums text-gray-900">
+                  {Math.round(cantidadElegida).toLocaleString("es-CO")}
+                </span>
+              </div>
             )}
-            {secundario && Number(reglaA) > 0 && Number(reglaB) > 0 ? (
-              <p className="mt-1 text-[11px] text-slate-600">
-                Regla: {reglaA} (primario) → {reglaB} (secundario)
-              </p>
-            ) : null}
           </div>
 
-          <p className="rounded-lg border border-slate-100 bg-slate-50/80 px-3 py-2 text-xs text-slate-600">
-            El estado inicial será <strong>Iniciado</strong>. Podés cambiarlo a <strong>En curso</strong> o{" "}
-            <strong>Terminado</strong> desde la lista después de confirmar.
-          </p>
+          <div className="rounded-lg border border-gray-200 bg-white px-4 py-3">
+            <p className="text-xs font-bold uppercase tracking-wide text-gray-600">Estimado</p>
+            {estimado !== null && estimado !== undefined && Number.isFinite(estimado) ? (
+              <div className="mt-2 flex flex-wrap items-end gap-x-3 gap-y-1">
+                <p className="text-2xl font-bold tabular-nums text-gray-900">
+                  {estimado.toLocaleString("es-CO", { maximumFractionDigits: 0 })}
+                </p>
+                {perdidaPctDelCatalogo > 0 ? (
+                  <span className="text-xs text-gray-500">
+                    Merma {Math.round(perdidaPctDelCatalogo).toLocaleString("es-CO")}%
+                  </span>
+                ) : null}
+              </div>
+            ) : (
+              <p className="mt-2 text-sm text-amber-900">
+                Indicá la conversión ({unidadPrim === "peso" ? "por kg" : "por ud."}).
+              </p>
+            )}
+          </div>
 
           {error ? <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p> : null}
 

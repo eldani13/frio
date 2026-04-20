@@ -176,6 +176,7 @@ export default function ConfiguratorPanel({
     cliente: "",
     custodio: "bodega",
     operadorCuentas: "",
+    transporte: "",
   };
 
   const roleLabels: Record<Role, string> = {
@@ -187,6 +188,7 @@ export default function ConfiguratorPanel({
     cliente: "administrador de cuentas",
     configurador: "configurador",
     operadorCuentas: "operador de cuentas",
+    transporte: "transporte (entregas venta)",
   };
 
   const warehouseNameByAccountCode = useMemo(() => {
@@ -651,14 +653,14 @@ export default function ConfiguratorPanel({
                       ))}
                     </>
                   ) : users.length ? (
-                    users.map((user) => {
+                    users.map((user, index) => {
                       const hasCredentials = Boolean(user.email?.trim());
                       const shortId =
                         user.id.length > 12 ? `${user.id.slice(0, 6)}...${user.id.slice(-3)}` : user.id;
                       const code = ensureFiveClientCode(user.code ?? shortId);
                       return (
                         <tr
-                          key={user.id}
+                          key={`${user.id}-${index}`}
                           className="border-b border-slate-100 transition-colors hover:bg-violet-50/80"
                         >
                           <td className="whitespace-nowrap px-4 py-3 font-mono text-[13px] font-semibold text-slate-900">
@@ -1209,7 +1211,17 @@ export default function ConfiguratorPanel({
                   className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none"
                   disabled={userSaving || usersLoading}
                 >
-                  {["custodio", "administrador", "operario", "procesador", "jefe", "cliente", "configurador"].map((role) => (
+                  {[
+                    "custodio",
+                    "administrador",
+                    "operario",
+                    "procesador",
+                    "jefe",
+                    "cliente",
+                    "configurador",
+                    "operadorCuentas",
+                    "transporte",
+                  ].map((role) => (
                     <option key={role} value={role}>{roleLabels[role as Role] ?? role}</option>
                   ))}
                 </select>
@@ -1626,7 +1638,17 @@ export default function ConfiguratorPanel({
                   className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none"
                   disabled={editUserSaving || usersLoading}
                 >
-                  {["custodio", "administrador", "operario", "procesador", "jefe", "cliente", "configurador"].map((role) => (
+                  {[
+                    "custodio",
+                    "administrador",
+                    "operario",
+                    "procesador",
+                    "jefe",
+                    "cliente",
+                    "configurador",
+                    "operadorCuentas",
+                    "transporte",
+                  ].map((role) => (
                     <option key={role} value={role}>{roleLabels[role as Role] ?? role}</option>
                   ))}
                 </select>

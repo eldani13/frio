@@ -17,7 +17,8 @@ export type LoginPresetKey =
   | "administrador"
   | "cuenta"
   | "configurador"
-  | "operador";
+  | "operador"
+  | "transporte";
 
 type Credentials = { email: string; password: string };
 
@@ -30,6 +31,7 @@ const ORDER: Array<{ key: LoginPresetKey; label: string }> = [
   { key: "cuenta", label: "Cuenta" },
   { key: "configurador", label: "Configurador" },
   { key: "operador", label: "Operador" },
+  { key: "transporte", label: "Transporte" },
 ];
 
 /** Credenciales por defecto de los atajos (Firebase Auth). */
@@ -42,6 +44,7 @@ const DEFAULTS: Record<LoginPresetKey, Credentials> = {
   cuenta: { email: "adminmit@mit.com", password: "adminmit123" },
   configurador: { email: "configurador@configurador.com", password: "configurador123" },
   operador: { email: "luis.cantillo@polaria.tech", password: "123456789" },
+  transporte: { email: "transporte@transporte.com", password: "transporte123" },
 };
 
 const PRESET_KEYS = new Set<LoginPresetKey>([
@@ -53,6 +56,7 @@ const PRESET_KEYS = new Set<LoginPresetKey>([
   "cuenta",
   "configurador",
   "operador",
+  "transporte",
 ]);
 
 function parseEnvOverrides(): Partial<Record<LoginPresetKey, Credentials>> | null {

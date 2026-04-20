@@ -1,6 +1,7 @@
 "use client";
 import { HiOutlinePencilSquare, HiOutlineTrash, HiArrowsUpDown } from "react-icons/hi2";
 import { Catalogo } from "@/app/types/catalogo";
+import { etiquetaUnidadVisualizacion } from "@/lib/unidadVisualizacionCatalogo";
 
 interface Props {
   productos: Catalogo[];
@@ -105,7 +106,9 @@ export const CatalogoTable = ({ productos, productosCatalogo, onEdit, onDelete, 
                 <td className="p-4 bg-white group-hover:bg-violet-50/80 transition-colors">{p.continueSelling ? "SÍ" : "NO"}</td>
                 <td className="p-4 bg-white group-hover:bg-violet-50/80 transition-colors">{p.weightValue}</td>
                 <td className="p-4 bg-white capitalize group-hover:bg-violet-50/80 transition-colors">
-                  {p.unidadVisualizacion ?? p.weightUnit ?? "—"}
+                  {p.unidadVisualizacion || p.weightUnit
+                    ? etiquetaUnidadVisualizacion(String(p.unidadVisualizacion ?? p.weightUnit))
+                    : "—"}
                 </td>
                 <td className="p-4 bg-white group-hover:bg-violet-50/80 transition-colors">{p.requiresShipping ? "SÍ" : "NO"}</td>
                 <td className="p-4 bg-white group-hover:bg-violet-50/80 transition-colors">{p.logisticService}</td>

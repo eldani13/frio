@@ -6,6 +6,12 @@ import {
   OcOrdenIngresoPanel,
   type IngresoDesdeOrdenCompraPayload,
 } from "@/app/components/BodegaDashboard/OcOrdenIngresoPanel";
+import {
+  OcOrdenVentaIngresoPanel,
+  type IngresoDesdeOrdenVentaPayload,
+} from "@/app/components/BodegaDashboard/OcOrdenVentaIngresoPanel";
+import BodegaZonaCajaCard from "@/app/components/bodega/BodegaZonaCajaCard";
+import type { VentaPendienteCartonaje } from "@/app/types/ventaCuenta";
 
 const HIGH_TEMP_THRESHOLD = 5;
 
@@ -45,6 +51,9 @@ type Props = {
   warehouseId: string;
   isBodegaInterna: boolean;
   onIngresoDesdeOrdenCompra: (payload: IngresoDesdeOrdenCompraPayload) => Promise<void>;
+  onIngresoDesdeOrdenVenta: (payload: IngresoDesdeOrdenVentaPayload) => Promise<void>;
+  /** Custodio: despachar todas las cajas en salida de una OV en un solo envío (estado → Transporte + viaje). */
+  onDespachoPaqueteOrdenVenta?: (orden: VentaPendienteCartonaje) => Promise<void>;
 };
 
 export default function IngresosSection(props: Props) {
@@ -67,6 +76,8 @@ export default function IngresosSection(props: Props) {
     warehouseId,
     isBodegaInterna,
     onIngresoDesdeOrdenCompra,
+    onIngresoDesdeOrdenVenta,
+    onDespachoPaqueteOrdenVenta,
   } = props;
 
   const clientLabel = useCallback(
@@ -81,6 +92,11 @@ export default function IngresosSection(props: Props) {
 
   const salidaFilterValue = clientFilterId ?? "";
 
+  const [selectedBoxId, setSelectedBoxId] = useState<string>("");
+  /** OV cuyas cajas en salida se enviarán juntas desde esta columna. */
+  const [paqueteDespacho, setPaqueteDespacho] = useState<VentaPendienteCartonaje | null>(null);
+  const [enviandoPaquete, setEnviandoPaquete] = useState(false);
+
   const outboundFiltered = useMemo(
     () =>
       outboundBoxes.filter((box) =>
@@ -89,7 +105,26 @@ export default function IngresosSection(props: Props) {
     [outboundBoxes, salidaFilterValue, clientsForCatalog],
   );
 
-  const [selectedBoxId, setSelectedBoxId] = useState<string>("");
+  const paqueteActivoKey = useMemo(
+    () =>
+      paqueteDespacho
+        ? `${String(paqueteDespacho.idClienteDueno ?? "").trim()}::${String(paqueteDespacho.id ?? "").trim()}`
+        : "",
+    [paqueteDespacho],
+  );
+
+  /** Misma lógica que el despacho en BodegaDashboard: todas las cajas en salida de la OV (sin filtro de cliente). */
+  const cajasPaqueteEnSalida = useMemo(() => {
+    if (!paqueteDespacho) return [];
+    const cid = String(paqueteDespacho.idClienteDueno ?? "").trim();
+    const vid = String(paqueteDespacho.id ?? "").trim();
+    if (!cid || !vid) return [];
+    return outboundBoxes.filter(
+      (b) =>
+        String(b.ordenVentaId ?? "").trim() === vid &&
+        String(b.ordenVentaClienteId ?? "").trim() === cid,
+    );
+  }, [paqueteDespacho, outboundBoxes]);
 
   const [reviewModal, setReviewModal] = useState<Box | null>(null);
   const [tempError, setTempError] = useState<string | null>(null);
@@ -98,6 +133,11 @@ export default function IngresosSection(props: Props) {
     finalTemp: string;
   } | null>(null);
   const [tempConfirmError, setTempConfirmError] = useState<string | null>(null);
+
+  const [cajaDetalleModal, setCajaDetalleModal] = useState<{
+    box: Box;
+    zona: "ingreso" | "salida";
+  } | null>(null);
 
   const getFirstFreeBodegaSlot = () => {
     const free = slots.find((slot) => !slot.autoId || !slot.autoId.trim());
@@ -149,80 +189,199 @@ export default function IngresosSection(props: Props) {
 
   return (
     <>
-      <section className="grid w-full min-w-0 grid-cols-1 items-stretch gap-4 sm:gap-6 md:grid-cols-2 lg:grid-cols-4">
-        {/* 1. Orden de ingreso (OC en transporte → checklist → cajas en zona) */}
-        <div className="flex h-full min-h-0 w-full min-w-0">
-          <OcOrdenIngresoPanel
-            warehouseId={warehouseId}
-            isBodegaInterna={isBodegaInterna}
-            onRegistrar={onIngresoDesdeOrdenCompra}
-          />
-        </div>
-
-        {/* 2. Zona de ingreso (solo cola de cajas) */}
-        <div className="rounded-2xl bg-white p-4 sm:p-6 lg:p-8 shadow-lg border border-green-200 w-full min-w-0 flex h-full min-h-0 flex-col gap-4 sm:gap-6">
-          <div className="flex flex-col flex-1 min-h-0">
-            <div className="flex items-center justify-between gap-2 mb-2 shrink-0">
-              <div className="flex items-center gap-2 min-w-0">
-                <span className="rounded-full bg-emerald-600 p-2 text-white shrink-0">
-                  <FiArchive className="w-5 h-5" />
-                </span>
-                <div className="min-w-0">
-                  <h2 className="text-lg font-semibold">Zona de ingreso</h2>
-                  
-                </div>
-              </div>
-              <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-600 shrink-0">
-                {inboundBoxes.length} cajas
-              </span>
-            </div>
-            <div className="flex-1 flex flex-col mt-2 min-h-[8rem]">
-              {inboundBoxes.length === 0 ? (
-                <div className="flex flex-col items-center justify-center gap-2 flex-1 py-6">
-                  <FiArchive className="w-10 h-10 text-slate-300" />
-                  <p className="text-sm text-slate-500 text-center">No hay cajas en ingresos</p>
-                </div>
-              ) : (
-                <div className="w-full max-h-[min(22rem,55vh)] overflow-y-auto overflow-x-hidden flex flex-col">
-                  {sortByPosition(inboundBoxes).map((box, idx) => (
-                    <div
-                      key={`ingreso-${box.position}-${box.autoId ?? "no-id"}-${idx}`}
-                      className="rounded-xl border border-emerald-200 bg-white p-3 text-sm text-emerald-700 w-full mb-2"
-                    >
-                      <p className="font-semibold">Ingreso {box.position}</p>
-                      <p>Id único: {box.autoId}</p>
-                      <p>Nombre: {box.name}</p>
-                      <p>Temperatura: {box.temperature} °C</p>
-                      <p>Cantidad: {formatQuantityKg(box.quantityKg)}</p>
-                      <p>Cliente: {clientLabel(box.client)}</p>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
+      <section className="grid min-h-0 w-full min-w-0 grid-cols-1 items-stretch gap-4 sm:gap-6 md:grid-cols-2 lg:grid-cols-4">
+        {/* 1. Orden de ingreso (OC / venta): dos mitades con la misma altura dentro de la columna */}
+        <div className="flex h-full min-h-0 w-full min-w-0 flex-col gap-4">
+          <div className="flex min-h-0 flex-1 basis-0 flex-col">
+            <OcOrdenIngresoPanel
+              warehouseId={warehouseId}
+              isBodegaInterna={isBodegaInterna}
+              onRegistrar={onIngresoDesdeOrdenCompra}
+              className="h-full min-h-0 flex-col overflow-y-auto [scrollbar-gutter:stable]"
+            />
+          </div>
+          <div className="flex min-h-0 flex-1 basis-0 flex-col">
+            <OcOrdenVentaIngresoPanel
+              warehouseId={warehouseId}
+              isBodegaInterna={isBodegaInterna}
+              outboundBoxes={outboundBoxes}
+              paqueteActivoKey={paqueteActivoKey}
+              onArmarPaquete={(orden) => setPaqueteDespacho(orden)}
+              onRegistrar={onIngresoDesdeOrdenVenta}
+              className="h-full min-h-0 flex-col overflow-y-auto [scrollbar-gutter:stable]"
+            />
           </div>
         </div>
 
-        {/* 3. Orden de salida */}
-        <div className="rounded-2xl bg-white p-4 sm:p-6 lg:p-8 shadow-lg border border-pink-200 w-full min-w-0 flex h-full min-h-0 flex-col gap-4 sm:gap-6">
-          {outboundFiltered.length > 0 ? (
+        {/* 2. Zona de ingreso (solo cola de cajas) */}
+        <div className="flex h-full min-h-0 w-full min-w-0 flex-col rounded-2xl border border-green-200 bg-white p-4 shadow-lg sm:p-6 lg:p-8">
+          <div className="flex shrink-0 items-center justify-between gap-2">
+            <div className="flex min-w-0 items-center gap-2">
+              <span className="shrink-0 rounded-full bg-emerald-600 p-2 text-white">
+                <FiArchive className="w-5 h-5" />
+              </span>
+              <div className="min-w-0">
+                <h2 className="text-lg font-semibold">Zona de ingreso</h2>
+              </div>
+            </div>
+            <span className="shrink-0 rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-600">
+              {inboundBoxes.length} cajas
+            </span>
+          </div>
+          <div className="mt-3 min-h-0 flex-1 overflow-y-auto overflow-x-hidden [scrollbar-gutter:stable]">
+            {inboundBoxes.length === 0 ? (
+              <div className="flex h-full min-h-[6rem] flex-col items-center justify-center gap-2 py-6">
+                <FiArchive className="h-10 w-10 text-slate-300" />
+                <p className="text-center text-sm text-slate-500">No hay cajas en ingresos</p>
+              </div>
+            ) : (
+              <div className="flex flex-col gap-2 sm:gap-4">
+                {sortByPosition(inboundBoxes).map((box, idx) => {
+                  const isHighTemp =
+                    typeof box.temperature === "number" && box.temperature > HIGH_TEMP_THRESHOLD;
+                  return (
+                    <BodegaZonaCajaCard
+                      key={`ingreso-${box.position}-${box.autoId ?? "no-id"}-${idx}`}
+                      box={box}
+                      variant="entrada"
+                      alertaTemperaturaAlta={isHighTemp}
+                      className="mx-auto w-full max-w-[140px]"
+                      onOpen={() => setCajaDetalleModal({ box, zona: "ingreso" })}
+                    />
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* 3. Zona de salida */}
+        <div className="flex h-full min-h-0 w-full min-w-0 flex-col rounded-2xl border border-pink-200 bg-white p-4 shadow-lg sm:p-6 lg:p-8">
+          <div className="flex shrink-0 items-center justify-between gap-2">
+            <div className="flex min-w-0 items-center gap-2">
+              <span className="shrink-0 rounded-full bg-pink-600 p-2 text-white">
+                <FiBox className="w-5 h-5" />
+              </span>
+              <div className="min-w-0">
+                <h2 className="text-lg font-semibold">Zona de salida</h2>
+              </div>
+            </div>
+            <span className="shrink-0 rounded-full bg-pink-100 px-3 py-1 text-xs font-semibold text-pink-600">
+              {outboundFiltered.length} cajas
+            </span>
+          </div>
+          <div className="mt-3 min-h-0 flex-1 overflow-y-auto overflow-x-hidden [scrollbar-gutter:stable]">
+            {outboundFiltered.length === 0 ? (
+              <div className="flex h-full min-h-[6rem] flex-col items-center justify-center gap-2 py-6">
+                <FiBox className="h-10 w-10 text-slate-300" />
+                <p className="text-center text-sm text-slate-500">No hay cajas en salida</p>
+              </div>
+            ) : (
+              <div className="flex flex-col gap-2 sm:gap-4">
+                {sortByPosition(outboundFiltered).map((box, idx) => (
+                  <BodegaZonaCajaCard
+                    key={`salida-scroll-${box.position}-${box.autoId ?? "no-id"}-${idx}`}
+                    box={box}
+                    variant="salida"
+                    className="mx-auto w-full max-w-[140px]"
+                    onOpen={() => {
+                      setSelectedBoxId(box.autoId ?? `pos-${box.position}`);
+                      setCajaDetalleModal({ box, zona: "salida" });
+                    }}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* 4. Orden de salida */}
+        <div className="flex h-full min-h-0 w-full min-w-0 flex-col rounded-2xl border border-pink-200 bg-white p-4 shadow-lg sm:p-6 lg:p-8">
+          {outboundFiltered.length > 0 || paqueteDespacho ? (
             <>
-              <div className="flex items-center gap-3 shrink-0">
+              <div className="flex shrink-0 items-center gap-3">
                 <span className="rounded-full bg-pink-600 p-2 text-white shrink-0">
                   <FiBox className="w-5 h-5" />
                 </span>
                 <div className="min-w-0">
                   <h2 className="text-lg font-semibold">Orden de salida</h2>
-                  <p className="text-xs text-slate-500">Registrar salida de caja</p>
-                  <p className="mt-1 text-[11px] leading-relaxed text-slate-500">
-                    Complementa <strong>orden de compra</strong> y <strong>orden de ingreso</strong> (primera
-                    columna): cuando el <strong>operario</strong> ejecuta la tarea «A salida», la caja entra en
-                    esta cola y en <strong>Zona de salida</strong>; acá la elegís para confirmar el envío al
-                    cliente.
-                  </p>
+                 
                 </div>
               </div>
-              <div className="grid gap-3 flex-1 min-h-0">
+
+              <div className="mt-2 flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto [scrollbar-gutter:stable]">
+              {paqueteDespacho ? (
+                <div className="rounded-2xl border-2 border-dashed border-pink-400 bg-linear-to-br from-pink-50 to-white p-4 shadow-sm">
+                  <p className="text-xs font-bold uppercase tracking-wide text-pink-900">Paquete listo</p>
+                  <p className="mt-1 text-sm font-semibold text-slate-900">
+                    {paqueteDespacho.numero}{" "}
+                    <span className="font-normal text-slate-600">
+                      · {paqueteDespacho.compradorNombre}
+                    </span>
+                  </p>
+                  {cajasPaqueteEnSalida.length === 0 ? (
+                    <p className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                      No hay cajas de esta venta en <strong>zona de salida</strong> (o faltan{" "}
+                      <code className="rounded bg-white/80 px-0.5">ordenVentaId</code> /{" "}
+                      <code className="rounded bg-white/80 px-0.5">ordenVentaClienteId</code> en las cajas).
+                      Revisá <strong>Zona de salida</strong> y el flujo operario hasta salida.
+                    </p>
+                  ) : (
+                    <>
+                      <p className="mt-2 text-[11px] text-slate-600">
+                        Se enviarán <strong>{cajasPaqueteEnSalida.length}</strong> caja(s) en un solo paso; la venta
+                        pasa a <strong>Transporte</strong> y el viaje queda para el rol transporte.
+                      </p>
+                      <ul className="mt-2 max-h-[min(10rem,30vh)] space-y-1 overflow-y-auto text-xs text-slate-700">
+                        {sortByPosition(cajasPaqueteEnSalida).map((b, i) => (
+                          <li key={`pkg-${b.position}-${b.autoId ?? i}`} className="font-mono">
+                            {b.autoId || `Pos ${b.position}`}
+                            {b.name ? ` · ${b.name}` : ""}
+                          </li>
+                        ))}
+                      </ul>
+                    </>
+                  )}
+                  <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+                    {onDespachoPaqueteOrdenVenta ? (
+                      <button
+                        type="button"
+                        disabled={enviandoPaquete || cajasPaqueteEnSalida.length === 0}
+                        onClick={() => {
+                          void (async () => {
+                            setEnviandoPaquete(true);
+                            try {
+                              await onDespachoPaqueteOrdenVenta(paqueteDespacho);
+                              setPaqueteDespacho(null);
+                            } finally {
+                              setEnviandoPaquete(false);
+                            }
+                          })();
+                        }}
+                        className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-pink-700 px-4 py-2.5 text-sm font-bold text-white shadow-md transition hover:bg-pink-600 disabled:cursor-not-allowed disabled:bg-slate-300"
+                      >
+                        <FiBox className="h-4 w-4 shrink-0" />
+                        {enviandoPaquete ? "Enviando…" : "Enviar paquete al transporte"}
+                      </button>
+                    ) : (
+                      <p className="text-xs text-rose-700">
+                        El envío de paquete no está disponible en este contexto.
+                      </p>
+                    )}
+                    <button
+                      type="button"
+                      disabled={enviandoPaquete}
+                      onClick={() => setPaqueteDespacho(null)}
+                      className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                    >
+                      Cancelar paquete
+                    </button>
+                  </div>
+                </div>
+              ) : null}
+
+              {!paqueteDespacho && outboundFiltered.length > 0 ? (
+              <div className="grid gap-3">
                 <label className="text-sm font-medium text-slate-600">
                   Orden de posición
                 </label>
@@ -318,66 +477,149 @@ export default function IngresosSection(props: Props) {
                   <FiBox className="w-4 h-4" /> Enviar caja
                 </button>
               </div>
+              ) : null}
+              </div>
             </>
           ) : (
-            <div className="flex w-full min-w-0 flex-1 flex-col items-stretch justify-start gap-4">
-              <div className="flex items-start gap-3">
-                <span className="rounded-full bg-pink-600 p-2 text-white shrink-0">
+            <div className="flex h-full min-h-0 flex-1 flex-col gap-4">
+              <div className="flex shrink-0 items-start gap-3">
+                <span className="shrink-0 rounded-full bg-pink-600 p-2 text-white">
                   <FiBox className="w-5 h-5" />
                 </span>
                 <div className="min-w-0 pt-0.5">
                   <h2 className="text-lg font-semibold leading-tight">Orden de salida</h2>
                 </div>
               </div>
-              
+              <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-2 py-8 text-center text-sm text-slate-500">
+                <FiBox className="h-10 w-10 text-slate-300" />
+                <p>No hay cajas en salida ni paquete seleccionado.</p>
+              </div>
             </div>
           )}
         </div>
+      </section>
 
-        {/* 4. Zona de salida */}
-        <div className="rounded-2xl bg-white p-4 sm:p-6 lg:p-8 shadow-lg border border-pink-200 w-full min-w-0 flex h-full min-h-0 flex-col gap-4 sm:gap-6">
-          <div className="flex flex-col flex-1 min-h-0">
-            <div className="flex items-center justify-between gap-2 mb-2 shrink-0">
-              <div className="flex items-center gap-2 min-w-0">
-                <span className="rounded-full bg-pink-600 p-2 text-white shrink-0">
-                  <FiBox className="w-5 h-5" />
-                </span>
-                <div className="min-w-0">
-                  <h2 className="text-lg font-semibold">Zona de salida</h2>
-                  
-                </div>
-              </div>
-              <span className="rounded-full bg-pink-100 px-3 py-1 text-xs font-semibold text-pink-600 shrink-0">
-                {outboundFiltered.length} cajas
+    {cajaDetalleModal && (
+      <div
+        className="fixed inset-0 z-[85] flex items-end justify-center bg-slate-900/45 p-3 backdrop-blur-[2px] sm:items-center sm:p-4"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="caja-detalle-titulo"
+        onClick={() => setCajaDetalleModal(null)}
+      >
+        <div
+          className="flex max-h-[min(92vh,640px)] w-full max-w-lg flex-col overflow-hidden rounded-3xl border border-slate-200/90 bg-white shadow-2xl"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div
+            className={`relative shrink-0 border-b px-5 pb-5 pt-6 sm:px-6 ${
+              cajaDetalleModal.zona === "ingreso"
+                ? "border-emerald-100 bg-linear-to-br from-emerald-50 via-white to-teal-50/50"
+                : "border-pink-100 bg-linear-to-br from-pink-50 via-white to-rose-50/50"
+            }`}
+          >
+            <button
+              type="button"
+              onClick={() => setCajaDetalleModal(null)}
+              className="absolute right-3 top-3 rounded-xl border border-slate-200/80 bg-white/90 p-2 text-slate-500 shadow-sm transition hover:bg-white hover:text-slate-800"
+              aria-label="Cerrar"
+            >
+              <IoCloseOutline className="h-5 w-5" />
+            </button>
+            <div className="flex items-start gap-4 pr-12">
+              <span
+                className={`flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl shadow-inner ${
+                  cajaDetalleModal.zona === "ingreso"
+                    ? "bg-emerald-100 text-emerald-700"
+                    : "bg-pink-100 text-pink-600"
+                }`}
+              >
+                <FiBox className="h-7 w-7" aria-hidden />
               </span>
-            </div>
-            <div className="flex-1 flex flex-col mt-2 min-h-[8rem]">
-              {outboundFiltered.length === 0 ? (
-                <div className="flex flex-col items-center justify-center gap-2 flex-1 py-6">
-                  <FiBox className="w-10 h-10 text-slate-300" />
-                  <p className="text-sm text-slate-500 text-center">No hay cajas en salida</p>
-                </div>
-              ) : (
-                <div className="w-full max-h-[min(22rem,55vh)] overflow-y-auto overflow-x-hidden flex flex-col">
-                  {sortByPosition(outboundFiltered).map((box, idx) => (
-                    <div
-                      key={`salida-scroll-${box.position}-${box.autoId ?? "no-id"}-${idx}`}
-                      className="rounded-xl border border-pink-200 bg-white p-3 text-sm text-pink-700 w-full mb-2"
-                    >
-                      <p className="font-semibold">Salida {box.position}</p>
-                      <p>Id único: {box.autoId}</p>
-                      <p>Nombre: {box.name}</p>
-                      <p>Temperatura: {box.temperature} °C</p>
-                      <p>Cantidad: {formatQuantityKg(box.quantityKg)}</p>
-                      <p>Cliente: {clientLabel(box.client)}</p>
-                    </div>
-                  ))}
-                </div>
-              )}
+              <div className="min-w-0 pt-0.5">
+                <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">
+                  {cajaDetalleModal.zona === "ingreso" ? "Zona de ingreso" : "Zona de salida"}
+                </p>
+                <h2
+                  id="caja-detalle-titulo"
+                  className="mt-1 break-all font-mono text-lg font-bold tracking-tight text-slate-900 sm:text-xl"
+                >
+                  {cajaDetalleModal.box.autoId || "Sin id"}
+                </h2>
+                <p className="mt-2 text-sm font-medium leading-relaxed text-slate-700">
+                  {cajaDetalleModal.box.name || "Sin nombre"}
+                </p>
+              </div>
             </div>
           </div>
+
+          <div className="flex flex-col gap-2.5 overflow-y-auto px-5 py-5 sm:px-6">
+            <div className="rounded-2xl border border-slate-100 bg-slate-50/90 px-4 py-3">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Posición en zona</p>
+              <p className="mt-1 text-lg font-bold tabular-nums text-slate-900">
+                {cajaDetalleModal.box.position}
+              </p>
+            </div>
+            <div className="rounded-2xl border border-slate-100 bg-white px-4 py-3 shadow-sm">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Cliente</p>
+              <p className="mt-1 text-sm font-semibold text-slate-900">
+                {clientLabel(cajaDetalleModal.box.client || "")}
+              </p>
+            </div>
+            <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+              <div className="rounded-2xl border border-slate-100 bg-white px-4 py-3 shadow-sm">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Temperatura</p>
+                <p className="mt-1 text-base font-bold tabular-nums text-slate-900">
+                  {cajaDetalleModal.box.temperature !== undefined && cajaDetalleModal.box.temperature !== null
+                    ? `${cajaDetalleModal.box.temperature} °C`
+                    : "—"}
+                </p>
+              </div>
+              <div className="rounded-2xl border border-slate-100 bg-white px-4 py-3 shadow-sm">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Cantidad</p>
+                <p className="mt-1 text-base font-bold text-slate-900">
+                  {formatQuantityKg(cajaDetalleModal.box.quantityKg)}
+                </p>
+              </div>
+            </div>
+            {(cajaDetalleModal.box.ordenCompraId || cajaDetalleModal.box.ordenVentaId) && (
+              <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/80 px-4 py-3 text-xs text-slate-600">
+                {cajaDetalleModal.box.ordenCompraId ? (
+                  <p>
+                    <span className="font-semibold text-slate-700">OC: </span>
+                    {cajaDetalleModal.box.ordenCompraId}
+                  </p>
+                ) : null}
+                {cajaDetalleModal.box.ordenVentaId ? (
+                  <p className={cajaDetalleModal.box.ordenCompraId ? "mt-1.5" : ""}>
+                    <span className="font-semibold text-slate-700">Venta: </span>
+                    {cajaDetalleModal.box.ordenVentaId}
+                  </p>
+                ) : null}
+              </div>
+            )}
+          </div>
+
+          <div
+            className={`shrink-0 border-t px-5 py-4 sm:px-6 ${
+              cajaDetalleModal.zona === "ingreso" ? "border-emerald-100 bg-emerald-50/40" : "border-pink-100 bg-pink-50/40"
+            }`}
+          >
+            <button
+              type="button"
+              onClick={() => setCajaDetalleModal(null)}
+              className={`w-full rounded-2xl px-4 py-3 text-sm font-bold shadow-sm transition ${
+                cajaDetalleModal.zona === "ingreso"
+                  ? "border border-emerald-200 bg-white text-emerald-800 hover:bg-emerald-50"
+                  : "border border-pink-200 bg-white text-pink-800 hover:bg-pink-50"
+              }`}
+            >
+              Cerrar
+            </button>
+          </div>
         </div>
-      </section>
+      </div>
+    )}
 
     {reviewModal && (
       <div
