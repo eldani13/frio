@@ -1,4 +1,3 @@
-/* eslint-disable react-hooks/set-state-in-effect */
 import { useEffect, useState } from "react";
 import type { SelectedSlotCardProps } from "../../interfaces/bodega/SelectedSlotCard";
 import { clientLabelFromList, formatBoxQuantityKg } from "@/app/lib/bodegaDisplay";

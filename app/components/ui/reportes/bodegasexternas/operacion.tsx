@@ -46,8 +46,8 @@ function parseIngresoMonth(fecha: string): string | null {
   }
   const m = t.match(/^(\d{1,2})[./-](\d{1,2})[./-](\d{2,4})/);
   if (m) {
-    let day = Number(m[1]);
-    let month = Number(m[2]);
+    const day = Number(m[1]);
+    const month = Number(m[2]);
     let year = Number(m[3]);
     if (year < 100) year += year >= 70 ? 1900 : 2000;
     if (month >= 1 && month <= 12 && day >= 1 && day <= 31) {

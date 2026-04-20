@@ -1,7 +1,7 @@
 /** Normaliza teléfonos viejos al formato que entiende PhoneInput (E.164 con +). */
 export function normalizeStoredTelefono(raw: string | undefined): string {
   if (!raw?.trim()) return "";
-  let t = raw.trim().replace(/\s/g, "");
+  const t = raw.trim().replace(/\s/g, "");
   if (t.startsWith("+")) return t;
   const digits = t.replace(/\D/g, "");
   if (!digits) return "";

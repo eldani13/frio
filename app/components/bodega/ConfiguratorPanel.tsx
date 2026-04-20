@@ -10,8 +10,6 @@ import {
   FiEdit2,
   FiArrowRight,
   FiArrowLeft,
-  FiTrash2,
-  FiCheck,
   FiRefreshCw,
   FiLayers,
   FiMapPin,
@@ -25,7 +23,6 @@ import {
 } from "react-icons/fi";
 import type { Dispatch, MouseEvent, SetStateAction } from "react";
 import type { Client, ConfigUser, Role, WarehouseMeta } from "../../interfaces/bodega";
-import { MdOutlineAutorenew } from "react-icons/md";
 import { SolicitudIntegracionService } from "@/app/services/solicitudIntegracionService";
 import {
   etiquetasTipoIntegracionRow,
@@ -93,7 +90,7 @@ export default function ConfiguratorPanel({
   setNewWarehouseCapacity,
   handleCreateWarehouse,
   handleUpdateWarehouse,
-  toggleWarehouseDisabled,
+  toggleWarehouseDisabled: _toggleWarehouseDisabled,
   newClientName,
   newClientCode,
   setNewClientName,
@@ -103,7 +100,7 @@ export default function ConfiguratorPanel({
   handleCreateClient,
   fetchClients,
   clients,
-  toggleClientDisabled,
+  toggleClientDisabled: _toggleClientDisabled,
   handleUpdateClient,
   fetchUsers,
   users,
@@ -122,7 +119,7 @@ export default function ConfiguratorPanel({
   usersLoading,
   userSaving,
   handleCreateUser,
-  toggleUserDisabled,
+  toggleUserDisabled: _toggleUserDisabled,
   handleUpdateUser,
   menuResetNonce,
 }: Props) {

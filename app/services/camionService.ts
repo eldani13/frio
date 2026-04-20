@@ -45,8 +45,8 @@ export const TruckService = {
         id: d.id, 
         ...d.data() 
       } as Camion));
-    } catch (error: any) {
-      console.error("Error en TruckService.getAll:", error.message);
+    } catch (error: unknown) {
+      console.error("Error en TruckService.getAll:", error instanceof Error ? error.message : error);
       return [];
     }
   },
@@ -74,8 +74,8 @@ export const TruckService = {
       };
 
       return await addDoc(getColRef(idCliente), newTruck);
-    } catch (error: any) {
-      console.error("Error en TruckService.create:", error.message);
+    } catch (error: unknown) {
+      console.error("Error en TruckService.create:", error instanceof Error ? error.message : error);
       throw error;
     }
   },
@@ -86,14 +86,14 @@ export const TruckService = {
   async update(idCliente: string, id: string, data: Partial<Omit<Camion, 'id' | 'numericId' | 'code'>>) {
     try {
       if (!idCliente?.trim()) throw new Error("idCliente requerido");
-      const updateData = { ...data };
-      delete (updateData as any).code;
-      delete (updateData as any).numericId;
-      delete (updateData as any).codeCuenta;
+      const u: Record<string, unknown> = { ...data };
+      for (const k of ["code", "numericId", "codeCuenta"] as const) {
+        delete u[k];
+      }
 
-      return await updateDoc(getTruckDocRef(idCliente, id), updateData);
-    } catch (error: any) {
-      console.error("Error en TruckService.update:", error.message);
+      return await updateDoc(getTruckDocRef(idCliente, id), u as Partial<Omit<Camion, "id" | "numericId" | "code">>);
+    } catch (error: unknown) {
+      console.error("Error en TruckService.update:", error instanceof Error ? error.message : error);
       throw error;
     }
   },
@@ -102,8 +102,8 @@ export const TruckService = {
     try {
       if (!idCliente?.trim()) throw new Error("idCliente requerido");
       return await deleteDoc(getTruckDocRef(idCliente, id));
-    } catch (error: any) {
-      console.error("Error en TruckService.delete:", error.message);
+    } catch (error: unknown) {
+      console.error("Error en TruckService.delete:", error instanceof Error ? error.message : error);
       throw error;
     }
   }

@@ -77,6 +77,8 @@ export type Box = {
 	client: string;
 	/** Cantidad en kilogramos. */
 	quantityKg?: number;
+	/** Solo historial local (p. ej. al registrar ingreso en contexto de reportes). */
+	historialAtMs?: number;
 	/** Ingreso desde OC: al ubicar la última caja en bodega se cierra la orden. */
 	ordenCompraId?: string;
 	ordenCompraClienteId?: string;

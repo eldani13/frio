@@ -84,8 +84,8 @@ export default function AdminBodegaReportes({
     despachadosHistorial,
   } = useBodegaHistory();
 
-  const [activeClientId, setActiveClientId] = useState<string>(TODOS_CLIENT_ID);
-  const [selectedBoxId, setSelectedBoxId] = useState("");
+  const [activeClientId, _setActiveClientId] = useState<string>(TODOS_CLIENT_ID);
+  const [_selectedBoxId, _setSelectedBoxId] = useState("");
   const [trackModalOpen, setTrackModalOpen] = useState(false);
   const [trackSelectedId, setTrackSelectedId] = useState("");
   const [trackComboOpen, setTrackComboOpen] = useState(false);
@@ -96,7 +96,7 @@ export default function AdminBodegaReportes({
     type: "ingresos" | "salidas" | "movimientos" | "despachados" | "alertas";
   } | null>(null);
 
-  const clientPickList = useMemo(
+  const _clientPickList = useMemo(
     () => clients.filter((c) => !c.disabled),
     [clients],
   );
@@ -158,7 +158,7 @@ export default function AdminBodegaReportes({
     });
   }, [alertas, activeClientId, clientAutoIds]);
 
-  const clientBoxes = useMemo(() => {
+  const _clientBoxes = useMemo(() => {
     const candidates = [...inboundBoxes, ...outboundBoxes, ...dispatchedFiltered, ...slots];
     const seen = new Set<string>();
     return candidates
@@ -701,7 +701,12 @@ export default function AdminBodegaReportes({
                 <label className="mb-1 block text-[10px] font-bold uppercase tracking-wide text-slate-400">
                   Id de caja
                 </label>
-                <div className="flex rounded-xl border border-slate-200 bg-white shadow-sm ring-sky-200 focus-within:ring-2">
+                <div
+                  className="flex rounded-xl border border-slate-200 bg-white shadow-sm ring-sky-200 focus-within:ring-2"
+                  role="combobox"
+                  aria-expanded={trackComboOpen}
+                  aria-controls="track-box-listbox"
+                >
                   <input
                     type="text"
                     value={trackComboQuery}
@@ -721,8 +726,6 @@ export default function AdminBodegaReportes({
                     }}
                     placeholder="Buscar o elegir de la lista…"
                     autoComplete="off"
-                    aria-expanded={trackComboOpen}
-                    aria-controls="track-box-listbox"
                     className="min-w-0 flex-1 rounded-l-xl border-0 bg-transparent px-3 py-2.5 text-sm font-semibold text-slate-900 outline-none placeholder:font-normal placeholder:text-slate-400"
                   />
                   <button
@@ -748,7 +751,11 @@ export default function AdminBodegaReportes({
                     className="absolute z-20 mt-1 max-h-[min(45vh,320px)] w-full overflow-auto rounded-xl border border-slate-200 bg-white py-1 shadow-xl"
                   >
                     {filteredTrackBoxes.length === 0 ? (
-                      <li className="px-3 py-3 text-center text-sm text-slate-500" role="option">
+                      <li
+                        className="px-3 py-3 text-center text-sm text-slate-500"
+                        role="option"
+                        aria-selected={false}
+                      >
                         Sin coincidencias
                       </li>
                     ) : (

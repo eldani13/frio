@@ -84,14 +84,14 @@ export default function CatalogoPage() {
     setSortConfig({ key, direction });
   };
 
-  const handleImport = async (data: any[]) => {
+  const handleImport = async (data: Record<string, unknown>[]) => {
     if (data.length === 0 || !idCliente) return;
     setLoading(true);
     try {
       await CatalogoService.importMany(data, idCliente, codeCuenta);
       alert("¡Importación exitosa!");
       await load();
-    } catch (error) {
+    } catch (_error) {
       alert("Error al importar los datos.");
     } finally {
       setLoading(false);
@@ -104,18 +104,18 @@ export default function CatalogoPage() {
       if (selectedProducto?.id) {
         await CatalogoService.update(idCliente, selectedProducto.id, data);
       } else {
-        await CatalogoService.create(data as any, idCliente, codeCuenta);
+        await CatalogoService.create(data as Omit<Catalogo, "id" | "numericId" | "code" | "createdAt" | "codeCuenta">, idCliente, codeCuenta);
       }
       setIsModalOpen(false);
       await load();
-    } catch (error) {
+    } catch (_error) {
       alert("Hubo un error al procesar la solicitud.");
     }
   };
 
   const handleSecundarioSuccess = async (data: Partial<Catalogo>) => {
     if (!idCliente) throw new Error("sin_cliente");
-    await CatalogoService.create(data as any, idCliente, codeCuenta);
+    await CatalogoService.create(data as Omit<Catalogo, "id" | "numericId" | "code" | "createdAt" | "codeCuenta">, idCliente, codeCuenta);
     await load();
   };
 

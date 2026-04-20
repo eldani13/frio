@@ -1,4 +1,3 @@
-/* eslint-disable react-hooks/set-state-in-effect */
 import { FiArchive, FiBox, FiAlertTriangle } from "react-icons/fi";
 import React, { useState, useEffect } from "react";
 import SlotsGrid from "../bodega/SlotsGrid";
@@ -137,6 +136,7 @@ export default function EstadoBodegaSection(props: Props) {
       temperature: box.temperature,
       position: box.position,
       client: box.client,
+      quantityKg: box.quantityKg,
     }));
 
   const [showAlertModal, setShowAlertModal] = useState(false);

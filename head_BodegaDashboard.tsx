@@ -1,6 +1,6 @@
 "use client";
 /* eslint-disable react-hooks/purity */
-/* eslint-disable @typescript-eslint/no-unused-vars, react-hooks/exhaustive-deps */
+/* eslint-disable @typescript-eslint/no-unused-vars */
 import React from "react";
 import { useBodegaHistory } from "./app/components/BodegaDashboard/BodegaHistoryContext";
 import EstadoBodegaSection from "./app/components/BodegaDashboard/EstadoBodegaSection";

@@ -41,8 +41,8 @@ export const PlantaService = {
         id: d.id, 
         ...d.data() 
       } as Planta));
-    } catch (error: any) {
-      console.error("Error en PlantaService.getAll:", error.message);
+    } catch (error: unknown) {
+      console.error("Error en PlantaService.getAll:", error instanceof Error ? error.message : error);
       return [];
     }
   },
@@ -69,8 +69,8 @@ export const PlantaService = {
       };
 
       return await addDoc(getColRef(idCliente), newPlanta);
-    } catch (error: any) {
-      console.error("Error en PlantaService.create:", error.message);
+    } catch (error: unknown) {
+      console.error("Error en PlantaService.create:", error instanceof Error ? error.message : error);
       throw error;
     }
   },
@@ -97,8 +97,8 @@ export const PlantaService = {
       };
 
       return await updateDoc(getPlantaDocRef(idCliente, id), updateData);
-    } catch (error: any) {
-      console.error("Error en PlantaService.update:", error.message);
+    } catch (error: unknown) {
+      console.error("Error en PlantaService.update:", error instanceof Error ? error.message : error);
       throw error;
     }
   },
@@ -107,8 +107,8 @@ export const PlantaService = {
     try {
       if (!idCliente?.trim()) throw new Error("idCliente requerido");
       return await deleteDoc(getPlantaDocRef(idCliente, id));
-    } catch (error: any) {
-      console.error("Error en PlantaService.delete:", error.message);
+    } catch (error: unknown) {
+      console.error("Error en PlantaService.delete:", error instanceof Error ? error.message : error);
       throw error;
     }
   }

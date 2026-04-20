@@ -300,7 +300,7 @@ export function planSalidaVentaDesdeMapa(slots: Slot[], tarea: Record<string, un
     return { ok: false, message: "La tarea no tiene líneas de pedido." };
   }
 
-  let working = cloneSlots(slots);
+  const working = cloneSlots(slots);
   const movimientosRaw: Array<{ position: number; kg: number }> = [];
 
   for (const line of lineItems) {

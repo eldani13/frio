@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import { FiArchive, FiBox, FiAlertCircle } from "react-icons/fi";
 import { IoCloseOutline } from "react-icons/io5";
 import type { Box, Client, Slot, BodegaOrder } from "../../interfaces/bodega";
@@ -63,7 +63,7 @@ export default function IngresosSection(props: Props) {
     orders,
     inboundBoxes,
     outboundBoxes,
-    ingresoClientId,
+    ingresoClientId: _ingresoClientId,
     setIngresoClientId,
     createReturnOrder,
     sortByPosition,

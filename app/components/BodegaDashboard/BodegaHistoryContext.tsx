@@ -14,6 +14,7 @@ import type {
   DispatchedHistoryEntry,
   HistoryState,
 } from "../../interfaces/bodega";
+import { useAuth } from "@/app/context/AuthContext";
 import {
   DEFAULT_WAREHOUSE_ID,
   defaultHistoryState,
@@ -34,6 +35,7 @@ interface BodegaHistoryContextType extends HistoryState {
 const BodegaHistoryContext = createContext<BodegaHistoryContextType | undefined>(undefined);
 
 export const BodegaHistoryProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { session, loading: authLoading } = useAuth();
   const [history, setHistory] = useState<HistoryState>(defaultHistoryState);
   const [warehouseId, setWarehouseIdState] = useState<string>(DEFAULT_WAREHOUSE_ID);
   const previousWarehouseIdRef = useRef<string | null>(null);
@@ -55,12 +57,21 @@ export const BodegaHistoryProvider: React.FC<{ children: React.ReactNode }> = ({
     }
   }, [warehouseId]);
 
+  /**
+   * No suscribir a Firestore hasta tener sesión: si `request.auth` es null las reglas
+   * deniegan la lectura (p. ej. en la pantalla de login el provider igual está montado).
+   */
   useEffect(() => {
+    if (authLoading) return;
+    if (!session) {
+      setHistory(defaultHistoryState);
+      return;
+    }
     const unsub = subscribeHistoryState(warehouseId, (cloud) => {
       setHistory(cloud);
     });
     return unsub;
-  }, [warehouseId]);
+  }, [warehouseId, authLoading, session]);
 
   const persist = useCallback(
     (updater: (prev: HistoryState) => HistoryState) => {

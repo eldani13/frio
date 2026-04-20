@@ -22,10 +22,14 @@ function etiquetaIncluidoPrimario(p: Catalogo, catalogo?: Catalogo[]): string {
   return "—";
 }
 
-export const CatalogoTable = ({ productos, productosCatalogo, onEdit, onDelete, onSort }: Props) => {
-  
-  // Helper para renderizar headers con ordenamiento
-  const SortableHeader = ({ label, sortKey }: { label: string; sortKey?: keyof Catalogo }) => (
+type SortableHeaderProps = {
+  label: string;
+  sortKey?: keyof Catalogo;
+  onSort: (key: keyof Catalogo) => void;
+};
+
+function CatalogoSortableHeader({ label, sortKey, onSort }: SortableHeaderProps) {
+  return (
     <th
       className={`sticky top-0 z-20 border-b border-slate-200 bg-slate-50 p-4 ${sortKey ? "cursor-pointer transition-colors hover:bg-slate-100" : ""}`}
       onClick={() => sortKey && onSort(sortKey)}
@@ -36,7 +40,9 @@ export const CatalogoTable = ({ productos, productosCatalogo, onEdit, onDelete, 
       </div>
     </th>
   );
+}
 
+export const CatalogoTable = ({ productos, productosCatalogo, onEdit, onDelete, onSort }: Props) => {
   return (
     /* Contenedor principal con altura máxima para el sticky header */
     <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
@@ -44,26 +50,26 @@ export const CatalogoTable = ({ productos, productosCatalogo, onEdit, onDelete, 
         <table className="table-auto min-w-[4500px] border-separate border-spacing-0 text-left">
           <thead className="bg-slate-50">
             <tr>
-              <SortableHeader label="ID Num" sortKey="numericId" />
-              <SortableHeader label="Código" sortKey="code" />
-              <SortableHeader label="Título" sortKey="title" />
-              <SortableHeader label="Slug" />
-              <SortableHeader label="Descripción" />
-              <SortableHeader label="Proveedor" sortKey="provider" />
-              <SortableHeader label="Categoría" sortKey="category" />
-              <SortableHeader label="Tipo" />
-              <SortableHeader label="Etiquetas" />
-              <SortableHeader label="Publicado" />
-              <SortableHeader label="Estado" sortKey="status" />
-              <SortableHeader label="SKU" sortKey="sku" />
-              <SortableHeader label="Cód. Barras" />
-              <SortableHeader label="Nombre Op 1" />
-              <SortableHeader label="Valor Op 1" />
-              <SortableHeader label="Vinculado" />
-              <SortableHeader label="Costo" sortKey="costPerItem" />
-              <SortableHeader label="Impuesto" />
-              <SortableHeader label="Tracker inv." />
-              <SortableHeader label="Stock" sortKey="inventoryQty" />
+              <CatalogoSortableHeader label="ID Num" sortKey="numericId" onSort={onSort} />
+              <CatalogoSortableHeader label="Código" sortKey="code" onSort={onSort} />
+              <CatalogoSortableHeader label="Título" sortKey="title" onSort={onSort} />
+              <CatalogoSortableHeader label="Slug" onSort={onSort} />
+              <CatalogoSortableHeader label="Descripción" onSort={onSort} />
+              <CatalogoSortableHeader label="Proveedor" sortKey="provider" onSort={onSort} />
+              <CatalogoSortableHeader label="Categoría" sortKey="category" onSort={onSort} />
+              <CatalogoSortableHeader label="Tipo" onSort={onSort} />
+              <CatalogoSortableHeader label="Etiquetas" onSort={onSort} />
+              <CatalogoSortableHeader label="Publicado" onSort={onSort} />
+              <CatalogoSortableHeader label="Estado" sortKey="status" onSort={onSort} />
+              <CatalogoSortableHeader label="SKU" sortKey="sku" onSort={onSort} />
+              <CatalogoSortableHeader label="Cód. Barras" onSort={onSort} />
+              <CatalogoSortableHeader label="Nombre Op 1" onSort={onSort} />
+              <CatalogoSortableHeader label="Valor Op 1" onSort={onSort} />
+              <CatalogoSortableHeader label="Vinculado" onSort={onSort} />
+              <CatalogoSortableHeader label="Costo" sortKey="costPerItem" onSort={onSort} />
+              <CatalogoSortableHeader label="Impuesto" onSort={onSort} />
+              <CatalogoSortableHeader label="Tracker inv." onSort={onSort} />
+              <CatalogoSortableHeader label="Stock" sortKey="inventoryQty" onSort={onSort} />
               
               {/* HEADER DE ACCIONES: Sticky a la derecha Y arriba */}
               <th className="sticky top-0 right-0 z-30 border-b border-slate-200 bg-slate-50 p-4 text-right text-[10px] font-bold uppercase tracking-wide text-slate-500 shadow-[-4px_0_8px_-2px_rgba(0,0,0,0.05)]">

@@ -69,7 +69,6 @@ import type {
   Role,
   Slot,
 } from "../interfaces/bodega";
-import WarehouseSelector from "./bodega/WarehouseSelector";
 import RequestsQueue from "./bodega/RequestsQueue";
 import LoginCard from "./bodega/LoginCard";
 import {
@@ -887,7 +886,7 @@ export default function BodegaDashboard() {
   const [tempFixPosition, setTempFixPosition] = useState<number>(1);
   const [tempFixValue, setTempFixValue] = useState<string>("");
 
-  const [ingresoPosition, setIngresoPosition] = useState<number>(1);
+  const [, setIngresoPosition] = useState<number>(1);
   const [ingresoName, setIngresoName] = useState<string>("");
   const [ingresoTemp, setIngresoTemp] = useState<string>("");
   const [ingresoQuantityKg, setIngresoQuantityKg] = useState<string>("");
@@ -1915,10 +1914,10 @@ export default function BodegaDashboard() {
   const reviewBodegaList = useMemo(() => availableBodegaForOrders, [availableBodegaForOrders]);
 
   const {
-    ingresos: historyIngresos,
-    salidas: historySalidas,
-    movimientosBodega: historyMovimientos,
-    alertas,
+    ingresos: _historyIngresos,
+    salidas: _historySalidas,
+    movimientosBodega: _historyMovimientos,
+    alertas: _alertasHistorial,
     addIngreso,
     addSalida,
     addMovimientoBodega,
@@ -2368,7 +2367,7 @@ export default function BodegaDashboard() {
   const canManageAlerts = isJefe;
 
   const canSeeBodega = isAdmin || isColaboradorBodega;
-  const canUseIngresoForm = isCustodio;
+  const _canUseIngresoForm = isCustodio;
   const canUseOrderForm = isJefe;
   const canUseSearch = isAdmin;
 
@@ -2527,7 +2526,7 @@ export default function BodegaDashboard() {
     setSelectedPosition(position);
   };
 
-  const handleIngreso = () => {
+  const _handleIngreso = () => {
     if (role !== "custodio") {
       setMessage("Solo el custodio registra ingresos.");
       return;
@@ -3368,43 +3367,43 @@ export default function BodegaDashboard() {
       }
 
       if (sourceIsProcesamiento) {
-        const meta = order.procesamientoOrigen;
-        if (!meta) {
+        const procMeta = order.procesamientoOrigen;
+        if (!procMeta) {
           setMessage("Orden invalida: falta dato de procesamiento.");
           return;
         }
-        const qty = Math.max(0, Number(meta.cantidadPrimario) || 0);
+        const qty = Math.max(0, Number(procMeta.cantidadPrimario) || 0);
         if (qty <= 0) {
           setMessage("La orden no tiene cantidad valida para ubicar en bodega.");
           return;
         }
-        const isPeso = meta.unidadPrimarioVisualizacion === "peso";
+        const isPeso = procMeta.unidadPrimarioVisualizacion === "peso";
         const filled: Record<string, unknown> = {
-          autoId: (order.autoId && order.autoId.trim()) || `PROC-${meta.numero}`,
+          autoId: (order.autoId && order.autoId.trim()) || `PROC-${procMeta.numero}`,
           name:
             (order.boxName && order.boxName.trim()) ||
-            `${meta.productoPrimarioTitulo} → ${meta.productoSecundarioTitulo}`.slice(0, 200),
+            `${procMeta.productoPrimarioTitulo} → ${procMeta.productoSecundarioTitulo}`.slice(0, 200),
           temperature: 0,
-          client: (order.client && order.client.trim()) || meta.cuentaClientId,
+          client: (order.client && order.client.trim()) || procMeta.cuentaClientId,
         };
         if (isPeso) {
           filled.quantityKg = qty;
         } else {
           filled.piezas = Math.max(1, Math.round(qty));
         }
-        const secTit = (meta.productoSecundarioTitulo || "").trim();
+        const secTit = (procMeta.productoSecundarioTitulo || "").trim();
         if (secTit) {
           filled.procesamientoSecundarioTitulo = secTit.slice(0, 240);
         }
-        const solId = (meta.solicitudId || "").trim();
+        const solId = (procMeta.solicitudId || "").trim();
         if (solId) {
           filled.procesamientoSolicitudId = solId.slice(0, 120);
         }
-        let est = meta.estimadoUnidadesSecundario;
+        let est = procMeta.estimadoUnidadesSecundario;
         if (!(typeof est === "number" && Number.isFinite(est) && est > 0)) {
           const row = solicitudesProcSubscriptionRows.find(
             (s) =>
-              s.clientId.trim() === meta.cuentaClientId.trim() && s.id.trim() === solId,
+              s.clientId.trim() === procMeta.cuentaClientId.trim() && s.id.trim() === solId,
           );
           const rEst = row?.estimadoUnidadesSecundario;
           if (typeof rEst === "number" && Number.isFinite(rEst) && rEst > 0) {
@@ -3414,8 +3413,8 @@ export default function BodegaDashboard() {
         if (typeof est === "number" && Number.isFinite(est) && est > 0) {
           filled.procesamientoUnidadesSecundario = est;
         }
-        if (meta.productoPrimarioId?.trim()) {
-          filled.catalogoProductId = meta.productoPrimarioId.trim();
+        if (procMeta.productoPrimarioId?.trim()) {
+          filled.catalogoProductId = procMeta.productoPrimarioId.trim();
         }
         const nextSlotsProc = slots.map((item) =>
           item.position === target ? { ...item, ...(filled as Partial<Slot>) } : item,
@@ -3743,7 +3742,7 @@ export default function BodegaDashboard() {
       }
 
       let nextOutbound = [...outboundBoxes];
-      let nextSlots = slotsTrasDescuento;
+      const nextSlots = slotsTrasDescuento;
       let salidasCount = 0;
       const extraReserved = new Set(reservedSalidaTargets);
 

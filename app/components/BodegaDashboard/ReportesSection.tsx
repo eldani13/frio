@@ -131,7 +131,7 @@ const ReportesSection: React.FC<ReportesSectionProps> = ({
 
   const [ordenesCompra, setOrdenesCompra] = React.useState<OrdenCompra[]>([]);
   const [catalogosOrden, setCatalogosOrden] = React.useState<Catalogo[]>([]);
-  const [proveedoresOrden, setProveedoresOrden] = React.useState<Provider[]>([]);
+  const [, setProveedoresOrden] = React.useState<Provider[]>([]);
   const [compradoresCuenta, setCompradoresCuenta] = React.useState<Comprador[]>([]);
   const [ordenesDataLoading, setOrdenesDataLoading] = React.useState(false);
   const [ordenCompraModalOpen, setOrdenCompraModalOpen] = React.useState(false);
@@ -791,7 +791,8 @@ const ReportesSection: React.FC<ReportesSectionProps> = ({
           clientId: cid,
           clientName,
           codeCuenta: codeCuenta.trim(),
-          creadoPorNombre: session.displayName?.trim() || session.email?.trim() || "Usuario",
+          creadoPorNombre:
+            (session as { displayName?: string }).displayName?.trim() || session.email?.trim() || "Usuario",
           creadoPorUid: session.uid,
         });
         setModalIntegracionOpen(false);

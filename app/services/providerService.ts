@@ -42,8 +42,8 @@ export const ProviderService = {
         id: d.id, 
         ...d.data() 
       } as Provider));
-    } catch (error: any) {
-      console.error("Error en getAll:", error.message);
+    } catch (error: unknown) {
+      console.error("Error en getAll:", error instanceof Error ? error.message : error);
       return [];
     }
   },
@@ -91,8 +91,8 @@ export const ProviderService = {
       };
 
       return await addDoc(getColRef(idCliente), newProvider);
-    } catch (error: any) {
-      console.error("Error en create:", error.message);
+    } catch (error: unknown) {
+      console.error("Error en create:", error instanceof Error ? error.message : error);
       throw error;
     }
   },
@@ -106,8 +106,8 @@ export const ProviderService = {
       if (data.telefono !== undefined) patch.telefono = data.telefono.trim();
       if (data.email !== undefined) patch.email = data.email.trim();
       return await updateDoc(getProviderDocRef(idCliente, id), patch);
-    } catch (error: any) {
-      console.error("Error en update:", error.message);
+    } catch (error: unknown) {
+      console.error("Error en update:", error instanceof Error ? error.message : error);
       throw error;
     }
   },
@@ -116,8 +116,8 @@ export const ProviderService = {
     try {
       if (!idCliente?.trim()) throw new Error("idCliente requerido");
       return await deleteDoc(getProviderDocRef(idCliente, id));
-    } catch (error: any) {
-      console.error("Error en delete:", error.message);
+    } catch (error: unknown) {
+      console.error("Error en delete:", error instanceof Error ? error.message : error);
       throw error;
     }
   }
