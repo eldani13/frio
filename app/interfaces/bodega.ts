@@ -28,6 +28,10 @@ export type Slot = {
 	procesamientoUnidadesSecundario?: number;
 	/** Id Firestore de la solicitud de procesamiento (para re-enlazar estimado si faltó en el slot). */
 	procesamientoSolicitudId?: string;
+	/** Tras devolver sobrante (kg fraccionarios) al primario: id de solicitud ya reintegrada en este casillero. */
+	procesamientoDesperdicioDevueltoSolicitudId?: string;
+	/** Catálogo (alineado con descuentos / ventas). */
+	catalogoProductId?: string;
 };
 
 export type Role =
@@ -102,6 +106,12 @@ export type ProcesamientoOrigenOrden = {
 	unidadPrimarioVisualizacion?: "peso" | "cantidad";
 	/** Estimación al crear la solicitud (regla de tres hacia el secundario). */
 	estimadoUnidadesSecundario?: number | null;
+	/** `procesado`: ubicar resultado (secundario) en casillero elegido por el jefe. `desperdicio`: reintegrar sobrante (kg fraccionarios del primario) al mismo producto en mapa. */
+	rolDevolucion?: "desperdicio" | "procesado";
+	/** Solo si `rolDevolucion === "desperdicio"` — kg de sobrante a sumar al primario en mapa. */
+	sobranteKg?: number;
+	/** @deprecated Usar `sobranteKg`; se mantiene solo para lectura de órdenes viejas. */
+	desperdicioKg?: number;
 };
 
 export type BodegaOrder = {
@@ -174,6 +184,8 @@ export type HistoryState = {
 	movimientosBodega: BodegaOrder[];
 	alertas: AlertHistoryEntry[];
 	despachadosHistorial: DispatchedHistoryEntry[];
+	/** Kg acumulados de merma declarada al cerrar procesamiento (no reingresan al mapa). */
+	mermaProcesamientoKgTotal?: number;
 };
 
 export type WarehouseMeta = {

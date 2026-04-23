@@ -13,6 +13,7 @@ import {
   limit,
 } from "firebase/firestore";
 import { Catalogo } from "@/app/types/catalogo";
+import { coerceNumberImport } from "@/lib/catalogoPrecio";
 
 const PARENT_COLLECTION = "clientes";
 const SUB_COLLECTION = "productos";
@@ -22,6 +23,20 @@ const getColRef = (idCliente: string) =>
 
 const getProductoDocRef = (idCliente: string, id: string) =>
   doc(db, PARENT_COLLECTION, idCliente, SUB_COLLECTION, id);
+
+/** Une columnas Excel `precio` / `price` y numéricos string en `price` para la UI. */
+function normalizeCatalogoImportRow(item: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = { ...item };
+  let priceNum = coerceNumberImport(out.price);
+  if (priceNum === undefined) priceNum = coerceNumberImport(out.precio);
+  if (priceNum !== undefined) out.price = priceNum;
+  delete out.precio;
+  if (out.costPerItem !== undefined) {
+    const c = coerceNumberImport(out.costPerItem);
+    if (c !== undefined) out.costPerItem = c;
+  }
+  return out;
+}
 
 export const CatalogoService = {
   
@@ -134,8 +149,9 @@ export const CatalogoService = {
 
       const promises = dataList.map((item, index) => {
         const nextId = currentId + index;
+        const row = normalizeCatalogoImportRow(item);
         const newProduct: Omit<Catalogo, "id"> = {
-          ...(item as Omit<Catalogo, "id">),
+          ...(row as Omit<Catalogo, "id">),
           codeCuenta,
           numericId: nextId,
           code: this.toBase36(nextId),

@@ -1,60 +1,100 @@
+"use client";
+
+import { useState } from "react";
 import type { SlotCardProps } from "../../interfaces/bodega/SlotCard";
 import { occupiedSlotVisualClasses } from "@/app/lib/bodegaDisplay";
+import {
+  BODEGA_SLOT_BODY_CLASS,
+  BODEGA_SLOT_ROUNDED,
+  BODEGA_SLOT_SHELL_CLASS,
+  BODEGA_SLOT_SHELL_PADDING,
+} from "@/app/lib/bodegaSlotUniform";
 import { FiBox } from "react-icons/fi";
+import { EmptyZonaSlot } from "@/app/components/bodega/ZonaCuatroSlotsRow";
+import { buildCajaDetalleFromSlot, CajaDetalleModal } from "@/app/components/bodega/CajaDetalleModal";
 
 export default function SlotCard({
   slot,
   isSelected,
   onSelect,
+  clients = [],
+  slotCantidadContext,
+  detalleChildren,
 }: SlotCardProps) {
+  const [detalleOpen, setDetalleOpen] = useState(false);
   const isOccupied = slot.autoId && slot.autoId.trim() !== "";
   const tone = isOccupied ? occupiedSlotVisualClasses(slot) : null;
+  const showDetalle = Boolean(isOccupied);
+
+  if (!isOccupied || !tone) {
+    return (
+      <div
+        className={`relative ${isSelected ? `${BODEGA_SLOT_ROUNDED} ring-2 ring-sky-400 ring-offset-1` : ""}`}
+      >
+        <EmptyZonaSlot variant="mapa" label={slot.position} />
+      </div>
+    );
+  }
+
+  const detalleProps = buildCajaDetalleFromSlot(slot, clients, slotCantidadContext);
 
   return (
-    <button
-      type="button"
-      onClick={() => isOccupied && onSelect(slot.position)}
-      className={`relative flex flex-col items-center justify-center rounded-3xl border p-2 sm:p-4 transition ${
-        isOccupied && tone
-          ? tone.card
-          : "bg-slate-50 text-slate-400 border-slate-300 cursor-default"
-      } ${isSelected ? "ring-2 ring-emerald-300" : ""}`}
-      style={{ minHeight: 90, maxWidth: 140, width: "100%" }}
-    >
-      <span className="absolute top-1 left-1 text-[9px] font-semibold rounded-full px-1 py-0.5  text-slate-600">
-        {slot.position}
-      </span>
-
-      {isOccupied && tone ? (
-        <>
-          <div className="mb-1">
-            <FiBox className={`w-4 h-4 sm:w-6 sm:h-6 ${tone.icon}`} />
-          </div>
-          <div className="font-semibold text-[clamp(0.65rem,1vw,0.85rem)] text-center truncate w-full">
-            {slot.name || "Sin nombre"}
-          </div>
-          <div className="text-[clamp(0.7rem,1.5vw,0.85rem)] mt-1 text-center truncate w-full">
-            {slot.autoId}
-          </div>
-          {/* <div className="text-[clamp(0.68rem,1.4vw,0.8rem)] text-center truncate w-full text-slate-600">
-            Cliente: {slot.client || "—"}
-          </div> */}
-          <div
-            className={`mt-2 text-[clamp(0.7rem,1.5vw,0.85rem)] font-medium rounded-full px-1.5 sm:px-3 py-0.5 inline-block ${tone.pill}`}
+    <>
+      <div className={`relative ${isSelected ? `${BODEGA_SLOT_ROUNDED} ring-2 ring-sky-400 ring-offset-1` : ""}`}>
+        <button
+          type="button"
+          onClick={() => {
+            onSelect(slot.position);
+            setDetalleOpen(true);
+          }}
+          className={`${BODEGA_SLOT_SHELL_CLASS} relative flex w-full flex-col ${BODEGA_SLOT_ROUNDED} ${BODEGA_SLOT_SHELL_PADDING} transition ${tone.shell} ${isSelected ? "ring-2 ring-sky-400 ring-offset-1" : ""}`}
+          aria-label={`Ver detalles de la caja en posición ${slot.position}`}
+        >
+          <span
+            className={`absolute left-2 top-2 z-10 text-xs leading-none ${tone.positionLabel}`}
           >
-            {typeof slot.temperature === "number"
-              ? `${slot.temperature} °C`
-              : "Sin temperatura"}
+            {slot.position}
+          </span>
+          <div className={BODEGA_SLOT_BODY_CLASS}>
+            <div className={`${tone.inner}`}>
+              <div className="flex min-h-0 min-w-0 flex-1 gap-2 overflow-hidden">
+                <FiBox
+                  className={`mt-0.5 h-4 w-4 shrink-0 sm:h-[18px] sm:w-[18px] ${tone.icon}`}
+                  aria-hidden
+                />
+                <div className="min-w-0 flex-1">
+                  <div
+                    className={`truncate font-semibold leading-tight text-[clamp(0.65rem,1vw,0.8rem)] ${tone.name}`}
+                  >
+                    {slot.name || "Sin nombre"}
+                  </div>
+                  <div
+                    className={`mt-0.5 truncate leading-tight text-[clamp(0.65rem,1.4vw,0.78rem)] ${tone.id}`}
+                  >
+                    {slot.autoId}
+                  </div>
+                </div>
+              </div>
+              <div className="mt-2 flex shrink-0 justify-center">
+                <span
+                  className={`inline-block max-w-full truncate rounded-full px-2 py-0.5 text-[clamp(0.65rem,1.4vw,0.78rem)] font-medium ${tone.pill}`}
+                >
+                  {typeof slot.temperature === "number" ? `${slot.temperature}°C` : "Sin temperatura"}
+                </span>
+              </div>
+            </div>
           </div>
-        </>
-      ) : (
-        <div className="flex flex-col items-center gap-1">
-          <div className="border-2 border-dashed border-slate-300 rounded-3xl w-7 h-7 sm:w-9 sm:h-9 flex items-center justify-center">
-            <span className="text-base sm:text-lg">+</span>
-          </div>
-          <div className="text-[clamp(0.7rem,1.5vw,0.85rem)] mt-1">Vacía</div>
-        </div>
-      )}
-    </button>
+        </button>
+      </div>
+      {showDetalle ? (
+        <CajaDetalleModal
+          open={detalleOpen}
+          onClose={() => setDetalleOpen(false)}
+          {...detalleProps}
+        >
+          {detalleChildren}
+        </CajaDetalleModal>
+      ) : null}
+    </>
   );
 }

@@ -1,5 +1,6 @@
 import type { Slot } from "../app/interfaces/bodega";
 import type { Catalogo } from "../app/types/catalogo";
+import { slotLooksLikeProcesamiento } from "../app/lib/bodegaDisplay";
 import { unidadVisualizacionDe } from "./catalogoProcesamiento";
 import { coercePiezasFromUnknown, kgFromFirestoreSlotRecord } from "./coerceBodegaKg";
 
@@ -30,6 +31,7 @@ function slotsClienteYProducto(slots: Slot[], clientId: string, primario: Catalo
     (s) =>
       Boolean(s.autoId?.trim()) &&
       String(s.client ?? "").trim() === cid &&
+      !slotLooksLikeProcesamiento(s) &&
       slotCoincideConCatalogo(s, primario),
   );
 }

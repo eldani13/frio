@@ -10,6 +10,7 @@ import {
   MdClose,
   MdGpsFixed,
   MdExpandMore,
+  MdTrendingDown,
 } from "react-icons/md";
 import { IoAlert } from "react-icons/io5";
 import {
@@ -82,6 +83,7 @@ export default function AdminBodegaReportes({
     movimientosBodega,
     alertas,
     despachadosHistorial,
+    mermaProcesamientoKgTotal,
   } = useBodegaHistory();
 
   const [activeClientId, _setActiveClientId] = useState<string>(TODOS_CLIENT_ID);
@@ -273,7 +275,7 @@ export default function AdminBodegaReportes({
   const pieData = useMemo(() => reportData.filter((item) => item.value > 0), [reportData]);
 
   const renderPieLabel = ({ name, percent }: { name: string; percent: number }) =>
-    `${name.substring(0, 4)} ${(percent * 100).toFixed(0)}%`;
+    `${name} · ${(percent * 100).toFixed(0)}%`;
 
   const zoneLabel = (z: OrderSource) =>
     z === "bodega" ? "Bodega" : z === "salida" ? "Salida" : "Ingreso";
@@ -400,78 +402,135 @@ export default function AdminBodegaReportes({
     sortByPosition,
   ]);
 
+  const kpiCardClass =
+    "group flex min-h-[88px] w-full items-center gap-4 rounded-2xl border border-slate-200/90 bg-white p-4 text-left shadow-sm transition duration-200 hover:border-slate-300 hover:shadow-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-400";
+
   return (
-    <div className="flex w-full flex-col gap-6 bg-white p-4 animate-fade-in">
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-3xl border border-slate-100 bg-white p-4 shadow-sm">
-        <div>
-          <h2 className="text-xl font-bold text-slate-900">Reportes</h2>
-          <p className="mt-0.5 text-xs text-slate-500">
-            Historial persistente en Firestore; los totales suman todo lo acumulado.
+    <div className="mx-auto flex w-full max-w-6xl flex-col gap-8 bg-gradient-to-b from-slate-50 to-white px-3 py-6 sm:px-5 animate-fade-in">
+      <header className="flex flex-col gap-4 rounded-2xl border border-slate-200/80 bg-white/95 p-5 shadow-sm ring-1 ring-slate-100 sm:flex-row sm:items-center sm:justify-between sm:p-6">
+        <div className="min-w-0 space-y-1">
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-sky-600/90">Almacenamiento</p>
+          <h2 className="text-2xl font-bold tracking-tight text-slate-900 sm:text-[1.65rem]">Reportes</h2>
+          {/* <p className="max-w-xl text-sm leading-relaxed text-slate-600">
+            Historial acumulativo en Firestore por bodega: ingresos archivados, salidas, movimientos, despachos,
+            alertas y merma. Los guardados ahora usan transacciones para que varias pestañas o sesiones no se pisen
+            entre sí (antes el último guardado podía borrar entradas de otro flujo).
           </p>
+          <p className="mt-2 max-w-xl text-xs leading-relaxed text-amber-800/90">
+            Si en el pasado faltan filas, no se pueden reconstruir desde la app sin copia en Firestore o respaldo;
+            a partir de este cambio el historial deja de perderse por condiciones de carrera al escribir.
+          </p> */}
         </div>
+        <button
+          type="button"
+          onClick={() => setTrackModalOpen(true)}
+          className="inline-flex shrink-0 items-center justify-center gap-2 self-start rounded-xl bg-sky-600 px-5 py-3 text-sm font-semibold text-white shadow-md shadow-sky-600/20 transition hover:bg-sky-700 sm:self-center"
+        >
+          <MdGpsFixed size={20} className="opacity-95" aria-hidden />
+          Rastrear caja
+        </button>
+      </header>
 
-        <div className="flex flex-wrap items-center gap-3">
-          <button
-            type="button"
-            onClick={() => setTrackModalOpen(true)}
-            className="inline-flex items-center gap-2 rounded-2xl border border-sky-200 bg-sky-50 px-4 py-2.5 text-sm font-bold text-sky-800 shadow-sm transition hover:bg-sky-100"
-          >
-            <MdGpsFixed size={20} className="text-sky-600" />
-            Rastrear caja
+      <section aria-label="Resumen numérico">
+        <h3 className="mb-3 text-xs font-bold uppercase tracking-wide text-slate-500">Resumen</h3>
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <button type="button" onClick={() => setReportDetailModal({ type: "ingresos" })} className={kpiCardClass}>
+            <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600 ring-1 ring-emerald-100/80">
+              <MdInbox size={24} aria-hidden />
+            </span>
+            <div className="min-w-0 flex-1">
+              <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Ingresos</span>
+              <p className="mt-0.5 text-2xl font-bold tabular-nums tracking-tight text-slate-900">
+                {filteredIngresos.length}
+              </p>
+              <p className="mt-0.5 text-[11px] text-slate-400">Archivados en historial</p>
+            </div>
           </button>
-          <div className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-slate-100/80 p-1.5">
-            {/* <div className="flex items-center gap-2 rounded-xl bg-white px-3 py-1.5 shadow-sm">
-              <span className="border-r pr-2 text-[10px] font-black uppercase text-slate-400">
-                Cliente
-              </span>
-              <select
-                value={activeClientId}
-                onChange={(e) => {
-                  setActiveClientId(e.target.value);
-                  setSelectedBoxId("");
-                }}
-                className="min-w-[140px] bg-transparent text-sm font-bold text-slate-800 focus:outline-none"
-              >
-                <option value={TODOS_CLIENT_ID}>Todos los clientes</option>
-                {clientPickList.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name?.trim() || c.id}
-                  </option>
-                ))}
-              </select>
-            </div> */}
 
-            {/* <div className="flex items-center gap-2 rounded-xl bg-white px-3 py-1.5 shadow-sm">
-              <span className="border-r pr-2 text-[10px] font-black uppercase text-slate-400">Caja</span>
-              <select
-                value={selectedBoxId}
-                onChange={(e) => setSelectedBoxId(e.target.value)}
-                className="min-w-[160px] bg-transparent text-sm font-bold text-slate-800 focus:outline-none"
-              >
-                <option value="">Todas las cajas</option>
-                {clientBoxes.map((box) => (
-                  <option key={box.value} value={box.value}>
-                    {box.label}
-                  </option>
-                ))}
-              </select>
-            </div> */}
+          <button type="button" onClick={() => setReportDetailModal({ type: "salidas" })} className={kpiCardClass}>
+            <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-rose-50 text-rose-600 ring-1 ring-rose-100/80">
+              <MdLogout size={24} aria-hidden />
+            </span>
+            <div className="min-w-0 flex-1">
+              <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Salidas</span>
+              <p className="mt-0.5 text-2xl font-bold tabular-nums tracking-tight text-slate-900">
+                {filteredSalidas.length}
+              </p>
+              <p className="mt-0.5 text-[11px] text-slate-400">Órdenes completadas</p>
+            </div>
+          </button>
+
+          <button type="button" onClick={() => setReportDetailModal({ type: "movimientos" })} className={kpiCardClass}>
+            <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-sky-50 text-sky-600 ring-1 ring-sky-100/80">
+              <MdMoveToInbox size={24} aria-hidden />
+            </span>
+            <div className="min-w-0 flex-1">
+              <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Movimientos</span>
+              <p className="mt-0.5 text-2xl font-bold tabular-nums tracking-tight text-slate-900">
+                {filteredMovimientos.length}
+              </p>
+              <p className="mt-0.5 text-[11px] text-slate-400">A bodega / traslados</p>
+            </div>
+          </button>
+
+          <button type="button" onClick={() => setReportDetailModal({ type: "despachados" })} className={kpiCardClass}>
+            <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-slate-600 ring-1 ring-slate-200/80">
+              <MdLocalShipping size={24} aria-hidden />
+            </span>
+            <div className="min-w-0 flex-1">
+              <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Despachados</span>
+              <p className="mt-0.5 text-2xl font-bold tabular-nums tracking-tight text-slate-900">
+                {filteredDespachoHistorial.length}
+              </p>
+              <p className="mt-0.5 text-[11px] text-slate-400">Salida definitiva</p>
+            </div>
+          </button>
+
+          <button type="button" onClick={() => setReportDetailModal({ type: "alertas" })} className={kpiCardClass}>
+            <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-red-50 text-red-600 ring-1 ring-red-100/80">
+              <IoAlert size={24} aria-hidden />
+            </span>
+            <div className="min-w-0 flex-1">
+              <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Alertas</span>
+              <p className="mt-0.5 text-2xl font-bold tabular-nums tracking-tight text-slate-900">{filteredAlerts.length}</p>
+              <p className="mt-0.5 text-[11px] text-slate-400">Historial de eventos</p>
+            </div>
+          </button>
+
+          <div className="flex min-h-[88px] items-center gap-4 rounded-2xl border border-amber-200/90 bg-gradient-to-br from-amber-50/90 to-amber-50/40 p-4 shadow-sm ring-1 ring-amber-100/60">
+            <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-amber-100/90 text-amber-800 ring-1 ring-amber-200/60">
+              <MdTrendingDown size={24} className="text-amber-800/90" aria-hidden />
+            </span>
+            <div className="min-w-0 flex-1">
+              <span className="text-[11px] font-semibold uppercase tracking-wide text-amber-900/85">Merma</span>
+              <p className="mt-0.5 text-2xl font-bold tabular-nums tracking-tight text-amber-950">
+                {(Number(mermaProcesamientoKgTotal) || 0).toLocaleString("es-CO", {
+                  minimumFractionDigits: 0,
+                  maximumFractionDigits: 4,
+                })}{" "}
+                <span className="text-base font-semibold text-amber-900/80">kg</span>
+              </p>
+              <p className="mt-1 text-[11px] leading-snug text-amber-900/70">
+                Declarada al cerrar órdenes de procesamiento
+              </p>
+            </div>
           </div>
         </div>
-      </div>
+      </section>
 
-      <div className="mt-2 grid min-w-0 gap-8 lg:grid-cols-[1.4fr_1fr]">
-        <div className="flex min-w-0 flex-col rounded-3xl border border-slate-200 bg-gradient-to-br from-slate-50 to-white p-6 shadow-sm">
-          <div className="mb-2 flex items-center justify-between">
-            <h3 className="flex items-center gap-2 text-base font-bold text-slate-800">
-              <MdBarChart size={20} className="text-blue-500" /> Totales por tipo
+      <section aria-label="Gráficos" className="grid min-w-0 gap-5 lg:grid-cols-5">
+        <div className="flex min-w-0 flex-col overflow-hidden rounded-2xl border border-slate-200/90 bg-white shadow-sm lg:col-span-3">
+          <div className="border-b border-slate-100 bg-slate-50/80 px-5 py-4">
+            <h3 className="flex items-center gap-2 text-sm font-bold text-slate-800">
+              <MdBarChart size={18} className="text-sky-600" aria-hidden />
+              Totales por tipo
             </h3>
-            <span className="text-xs font-bold uppercase text-slate-400">Barras</span>
+            <p className="mt-0.5 text-xs text-slate-500">Comparativa de registros en el historial</p>
           </div>
-          <div className="min-h-[220px] w-full min-w-0 flex-1">
-            <ResponsiveContainer width="100%" height={220} minWidth={0}>
-              <BarChart data={reportData} barSize={32}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E7EB" />
+          <div className="min-h-[240px] w-full min-w-0 flex-1 p-3 sm:p-4">
+            <ResponsiveContainer width="100%" height={240} minWidth={0}>
+              <BarChart data={reportData} barSize={28} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
                 <XAxis
                   dataKey="name"
                   tick={{ fontSize: 11, fill: "#64748b", fontWeight: 500 }}
@@ -480,18 +539,19 @@ export default function AdminBodegaReportes({
                 />
                 <YAxis
                   allowDecimals={false}
-                  tick={{ fontSize: 12, fill: "#64748b", fontWeight: 500 }}
+                  width={36}
+                  tick={{ fontSize: 11, fill: "#64748b", fontWeight: 500 }}
                   axisLine={false}
                   tickLine={false}
                 />
                 <Tooltip
                   contentStyle={{
-                    borderRadius: 12,
-                    border: "none",
-                    boxShadow: "0 4px 12px rgba(0,0,0,0.1)",
+                    borderRadius: 10,
+                    border: "1px solid #e2e8f0",
+                    boxShadow: "0 8px 24px rgba(15,23,42,0.08)",
                   }}
                 />
-                <Bar dataKey="value" radius={[8, 8, 0, 0]}>
+                <Bar dataKey="value" radius={[6, 6, 0, 0]}>
                   {reportData.map((entry, index) => (
                     <Cell key={index} fill={entry.fill} />
                   ))}
@@ -501,25 +561,25 @@ export default function AdminBodegaReportes({
           </div>
         </div>
 
-        <div className="flex min-w-0 flex-col rounded-3xl border border-slate-200 bg-gradient-to-br from-slate-50 to-white p-6 shadow-sm">
-          <div className="mb-2 flex items-center justify-between">
-            <h3 className="flex items-center gap-2 text-base font-bold text-slate-800">
-              <span className="h-2 w-2 animate-pulse rounded-full bg-emerald-500" /> Distribución
-            </h3>
-            <span className="text-xs font-bold uppercase text-slate-400">Torta</span>
+        <div className="flex min-w-0 flex-col overflow-hidden rounded-2xl border border-slate-200/90 bg-white shadow-sm lg:col-span-2">
+          <div className="border-b border-slate-100 bg-slate-50/80 px-5 py-4">
+            <h3 className="text-sm font-bold text-slate-800">Distribución</h3>
+            <p className="mt-0.5 text-xs text-slate-500">Solo categorías con al menos un registro</p>
           </div>
-          <div className="min-h-[220px] w-full min-w-0 flex-1">
+          <div className="flex min-h-[240px] w-full min-w-0 flex-1 items-center justify-center p-3 sm:p-4">
             {pieData.length > 0 ? (
-              <ResponsiveContainer width="100%" height={220} minWidth={0}>
+              <ResponsiveContainer width="100%" height={240} minWidth={0}>
                 <PieChart>
-                  <Tooltip />
+                  <Tooltip formatter={(v: number | string) => [v, "Registros"]} />
                   <Pie
                     data={pieData}
                     dataKey="value"
                     nameKey="name"
-                    innerRadius={55}
-                    outerRadius={85}
-                    paddingAngle={3}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={52}
+                    outerRadius={78}
+                    paddingAngle={2}
                     label={renderPieLabel}
                     labelLine={false}
                   >
@@ -530,67 +590,11 @@ export default function AdminBodegaReportes({
                 </PieChart>
               </ResponsiveContainer>
             ) : (
-              <div className="flex h-[220px] items-center justify-center text-sm text-slate-400">
-                Sin datos para mostrar
-              </div>
+              <p className="text-sm text-slate-400">Sin datos para mostrar en la torta</p>
             )}
           </div>
         </div>
-      </div>
-
-      <div className="mt-4 grid gap-4 sm:grid-cols-2 md:grid-cols-4">
-        <button
-          type="button"
-          onClick={() => setReportDetailModal({ type: "ingresos" })}
-          className="flex w-full flex-col items-center rounded-2xl border border-slate-100 bg-white p-5 transition hover:shadow-md"
-        >
-          <MdInbox size={32} className="mb-2 text-green-500" />
-          <span className="text-xs font-semibold uppercase text-slate-500">Ingresos</span>
-          <span className="mt-1 text-2xl font-bold text-slate-900">{filteredIngresos.length}</span>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setReportDetailModal({ type: "salidas" })}
-          className="flex w-full flex-col items-center rounded-2xl border border-slate-100 bg-white p-5 transition hover:shadow-md"
-        >
-          <MdLogout size={32} className="mb-2 text-pink-500" />
-          <span className="text-xs font-semibold uppercase text-slate-500">Salidas</span>
-          <span className="mt-1 text-2xl font-bold text-slate-900">{filteredSalidas.length}</span>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setReportDetailModal({ type: "movimientos" })}
-          className="flex w-full flex-col items-center rounded-2xl border border-slate-100 bg-white p-5 transition hover:shadow-md"
-        >
-          <MdMoveToInbox size={32} className="mb-2 text-blue-500" />
-          <span className="text-xs font-semibold uppercase text-slate-500">Movimientos</span>
-          <span className="mt-1 text-2xl font-bold text-slate-900">{filteredMovimientos.length}</span>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setReportDetailModal({ type: "despachados" })}
-          className="flex w-full flex-col items-center rounded-2xl border border-slate-100 bg-white p-5 transition hover:shadow-md"
-        >
-          <MdLocalShipping size={32} className="mb-2 text-gray-500" />
-          <span className="text-xs font-semibold uppercase text-slate-500">Despachados</span>
-          <span className="mt-1 text-2xl font-bold text-slate-900">
-            {filteredDespachoHistorial.length}
-          </span>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setReportDetailModal({ type: "alertas" })}
-          className="col-span-full flex w-full flex-col items-center rounded-2xl border border-slate-100 bg-white p-5 transition hover:shadow-md md:col-span-4"
-        >
-          <IoAlert size={32} className="mb-2 text-red-500" />
-          <span className="text-xs font-semibold uppercase text-slate-500">Alertas (historial)</span>
-          <span className="mt-1 text-2xl font-bold text-slate-900">{filteredAlerts.length}</span>
-        </button>
-      </div>
+      </section>
 
       {reportDetailModal ? (
         <div
@@ -805,7 +809,7 @@ export default function AdminBodegaReportes({
                 </div>
               ) : trackSelectedId.trim() && trackingTimeline.steps.length > 0 ? (
                 <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
-                  No aparece en ingreso, bodega, salida ni despacho del mapa. El último evento del historial
+                  No aparece en ingreso, bodega, salida ni despacho del almacenamiento. El último evento del historial
                   indica dónde quedó registrada.
                 </div>
               ) : trackSelectedId.trim() ? (

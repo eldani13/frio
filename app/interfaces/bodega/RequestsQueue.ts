@@ -1,6 +1,8 @@
 import type { BodegaOrder, Box, OrderSource, Slot } from "../bodega";
 
 export type RequestsQueueProps = {
+  /** Bodega actual (historial de merma en reportes). */
+  warehouseId?: string;
   requests: BodegaOrder[];
   canExecute: boolean;
   /** Órdenes de trabajo (a bodega / salida / revisar). Por defecto coincide con `canExecute`. */
@@ -32,7 +34,7 @@ export type RequestsQueueProps = {
     tarea: Record<string, unknown>,
     nextTareas: Array<Record<string, unknown>>,
   ) => void | Promise<void>;
-  /** Tras marcar Terminado: quitar tarea de la cola y persistir (el kg ya se descontó al pasar a En curso). */
+  /** Tras marcar Pendiente (cierre procesador): quitar tarea de la cola y persistir (el kg ya se descontó al pasar a En curso). */
   onProcesamientoTerminadoDesdeOperario?: (tarea: Record<string, unknown>) => void | Promise<void>;
   /**
    * Tarea «venta · salida»: descontar del mapa las cantidades del pedido (kg o u. según catálogo) y pasar a salida.

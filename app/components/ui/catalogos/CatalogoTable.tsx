@@ -2,6 +2,7 @@
 import { HiOutlinePencilSquare, HiOutlineTrash, HiArrowsUpDown } from "react-icons/hi2";
 import { Catalogo } from "@/app/types/catalogo";
 import { etiquetaUnidadVisualizacion } from "@/lib/unidadVisualizacionCatalogo";
+import { formatoPrecioCatalogo } from "@/lib/catalogoPrecio";
 
 interface Props {
   productos: Catalogo[];
@@ -66,7 +67,7 @@ export const CatalogoTable = ({ productos, productosCatalogo, onEdit, onDelete, 
               <CatalogoSortableHeader label="Nombre Op 1" onSort={onSort} />
               <CatalogoSortableHeader label="Valor Op 1" onSort={onSort} />
               <CatalogoSortableHeader label="Vinculado" onSort={onSort} />
-              <CatalogoSortableHeader label="Costo" sortKey="costPerItem" onSort={onSort} />
+              <CatalogoSortableHeader label="Precio" sortKey="price" onSort={onSort} />
               <CatalogoSortableHeader label="Impuesto" onSort={onSort} />
               <CatalogoSortableHeader label="Tracker inv." onSort={onSort} />
               <CatalogoSortableHeader label="Stock" sortKey="inventoryQty" onSort={onSort} />
@@ -103,8 +104,8 @@ export const CatalogoTable = ({ productos, productosCatalogo, onEdit, onDelete, 
                 <td className="p-4 bg-white group-hover:bg-violet-50/80 transition-colors">{p.optionName1}</td>
                 <td className="p-4 bg-white group-hover:bg-violet-50/80 transition-colors">{p.optionValue1}</td>
                 <td className="p-4 bg-white group-hover:bg-violet-50/80 transition-colors">{p.linkedOption1}</td>
-                <td className="p-4 text-red-500 bg-white group-hover:bg-violet-50/80 transition-colors">
-                  {p.costPerItem != null ? `$${p.costPerItem}` : "—"}
+                <td className="p-4 bg-white font-medium text-slate-800 transition-colors group-hover:bg-violet-50/80">
+                  {formatoPrecioCatalogo(p)}
                 </td>
                 <td className="p-4 bg-white group-hover:bg-violet-50/80 transition-colors">{p.chargeTax ? "SÍ" : "NO"}</td>
                 <td className="p-4 bg-white group-hover:bg-violet-50/80 transition-colors">{p.inventoryTracker}</td>

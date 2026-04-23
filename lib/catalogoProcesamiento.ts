@@ -91,16 +91,24 @@ export function maxUnidadesSecundarioDesdeStock(
 }
 
 /**
- * Reduce el estimado teórico de unidades de secundario según merma (%).
+ * Aplica merma (%) al estimado teórico de unidades de secundario.
  * `perdidaPct` en 0–100: porcentaje que se resta del resultado teórico (p. ej. 5 → se conserva el 95 %).
+ * Devuelve el valor numérico exacto (sin redondear a entero).
  */
 export function estimadoSecundarioAplicarPerdidaPct(teorico: number | null, perdidaPct: number): number | null {
   if (teorico === null || !Number.isFinite(teorico) || teorico < 0) return null;
   const pRaw = Number(perdidaPct);
   if (!Number.isFinite(pRaw) || pRaw <= 0) {
-    return Math.round(teorico);
+    return teorico;
   }
   const p = Math.min(100, Math.max(0, pRaw));
   const r = teorico * (1 - p / 100);
-  return Number.isFinite(r) ? Math.round(r) : null;
+  return Number.isFinite(r) ? r : null;
+}
+
+/** Texto para UI: estimado de uds. secundario con decimales cuando aplica (sin forzar entero). */
+export function formatEstimadoUnidadesSecundario(n: number): string {
+  if (!Number.isFinite(n)) return "—";
+  if (Number.isInteger(n)) return n.toLocaleString("es-CO");
+  return n.toLocaleString("es-CO", { maximumFractionDigits: 10 });
 }

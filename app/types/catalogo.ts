@@ -22,7 +22,7 @@ export interface Catalogo {
     optionValue1?: string;
     linkedOption1?: string;
     
-    /** @deprecated Precio de venta: no se edita en catálogo (menú). Persistencia legacy. */
+    /** Precio de referencia (catálogo e import Excel `precio` / `price`). */
     price?: number;
     internationalPrice?: number;
     compareAtPrice?: number;

@@ -245,10 +245,7 @@ export function TransporteViajesPanel({ uid, displayName }: Props) {
           </span>
           <div>
             <h1 className="text-xl font-bold text-slate-900">Viajes de entrega (ventas)</h1>
-            <p className="mt-1 text-sm text-slate-600">
-              Listado de viajes <strong>en curso</strong>. Al entregar: compará cantidades, adjuntá evidencia,
-              firmá; si la entrega <strong>no está conforme</strong>, podés describir la incidencia.
-            </p>
+           
           </div>
         </div>
         <button

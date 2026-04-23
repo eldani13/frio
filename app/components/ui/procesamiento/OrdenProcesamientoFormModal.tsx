@@ -9,6 +9,7 @@ import {
   catalogosPrimarios,
   catalogosSecundariosDePrimario,
   estimadoSecundarioAplicarPerdidaPct,
+  formatEstimadoUnidadesSecundario,
   mermaPctDesdeCatalogoSecundario,
   reglaConversionDesdeCatalogoSecundario,
   unidadesSecundarioPorRegla,
@@ -213,8 +214,8 @@ export function OrdenProcesamientoFormModal({
   }, [isOpen, warehouseFirestoreId]);
 
   const primario = useMemo(
-    () => primariosCatalogo.find((p) => p.id === primarioId),
-    [primariosCatalogo, primarioId],
+    () => primariosOrdenados.find((p) => p.id === primarioId),
+    [primariosOrdenados, primarioId],
   );
   const secundario = useMemo(
     () => secundariosDelPrimario.find((p) => p.id === secundarioId),
@@ -306,7 +307,7 @@ export function OrdenProcesamientoFormModal({
         setError(
           !warehouseFirestoreId
             ? "No hay bodega interna vinculada a la cuenta para leer el mapa y validar stock (asigná una en «Asignar bodegas»)."
-            : "No hay stock de este primario en el mapa de bodega para tu cuenta (o las cajas no tienen kg/piezas). Revisá que el nombre en mapa coincida con el título del catálogo.",
+            : "No hay stock de este primario en el almacenamiento para tu cuenta (o las cajas no tienen kg/piezas). Revisá que el nombre en almacenamiento coincida con el título del catálogo.",
         );
         return;
       }
@@ -621,7 +622,7 @@ export function OrdenProcesamientoFormModal({
             {estimado !== null && estimado !== undefined && Number.isFinite(estimado) ? (
               <div className="mt-2 flex flex-wrap items-end gap-x-3 gap-y-1">
                 <p className="text-2xl font-bold tabular-nums text-gray-900">
-                  {estimado.toLocaleString("es-CO", { maximumFractionDigits: 0 })}
+                  {formatEstimadoUnidadesSecundario(estimado)}
                 </p>
                 {perdidaPctDelCatalogo > 0 ? (
                   <span className="text-xs text-gray-500">

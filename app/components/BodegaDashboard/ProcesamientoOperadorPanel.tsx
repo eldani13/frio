@@ -4,6 +4,7 @@ import React from "react";
 import { HiOutlineArrowLeft, HiOutlineChevronDown, HiOutlinePlus } from "react-icons/hi2";
 import { FiCpu } from "react-icons/fi";
 import { SolicitudProcesamientoService } from "@/app/services/solicitudProcesamientoService";
+import { recordMermaProcesamientoKg } from "@/lib/bodegaCloudState";
 import type { SolicitudProcesamiento } from "@/app/types/solicitudProcesamiento";
 import {
   PROCESAMIENTO_ESTADOS,
@@ -14,20 +15,43 @@ import { compareOrdenCompraByCodigoDesc } from "@/lib/ordenCompraSort";
 import { OrdenProcesamientoFormModal } from "@/app/components/ui/procesamiento/OrdenProcesamientoFormModal";
 import type { Catalogo } from "@/app/types/catalogo";
 import type { WarehouseMeta } from "@/app/interfaces/bodega";
-import { catalogosPrimarios, esCatalogoSecundario } from "@/lib/catalogoProcesamiento";
+import {
+  catalogosPrimarios,
+  esCatalogoSecundario,
+  formatEstimadoUnidadesSecundario,
+} from "@/lib/catalogoProcesamiento";
+import {
+  cantidadPrimarioProcesamientoTexto,
+  estimadoUnidadesSecundarioTexto,
+  primarioCatalogoPorId,
+} from "@/app/lib/procesamientoDisplay";
+import {
+  desperdicioKgSugeridoDesdeMerma,
+  stringKgInicialDesperdicio,
+} from "@/app/lib/desperdicioKgSugerido";
 
 function opcionesEstadoSelect(estadoActual: string): string[] {
   const cur = estadoActual.trim();
-  if (cur && !PROCESAMIENTO_ESTADOS.some((x) => x === cur)) {
-    return [cur, ...PROCESAMIENTO_ESTADOS];
+  const ordered = [...PROCESAMIENTO_ESTADOS];
+  const base = cur && !ordered.some((x) => x === cur) ? [cur, ...ordered] : [...ordered];
+  const n = normalizeProcesamientoEstado(estadoActual);
+  if (n === "Pendiente" || n === "Terminado") {
+    return [n];
   }
-  return [...PROCESAMIENTO_ESTADOS];
+  if (n === "Iniciado") {
+    return base.filter((x) => x !== "Terminado" && x !== "Pendiente");
+  }
+  if (n === "En curso") {
+    return base.filter((x) => x !== "Terminado");
+  }
+  return base;
 }
 
 /** En cuenta: el paso a «En curso» lo hace el operario de bodega asignado, no desde aquí. */
 function opcionesEstadoVistaCuenta(estadoActual: string): string[] {
   const base = opcionesEstadoSelect(estadoActual);
-  if (normalizeProcesamientoEstado(estadoActual) === "Iniciado") {
+  const n = normalizeProcesamientoEstado(estadoActual);
+  if (n === "Iniciado") {
     return base.filter((o) => o !== "En curso");
   }
   return base;
@@ -47,12 +71,8 @@ function formatCantidad(n: number): string {
   return Number.isInteger(n) ? String(n) : n.toLocaleString("es-CO", { maximumFractionDigits: 4 });
 }
 
-function cantidadPrimarioEtiqueta(row: SolicitudProcesamiento): string {
-  const n = formatCantidad(row.cantidadPrimario);
-  const u = row.unidadPrimarioVisualizacion;
-  if (u === "peso") return `${n} · peso`;
-  if (u === "cantidad") return `${n} · ud.`;
-  return n;
+function cantidadPrimarioEtiqueta(row: SolicitudProcesamiento, productos: Catalogo[]): string {
+  return cantidadPrimarioProcesamientoTexto(row, primarioCatalogoPorId(productos, row.productoPrimarioId));
 }
 
 function catalogoTieneSecundarioVinculado(productos: Catalogo[]): boolean {
@@ -89,6 +109,8 @@ export function ProcesamientoOperadorPanel({
   const [modalOpen, setModalOpen] = React.useState(false);
   const [subError, setSubError] = React.useState<string | null>(null);
   const [savingId, setSavingId] = React.useState<string | null>(null);
+  const [modalDesperdicioRow, setModalDesperdicioRow] = React.useState<SolicitudProcesamiento | null>(null);
+  const [modalDesperdicioKg, setModalDesperdicioKg] = React.useState("0");
 
   React.useEffect(() => {
     if (!idCliente.trim()) {
@@ -116,22 +138,65 @@ export function ProcesamientoOperadorPanel({
     [tabla, currentPage],
   );
 
-  const handleEstado = async (row: SolicitudProcesamiento, next: string) => {
+  const handleEstado = async (row: SolicitudProcesamiento, next: string, desperdicioKgArg?: number) => {
     const nextNorm = normalizeProcesamientoEstado(next);
     if (nextNorm === row.estado) return;
+    const prevNorm = normalizeProcesamientoEstado(row.estado);
+    if (nextNorm === "Pendiente" && prevNorm === "En curso" && desperdicioKgArg === undefined) {
+      setModalDesperdicioRow(row);
+      setModalDesperdicioKg(stringKgInicialDesperdicio(desperdicioKgSugeridoDesdeMerma(row)));
+      return;
+    }
     setSubError(null);
     setSavingId(row.id);
     const prev = row.estado;
-    setOrdenes((list) => list.map((o) => (o.id === row.id ? { ...o, estado: nextNorm } : o)));
-    setDetalle((d) => (d?.id === row.id ? { ...d, estado: nextNorm } : d));
+    setOrdenes((list) =>
+      list.map((o) =>
+        o.id === row.id
+          ? {
+              ...o,
+              estado: nextNorm,
+          ...(nextNorm === "Pendiente" && prevNorm === "En curso"
+            ? { desperdicioKg: Number(desperdicioKgArg), cierreDesdeProcesador: false }
+            : {}),
+            }
+          : o,
+      ),
+    );
+    setDetalle((d) =>
+      d?.id === row.id
+        ? {
+            ...d,
+            estado: nextNorm,
+          ...(nextNorm === "Pendiente" && prevNorm === "En curso"
+            ? { desperdicioKg: Number(desperdicioKgArg), cierreDesdeProcesador: false }
+            : {}),
+          }
+        : d,
+    );
     try {
-      await SolicitudProcesamientoService.actualizarEstado(idCliente.trim(), row.id, nextNorm);
+      await SolicitudProcesamientoService.actualizarEstado(
+        idCliente.trim(),
+        row.id,
+        nextNorm,
+        nextNorm === "Pendiente" && prevNorm === "En curso"
+          ? { desperdicioKg: Number(desperdicioKgArg), cierreDesdeProcesador: false }
+          : undefined,
+      );
+      if (nextNorm === "Pendiente" && prevNorm === "En curso") {
+        const mk = Number(desperdicioKgArg);
+        if (Number.isFinite(mk) && mk > 0) {
+          void recordMermaProcesamientoKg(String(row.warehouseId ?? "").trim(), mk);
+        }
+      }
     } catch (e) {
       setOrdenes((list) => list.map((o) => (o.id === row.id ? { ...o, estado: prev } : o)));
       setDetalle((d) => (d?.id === row.id ? { ...d, estado: prev } : d));
       const msg = e instanceof Error ? e.message : "";
       if (msg === "solo_operario_asignado" || msg === "sin_operario_asignado") {
         setSubError("El estado «En curso» lo marca el operario de bodega asignado a la orden.");
+      } else if (msg === "desperdicio_requerido") {
+        setSubError("Indicá la merma en kg (puede ser 0) al pasar a «Pendiente».");
       } else {
         setSubError("No se pudo actualizar el estado.");
       }
@@ -147,6 +212,92 @@ export function ProcesamientoOperadorPanel({
 
   return (
     <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
+      {modalDesperdicioRow ? (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/50 p-3 sm:p-6"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="pop-proc-desperdicio-titulo"
+        >
+          <button
+            type="button"
+            className="absolute inset-0 cursor-default"
+            aria-label="Cerrar"
+            onClick={() => setModalDesperdicioRow(null)}
+          />
+          <div
+            className="relative z-10 w-full max-w-md rounded-2xl border border-slate-200 bg-white p-5 shadow-xl sm:p-6"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 id="pop-proc-desperdicio-titulo" className="text-lg font-bold text-slate-900">
+              Merma (kg)
+            </h3>
+            <p className="mt-1 text-sm text-slate-600">
+              Orden <span className="font-mono font-semibold">{modalDesperdicioRow.numero}</span>. Es la merma del
+              proceso (<strong>no vuelve al mapa</strong>; reporte en bodega). Se precarga con el % del secundario;
+              ajustá si corresponde.
+            </p>
+            {(() => {
+              const sug = desperdicioKgSugeridoDesdeMerma(modalDesperdicioRow);
+              const pct = modalDesperdicioRow.perdidaProcesamientoPct;
+              if (sug !== null && pct !== undefined && Number(pct) > 0) {
+                return (
+                  <p className="mt-2 text-xs text-slate-500">
+                    kg primario × {Number(pct).toLocaleString("es-CO", { maximumFractionDigits: 2 })}% →{" "}
+                    <span className="font-mono font-semibold text-slate-700">{sug}</span> kg.
+                  </p>
+                );
+              }
+              if (modalDesperdicioRow.unidadPrimarioVisualizacion === "cantidad") {
+                return (
+                  <p className="mt-2 text-xs text-amber-900/85">
+                    Primario en <strong>unidades</strong>: ingresá kg de desperdicio a mano.
+                  </p>
+                );
+              }
+              return null;
+            })()}
+            <label className="mt-4 block text-xs font-semibold text-slate-700" htmlFor="pop-proc-desperdicio-kg">
+              Kilogramos
+            </label>
+            <input
+              id="pop-proc-desperdicio-kg"
+              type="text"
+              inputMode="decimal"
+              autoComplete="off"
+              className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 font-mono text-slate-900 shadow-sm focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-400/40"
+              value={modalDesperdicioKg}
+              onChange={(e) => setModalDesperdicioKg(e.target.value)}
+            />
+            <div className="mt-5 flex flex-col gap-2 sm:flex-row sm:justify-end">
+              <button
+                type="button"
+                className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-800 transition hover:bg-slate-50"
+                onClick={() => setModalDesperdicioRow(null)}
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                className="rounded-xl bg-sky-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-sky-700"
+                onClick={() => {
+                  const raw = String(modalDesperdicioKg).replace(",", ".").trim();
+                  const kg = Number(raw);
+                  if (!Number.isFinite(kg) || kg < 0) {
+                    window.alert("Ingresá un número de kg mayor o igual a 0.");
+                    return;
+                  }
+                  const r = modalDesperdicioRow;
+                  setModalDesperdicioRow(null);
+                  void handleEstado(r, "Pendiente", kg);
+                }}
+              >
+                Confirmar pendiente
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
       <div className="mx-auto flex w-full max-w-5xl flex-col gap-6">
         <button
           type="button"
@@ -170,12 +321,7 @@ export function ProcesamientoOperadorPanel({
               <h1 className="text-2xl font-extrabold tracking-tight text-slate-900">
                 Órdenes de procesamiento
               </h1>
-              <p className="text-sm text-slate-500">
-                El primario y el secundario salen del <strong>catálogo</strong>; la cantidad en primario respeta el
-                inventario del catálogo y el estimado del secundario usa la <strong>regla de conversión</strong>.
-                Elegís la <strong>bodega interna</strong> de destino cuando hay varias asignadas. Estados: Iniciado,
-                En curso, Terminado.
-              </p>
+              
             </div>
           </div>
           <button
@@ -226,13 +372,10 @@ export function ProcesamientoOperadorPanel({
                     Secundario
                   </th>
                   <th className="whitespace-nowrap px-4 py-3 text-[11px] font-bold uppercase tracking-wide text-slate-500">
-                    Cant. primario
+                    Insumo primario
                   </th>
                   <th className="whitespace-nowrap px-4 py-3 text-[11px] font-bold uppercase tracking-wide text-slate-500">
                     Estim. sec.
-                  </th>
-                  <th className="whitespace-nowrap px-4 py-3 text-[11px] font-bold uppercase tracking-wide text-slate-500">
-                    Unidad
                   </th>
                   <th className="px-4 py-3 text-[11px] font-bold uppercase tracking-wide text-slate-500">
                     Estado
@@ -245,13 +388,13 @@ export function ProcesamientoOperadorPanel({
               <tbody>
                 {dataLoading ? (
                   <tr>
-                    <td colSpan={8} className="px-4 py-12 text-center text-slate-500">
+                    <td colSpan={7} className="px-4 py-12 text-center text-slate-500">
                       Cargando datos de cuenta…
                     </td>
                   </tr>
                 ) : tabla.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="px-4 py-12 text-center text-slate-500">
+                    <td colSpan={7} className="px-4 py-12 text-center text-slate-500">
                       No hay órdenes. Usá &quot;Nueva orden&quot; para crear la primera (se envía a la bodega interna).
                     </td>
                   </tr>
@@ -285,21 +428,10 @@ export function ProcesamientoOperadorPanel({
                         </span>
                       </td>
                       <td className="whitespace-nowrap px-4 py-3 font-medium tabular-nums text-slate-900">
-                        {formatCantidad(row.cantidadPrimario)}
+                        {cantidadPrimarioEtiqueta(row, productos)}
                       </td>
                       <td className="whitespace-nowrap px-4 py-3 font-medium tabular-nums text-slate-800">
-                        {row.estimadoUnidadesSecundario !== undefined &&
-                        row.estimadoUnidadesSecundario !== null &&
-                        Number.isFinite(row.estimadoUnidadesSecundario)
-                          ? formatCantidad(row.estimadoUnidadesSecundario)
-                          : "—"}
-                      </td>
-                      <td className="whitespace-nowrap px-4 py-3 text-slate-600">
-                        {row.unidadPrimarioVisualizacion === "peso"
-                          ? "Peso"
-                          : row.unidadPrimarioVisualizacion === "cantidad"
-                            ? "Cantidad"
-                            : "—"}
+                        {estimadoUnidadesSecundarioTexto(row.estimadoUnidadesSecundario)}
                       </td>
                       <td
                         className="px-4 py-3"
@@ -313,7 +445,20 @@ export function ProcesamientoOperadorPanel({
                             title="Cambiar estado"
                             value={row.estado}
                             disabled={savingId === row.id}
-                            onChange={(e) => void handleEstado(row, e.target.value)}
+                            onChange={(e) => {
+                              const v = e.target.value;
+                              if (
+                                normalizeProcesamientoEstado(v) === "Pendiente" &&
+                                normalizeProcesamientoEstado(row.estado) === "En curso"
+                              ) {
+                                setModalDesperdicioRow(row);
+                                setModalDesperdicioKg(
+                                  stringKgInicialDesperdicio(desperdicioKgSugeridoDesdeMerma(row)),
+                                );
+                                return;
+                              }
+                              void handleEstado(row, v);
+                            }}
                             className={`inline-flex max-w-[12rem] cursor-pointer truncate rounded-full border-0 py-0.5 pl-2.5 pr-7 text-left text-xs font-semibold shadow-none outline-none ring-0 focus-visible:ring-2 focus-visible:ring-sky-400/50 [appearance:none] disabled:opacity-60 ${procesamientoEstadoBadgeClass(row.estado)}`}
                           >
                             {opcionesEstadoVistaCuenta(row.estado).map((opt) => (
@@ -421,7 +566,7 @@ export function ProcesamientoOperadorPanel({
             <p className="mt-1 text-sm font-medium text-slate-900">{detalle.productoPrimarioTitulo}</p>
             <p className="mt-1 text-sm text-slate-700">
               <span className="text-slate-500">Cantidad en primario:</span>{" "}
-              <span className="font-semibold tabular-nums">{cantidadPrimarioEtiqueta(detalle)}</span>
+              <span className="font-semibold tabular-nums">{cantidadPrimarioEtiqueta(detalle, productos)}</span>
             </p>
             <p className="mt-3 text-xs font-bold uppercase tracking-wide text-slate-500">Producto secundario</p>
             <p className="mt-1 text-sm font-medium text-slate-900">{detalle.productoSecundarioTitulo}</p>
@@ -431,7 +576,7 @@ export function ProcesamientoOperadorPanel({
               <p className="mt-2 text-sm text-slate-700">
                 <span className="text-slate-500">Estimado unidades secundario:</span>{" "}
                 <span className="font-semibold tabular-nums">
-                  {formatCantidad(detalle.estimadoUnidadesSecundario)}
+                  {formatEstimadoUnidadesSecundario(detalle.estimadoUnidadesSecundario)}
                 </span>
               </p>
             ) : null}

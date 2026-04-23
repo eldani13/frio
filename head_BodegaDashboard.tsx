@@ -1113,35 +1113,43 @@ export default function BodegaDashboard() {
   const renderStatusButtons = (zone: ZoneKey) => {
     const alertCount = zoneAlertItems[zone].length;
     const taskCount = zoneTaskItems[zone].length;
+    const alwaysShowBoth = zone === "bodega";
 
-    if (alertCount === 0 && taskCount === 0) {
+    if (!alwaysShowBoth && alertCount === 0 && taskCount === 0) {
       return null;
     }
 
+    const alertMuted = alwaysShowBoth && alertCount === 0;
+    const taskMuted = alwaysShowBoth && taskCount === 0;
+
     return (
       <div className="flex items-center gap-2">
-        {alertCount > 0 ? (
-          <button
-            type="button"
-            onClick={() => setStatusModal({ zone, kind: "alertas" })}
-            className="flex items-center gap-2 rounded-full bg-rose-600 px-3 py-1 text-xs font-semibold text-white shadow-sm transition hover:bg-rose-500"
-            aria-label={`Ver alertas en ${zoneLabels[zone]}`}
-          >
-            <FiAlertTriangle className="h-4 w-4" />
-            {alertCount}
-          </button>
-        ) : null}
-        {taskCount > 0 ? (
-          <button
-            type="button"
-            onClick={() => setStatusModal({ zone, kind: "tareas" })}
-            className="flex items-center gap-2 rounded-full bg-amber-300 px-3 py-1 text-xs font-semibold text-amber-950 shadow-sm transition hover:bg-amber-200"
-            aria-label={`Ver tareas en ${zoneLabels[zone]}`}
-          >
-            <FiClipboard className="h-4 w-4" />
-            {taskCount}
-          </button>
-        ) : null}
+        <button
+          type="button"
+          onClick={() => setStatusModal({ zone, kind: "alertas" })}
+          className={
+            alertMuted
+              ? "inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-2.5 text-xs font-semibold text-slate-500 transition hover:bg-slate-100"
+              : "inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full bg-rose-600 px-2.5 text-xs font-semibold text-white shadow-sm transition hover:bg-rose-500"
+          }
+          aria-label={`Ver alertas en ${zoneLabels[zone]}`}
+        >
+          <FiAlertTriangle className="h-4 w-4 shrink-0" />
+          <span className="tabular-nums leading-none">{alertCount}</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => setStatusModal({ zone, kind: "tareas" })}
+          className={
+            taskMuted
+              ? "inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-2.5 text-xs font-semibold text-slate-500 transition hover:bg-slate-100"
+              : "inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full bg-amber-300 px-2.5 text-xs font-semibold text-amber-950 shadow-sm transition hover:bg-amber-200"
+          }
+          aria-label={`Ver tareas en ${zoneLabels[zone]}`}
+        >
+          <FiClipboard className="h-4 w-4 shrink-0" />
+          <span className="tabular-nums leading-none">{taskCount}</span>
+        </button>
       </div>
     );
   };
@@ -2302,8 +2310,6 @@ export default function BodegaDashboard() {
             llamadasJefe={llamadasJefe}
             onUpdateAlertasOperario={setAlertasOperario}
             onUpdateLlamadasJefe={setLlamadasJefe}
-            selectedBoxModal={selectedBoxModal}
-            setSelectedBoxModal={setSelectedBoxModal}
             editTempModal={editTempModal}
             setEditTempModal={setEditTempModal}
             handleUpdateBoxTemperature={handleUpdateBoxTemperature}

@@ -18,7 +18,7 @@ import { useAuth } from "@/app/context/AuthContext";
 import {
   DEFAULT_WAREHOUSE_ID,
   defaultHistoryState,
-  saveHistoryState,
+  mergeHistoryState,
   subscribeHistoryState,
 } from "../../../lib/bodegaCloudState";
 
@@ -73,18 +73,11 @@ export const BodegaHistoryProvider: React.FC<{ children: React.ReactNode }> = ({
     return unsub;
   }, [warehouseId, authLoading, session]);
 
-  const persist = useCallback(
-    (updater: (prev: HistoryState) => HistoryState) => {
-      setHistory((prev) => {
-        const next = updater(prev);
-        saveHistoryState(warehouseId, next).catch((err) => {
-          console.error("[bodega] saveHistoryState:", err);
-        });
-        return next;
-      });
-    },
-    [warehouseId],
-  );
+  const persist = useCallback((updater: (prev: HistoryState) => HistoryState) => {
+    void mergeHistoryState(warehouseId, updater).catch((err) => {
+      console.error("[bodega] mergeHistoryState:", err);
+    });
+  }, [warehouseId]);
 
   const addIngreso = useCallback(
     (box: Box) => {
@@ -128,10 +121,11 @@ export const BodegaHistoryProvider: React.FC<{ children: React.ReactNode }> = ({
 
   const addDespachado = useCallback(
     (entry: DispatchedHistoryEntry) => {
-      persist((prev) => ({
-        ...prev,
-        despachadosHistorial: [...(prev.despachadosHistorial ?? []), entry],
-      }));
+      persist((prev) => {
+        const list = prev.despachadosHistorial ?? [];
+        if (list.some((e) => e.id === entry.id)) return prev;
+        return { ...prev, despachadosHistorial: [...list, entry] };
+      });
     },
     [persist],
   );

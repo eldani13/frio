@@ -8,6 +8,7 @@ import { CatalogoSecundarioForm } from "@/app/components/ui/catalogos/CatalogoSe
 import { HiOutlinePlus, HiOutlineSquares2X2, HiOutlineMagnifyingGlass } from "react-icons/hi2";
 import { useAuth } from "@/app/context/AuthContext";
 import { ImportExcel } from "@/app/utils/importarExcelCatalogo";
+import { precioCatalogoNumerico } from "@/lib/catalogoPrecio";
 
 export default function CatalogoPage() {
   const [productos, setProductos] = useState<Catalogo[]>([]);
@@ -55,15 +56,31 @@ export default function CatalogoPage() {
   // 2. Ordenamiento
   const sortedData = useMemo(() => {
     const data = [...filteredData];
-    if (sortConfig) {
+    if (!sortConfig) return data;
+    if (sortConfig.key === "price") {
       data.sort((a, b) => {
-        const aValue = a[sortConfig.key] ?? "";
-        const bValue = b[sortConfig.key] ?? "";
-        if (aValue < bValue) return sortConfig.direction === 'asc' ? -1 : 1;
-        if (aValue > bValue) return sortConfig.direction === 'asc' ? 1 : -1;
+        const na = precioCatalogoNumerico(a);
+        const nb = precioCatalogoNumerico(b);
+        const aHas = na !== undefined;
+        const bHas = nb !== undefined;
+        if (!aHas && !bHas) return 0;
+        if (!aHas) return 1;
+        if (!bHas) return -1;
+        const va = na as number;
+        const vb = nb as number;
+        if (va < vb) return sortConfig.direction === "asc" ? -1 : 1;
+        if (va > vb) return sortConfig.direction === "asc" ? 1 : -1;
         return 0;
       });
+      return data;
     }
+    data.sort((a, b) => {
+      const aValue = a[sortConfig.key] ?? "";
+      const bValue = b[sortConfig.key] ?? "";
+      if (aValue < bValue) return sortConfig.direction === 'asc' ? -1 : 1;
+      if (aValue > bValue) return sortConfig.direction === 'asc' ? 1 : -1;
+      return 0;
+    });
     return data;
   }, [filteredData, sortConfig]);
 
@@ -140,38 +157,45 @@ export default function CatalogoPage() {
           </div>
         </div>
 
-        <div className="flex flex-col sm:flex-row items-center gap-3 w-full lg:w-auto">
-          {/* Input de Búsqueda */}
-          <div className="relative w-full sm:w-64">
-            <HiOutlineMagnifyingGlass className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
-            <input 
+        <div className="flex w-full flex-col items-stretch gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end lg:w-auto">
+          <div className="relative w-full sm:w-56 sm:min-w-[12rem]">
+            <HiOutlineMagnifyingGlass className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" aria-hidden />
+            <input
               type="text"
               placeholder="Buscar..."
-              className="w-full pl-10 pr-4 py-2 bg-white border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-[#A8D5BA] outline-none transition-all"
+              className="w-full rounded-lg border border-slate-200 bg-white py-1.5 pl-8 pr-3 text-sm text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-slate-300 focus:ring-1 focus:ring-slate-200"
               value={filterText}
-              onChange={(e) => { setFilterText(e.target.value); setCurrentPage(1); }}
+              onChange={(e) => {
+                setFilterText(e.target.value);
+                setCurrentPage(1);
+              }}
             />
           </div>
 
-          <ImportExcel onDataLoaded={handleImport} />
+          <div className="flex flex-wrap items-center gap-2">
+            <ImportExcel onDataLoaded={handleImport} />
 
-          <button
-            type="button"
-            onClick={() => {
-              setSelectedProducto(null);
-              setIsModalOpen(true);
-            }}
-            className="flex w-full items-center justify-center gap-2 rounded-[14px] bg-[#A8D5BA] px-6 py-3 text-[14px] font-bold text-[#2D5A3F] shadow-sm transition-all hover:bg-[#97c4a9] active:scale-95 sm:w-auto"
-          >
-            <HiOutlinePlus strokeWidth={3} size={18} /> Nuevo producto
-          </button>
-          <button
-            type="button"
-            onClick={() => setIsSecundarioOpen(true)}
-            className="flex w-full items-center justify-center gap-2 rounded-[14px] border border-violet-200 bg-violet-50 px-6 py-3 text-[14px] font-bold text-violet-900 shadow-sm transition-all hover:bg-violet-100 active:scale-95 sm:w-auto"
-          >
-            <HiOutlinePlus strokeWidth={3} size={18} /> Crear producto secundario
-          </button>
+            <button
+              type="button"
+              onClick={() => {
+                setSelectedProducto(null);
+                setIsModalOpen(true);
+              }}
+              className="inline-flex items-center gap-1 rounded-lg border border-emerald-200/90 bg-white px-2.5 py-1.5 text-xs font-medium text-emerald-900 transition hover:bg-emerald-50/90"
+            >
+              <HiOutlinePlus className="h-3.5 w-3.5 shrink-0" strokeWidth={2} aria-hidden />
+              Nuevo producto
+            </button>
+            <button
+              type="button"
+              title="Crear producto secundario"
+              onClick={() => setIsSecundarioOpen(true)}
+              className="inline-flex items-center gap-1 rounded-lg border border-violet-200 bg-white px-2.5 py-1.5 text-xs font-medium text-violet-800 transition hover:bg-violet-50/90"
+            >
+              <HiOutlinePlus className="h-3.5 w-3.5 shrink-0" strokeWidth={2} aria-hidden />
+              Crear secundario
+            </button>
+          </div>
         </div>
       </header>
 

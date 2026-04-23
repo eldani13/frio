@@ -652,10 +652,7 @@ const ReportesSection: React.FC<ReportesSectionProps> = ({
 
           <div className="flex flex-col gap-3">
             <h2 className="pl-1 text-xs font-bold uppercase tracking-widest text-slate-500">Bodega interna</h2>
-            <p className="pl-1 text-sm text-slate-600">
-              Órdenes de transformación entre productos del catálogo de la cuenta (insumo primario → resultado
-              secundario).
-            </p>
+            
             <div className="flex flex-col gap-3">
               <button
                 type="button"

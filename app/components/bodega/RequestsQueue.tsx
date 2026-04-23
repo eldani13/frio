@@ -17,8 +17,16 @@ import {
   FiUser,
 } from "react-icons/fi";
 import { SolicitudProcesamientoService } from "@/app/services/solicitudProcesamientoService";
+import { recordMermaProcesamientoKg } from "@/lib/bodegaCloudState";
 import { IoCloseOutline } from "react-icons/io5";
 import { temperatureStringFromAnalyzeResponse } from "@/app/lib/imageAnalyzeApi";
+import {
+  desperdicioKgSugeridoDesdeMerma,
+  desperdicioKgSugeridoDesdeMermaLoose,
+  stringKgInicialDesperdicio,
+  unidadPrimarioNormalizada,
+} from "@/app/lib/desperdicioKgSugerido";
+import { estimadoUnidadesSecundarioTexto } from "@/app/lib/procesamientoDisplay";
 
 const TYPE_LABELS: Record<OrderType, string> = {
   a_bodega: "A bodega",
@@ -111,8 +119,8 @@ function formatCantidadProcesamientoCola(n: unknown): string {
 
 function etiquetaUnidadProcesamientoCola(t: Record<string, unknown>): string {
   const u = t.unidadPrimarioVisualizacion;
-  if (u === "peso") return "Peso";
-  if (u === "cantidad") return "Cantidad";
+  if (u === "peso") return "kg";
+  if (u === "cantidad") return "ud.";
   return "—";
 }
 
@@ -159,6 +167,7 @@ type ColaOperarioItem =
 
 export default function RequestsQueue(props: RequestsQueueProps) {
   const {
+    warehouseId: warehouseIdProp = "",
     requests,
     canExecute,
     canExecuteWorkOrders: canExecuteWorkOrdersProp,
@@ -385,7 +394,14 @@ export default function RequestsQueue(props: RequestsQueueProps) {
     }
   };
 
-  const handleMarcarProcesamientoTerminado = async (tarea: Record<string, unknown>) => {
+  const [modalProcTerminadoTarea, setModalProcTerminadoTarea] = useState<Record<string, unknown> | null>(null);
+  const [modalProcTerminadoKg, setModalProcTerminadoKg] = useState("0");
+  const [modalProcTerminadoLoading, setModalProcTerminadoLoading] = useState(false);
+
+  const ejecutarMarcarProcesamientoTerminado = async (
+    tarea: Record<string, unknown>,
+    desperdicioKg: number,
+  ) => {
     if (!onUpdateTareasProcesamientoOperario) return;
     const clientId = String(tarea.clientId ?? "").trim();
     const solicitudId = String(tarea.solicitudId ?? "").trim();
@@ -393,9 +409,16 @@ export default function RequestsQueue(props: RequestsQueueProps) {
     const key = `${clientId}::${solicitudId}`;
     setProcBusyKey(key);
     try {
-      await SolicitudProcesamientoService.actualizarEstado(clientId, solicitudId, "Terminado");
+      await SolicitudProcesamientoService.actualizarEstado(clientId, solicitudId, "Pendiente", {
+        desperdicioKg,
+        cierreDesdeProcesador: true,
+      });
+      const widHist = String(tarea.warehouseId ?? warehouseIdProp ?? "").trim();
+      if (desperdicioKg > 0) {
+        void recordMermaProcesamientoKg(widHist, desperdicioKg);
+      }
       if (onProcesamientoTerminadoDesdeOperario) {
-        await onProcesamientoTerminadoDesdeOperario(tarea);
+        await onProcesamientoTerminadoDesdeOperario({ ...tarea, desperdicioKg });
       } else {
         onUpdateTareasProcesamientoOperario(
           tareasProcesamientoOperario.filter(
@@ -408,7 +431,7 @@ export default function RequestsQueue(props: RequestsQueueProps) {
         );
       }
     } catch {
-      window.alert("No se pudo marcar la orden como terminada. Intentá de nuevo.");
+      window.alert("No se pudo marcar la orden como pendiente. Revisá la merma (kg) o intentá de nuevo.");
     } finally {
       setProcBusyKey(null);
     }
@@ -618,6 +641,106 @@ export default function RequestsQueue(props: RequestsQueueProps) {
 
   return (
     <div>
+      {modalProcTerminadoTarea ? (
+        <div
+          className="fixed inset-0 z-[55] flex items-center justify-center bg-slate-900/50 p-3 sm:p-6"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="rq-proc-desperdicio-titulo"
+        >
+          <button
+            type="button"
+            className="absolute inset-0 cursor-default"
+            aria-label="Cerrar"
+            onClick={() => {
+              setModalProcTerminadoTarea(null);
+              setModalProcTerminadoLoading(false);
+            }}
+          />
+          <div
+            className="relative z-10 w-full max-w-md rounded-2xl border border-slate-200 bg-white p-5 shadow-xl sm:p-6"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 id="rq-proc-desperdicio-titulo" className="text-lg font-bold text-slate-900">
+              Merma (kg)
+            </h3>
+            <p className="mt-1 text-sm text-slate-600">
+              Orden{" "}
+              <span className="font-mono font-semibold">
+                {String(modalProcTerminadoTarea.numero ?? "").trim() || "—"}
+              </span>
+              . Es la merma del proceso: <strong>no vuelve al mapa</strong> (reporte de bodega). Valor sugerido con el %
+              del secundario; corregí si hace falta. El <strong>sobrante</strong> se calculó al pasar a «En curso».
+            </p>
+            {modalProcTerminadoLoading ? (
+              <p className="mt-2 text-xs text-slate-500">Cargando merma y unidad desde la orden…</p>
+            ) : null}
+            {(() => {
+              const t = modalProcTerminadoTarea;
+              const sug = desperdicioKgSugeridoDesdeMermaLoose(t);
+              const pct = t.perdidaProcesamientoPct;
+              if (sug !== null && pct !== undefined && Number(pct) > 0) {
+                return (
+                  <p className="mt-2 text-xs text-slate-500">
+                    kg primario × {Number(pct).toLocaleString("es-CO", { maximumFractionDigits: 2 })}% →{" "}
+                    <span className="font-mono font-semibold text-slate-700">{sug}</span> kg.
+                  </p>
+                );
+              }
+              if (unidadPrimarioNormalizada(t.unidadPrimarioVisualizacion as "peso" | "cantidad" | undefined) === "cantidad") {
+                return (
+                  <p className="mt-2 text-xs text-amber-900/85">
+                    Primario en <strong>unidades</strong>: ingresá kg de merma a mano.
+                  </p>
+                );
+              }
+              return null;
+            })()}
+            <label className="mt-4 block text-xs font-semibold text-slate-700" htmlFor="rq-proc-desperdicio-kg">
+              Kilogramos de merma
+            </label>
+            <input
+              id="rq-proc-desperdicio-kg"
+              type="text"
+              inputMode="decimal"
+              autoComplete="off"
+              className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 font-mono text-slate-900 shadow-sm focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-400/40"
+              value={modalProcTerminadoKg}
+              onChange={(e) => setModalProcTerminadoKg(e.target.value)}
+            />
+            <div className="mt-5 flex flex-col gap-2 sm:flex-row sm:justify-end">
+              <button
+                type="button"
+                className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-800 transition hover:bg-slate-50"
+                onClick={() => {
+                  setModalProcTerminadoTarea(null);
+                  setModalProcTerminadoLoading(false);
+                }}
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                className="rounded-xl bg-sky-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-sky-700"
+                onClick={() => {
+                  const raw = String(modalProcTerminadoKg).replace(",", ".").trim();
+                  const kg = Number(raw);
+                  if (!Number.isFinite(kg) || kg < 0) {
+                    window.alert("Ingresá un número de kg mayor o igual a 0.");
+                    return;
+                  }
+                  const t = modalProcTerminadoTarea;
+                  setModalProcTerminadoTarea(null);
+                  setModalProcTerminadoLoading(false);
+                  void ejecutarMarcarProcesamientoTerminado(t, kg);
+                }}
+              >
+                Confirmar pendiente
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
       {/* Modal de Alertas */}
       {showAlertModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center backdrop-blur-sm bg-black/10 animate-fade-in">
@@ -882,7 +1005,7 @@ export default function RequestsQueue(props: RequestsQueueProps) {
                           <p className="w-full text-center text-sm font-bold text-emerald-800">
                             {procPrimerBusy
                               ? "Moviendo…"
-                              : "Tocá para pasar las cajas de esta venta del mapa a salida"}
+                              : "Tocá para pasar las cajas de esta venta del almacenamiento a salida"}
                           </p>
                         </>
                       ) : (
@@ -966,21 +1089,49 @@ export default function RequestsQueue(props: RequestsQueueProps) {
             disabled={!nextProcTarea || procProcesadorBusy}
             onClick={() => {
               if (!nextProcTarea || procProcesadorBusy) return;
-              void handleMarcarProcesamientoTerminado(nextProcTarea);
+              const t = nextProcTarea;
+              const cid = String(t.clientId ?? "").trim();
+              const sid = String(t.solicitudId ?? "").trim();
+              const openKey = `${cid}::${sid}`;
+              setModalProcTerminadoTarea(t);
+              setModalProcTerminadoKg(
+                stringKgInicialDesperdicio(desperdicioKgSugeridoDesdeMermaLoose(t)),
+              );
+              if (!cid || !sid) return;
+              setModalProcTerminadoLoading(true);
+              void (async () => {
+                try {
+                  const full = await SolicitudProcesamientoService.obtenerSolicitud(cid, sid);
+                  if (!full) return;
+                  setModalProcTerminadoTarea((cur) => {
+                    if (!cur) return null;
+                    const curKey = `${String(cur.clientId ?? "").trim()}::${String(cur.solicitudId ?? "").trim()}`;
+                    if (curKey !== openKey) return cur;
+                    return {
+                      ...cur,
+                      ...full,
+                      solicitudId: String(cur.solicitudId ?? full.id ?? "").trim(),
+                    };
+                  });
+                  setModalProcTerminadoKg(stringKgInicialDesperdicio(desperdicioKgSugeridoDesdeMerma(full)));
+                } finally {
+                  setModalProcTerminadoLoading(false);
+                }
+              })();
             }}
-            className="rounded-2xl bg-white p-6 sm:p-8 shadow-sm w-full border border-sky-200 transition-transform duration-150 hover:shadow-lg focus:shadow-lg active:shadow-lg hover:scale-[0.98] active:scale-[0.95] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:scale-100"
+            className="w-full rounded-2xl border border-emerald-200 bg-white p-6 shadow-sm transition-transform duration-150 hover:scale-[0.98] hover:shadow-lg focus:shadow-lg active:scale-[0.95] active:shadow-lg disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:scale-100 sm:p-8"
             style={{ outline: "none" }}
           >
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
-              <span className="px-6 py-2 rounded-xl bg-sky-600 text-white font-semibold text-lg flex items-center gap-2 w-full sm:w-auto justify-center sm:justify-start">
-                <FiCpu className="w-5 h-5" />
-                Movimiento
+            <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <span className="flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-6 py-2 text-lg font-semibold text-white sm:w-auto sm:justify-start">
+                <FiCpu className="h-5 w-5" />
+                Procesar
               </span>
-              <div className="flex flex-wrap items-center gap-2 sm:gap-3 w-full sm:w-auto justify-start sm:justify-end">
-                <span className="px-4 py-1 rounded-xl border border-sky-300 bg-sky-50 text-sky-800 font-semibold text-base flex items-center gap-2 w-full sm:w-auto justify-center sm:justify-start">
-                  <FiAlertCircle className="w-5 h-5" /> Pendiente
+              <div className="flex w-full flex-wrap items-center justify-start gap-2 sm:w-auto sm:justify-end sm:gap-3">
+                <span className="flex w-full items-center justify-center gap-2 rounded-xl border border-yellow-300 bg-yellow-50 px-4 py-1 text-base font-semibold text-yellow-700 sm:w-auto sm:justify-start">
+                  <FiAlertCircle className="h-5 w-5" /> Pendiente
                 </span>
-                <span className="px-3 py-1 rounded-full bg-sky-100 text-sky-800 font-bold text-base border border-sky-200 w-full sm:w-auto text-center">
+                <span className="w-full rounded-full border border-emerald-200 bg-emerald-100 px-3 py-1 text-center text-base font-bold text-emerald-700 sm:w-auto">
                   {tareasProcesamientoOperarioVisibles.length} tareas
                 </span>
               </div>
@@ -995,44 +1146,75 @@ export default function RequestsQueue(props: RequestsQueueProps) {
                 {esVistaSoloProcesador && tareasProcesadorEsperandoOperario > 0 ? (
                   <p className="max-w-md text-sm text-slate-600">
                     Cuando el operario pase una orden a <strong>en curso</strong>, aparecerá acá para que la marques
-                    como <strong>terminada</strong>.
+                    como <strong>pendiente</strong> (merma) hasta que el operario ubique el resultado en almacenamiento.
                   </p>
                 ) : null}
               </div>
             ) : (
               <div className="rounded-2xl bg-white p-4 sm:p-8">
                 <div className="flex flex-col items-center">
-                  <span className="text-slate-500 font-semibold text-lg mb-4">Próxima tarea</span>
-                  <div className="w-full rounded-2xl border border-sky-200 bg-linear-to-b from-sky-50/90 to-white px-6 py-6 text-center">
-                    <p className="font-mono text-xl font-bold text-sky-950">
-                      {String(nextProcTarea.numero ?? "").trim() || "—"}
-                    </p>
-                    <p className="mt-2 text-sm font-semibold text-slate-700">
-                      {String(nextProcTarea.clientName ?? nextProcTarea.clientId ?? "").trim() || "—"}
-                    </p>
-                    <p className="mt-2 text-left text-[10px] font-bold uppercase tracking-wide text-slate-500">
-                      Primario
-                    </p>
-                    <p className="mt-0.5 line-clamp-3 text-left text-sm text-slate-800">
-                      {String(nextProcTarea.productoPrimarioTitulo ?? "").trim() || "—"}
-                    </p>
-                    <p className="mt-3 text-left text-[10px] font-bold uppercase tracking-wide text-slate-500">
-                      Secundario (objetivo)
-                    </p>
-                    <p className="mt-0.5 line-clamp-2 text-left text-sm text-slate-800">
-                      → {String(nextProcTarea.productoSecundarioTitulo ?? "").trim() || "—"}
-                    </p>
-                    <p className="mt-3 text-left text-sm font-semibold text-slate-700">
-                      Cantidad: {formatCantidadProcesamientoCola(nextProcTarea.cantidadPrimario)} ·{" "}
-                      {etiquetaUnidadProcesamientoCola(nextProcTarea)}
-                      {nextProcTarea.estimadoUnidadesSecundario != null &&
-                      Number.isFinite(Number(nextProcTarea.estimadoUnidadesSecundario))
-                        ? ` · est. sec. ${formatCantidadProcesamientoCola(nextProcTarea.estimadoUnidadesSecundario)} u.`
-                        : ""}
-                    </p>
+                  <span className="mb-4 text-lg font-semibold text-slate-500">Procesar:</span>
+                  <div className="flex w-full flex-col items-center justify-center gap-4 sm:flex-row sm:gap-6">
+                    <div
+                      className={`flex w-full max-w-md flex-col items-center rounded-2xl border px-6 py-5 sm:px-8 sm:py-6 ${STATUS_STYLES.procesamiento.bg} ${STATUS_STYLES.procesamiento.border}`}
+                    >
+                      <FiCpu className={`mb-2 h-8 w-8 ${STATUS_STYLES.procesamiento.icon}`} />
+                      <span className={`mb-1 text-xs ${STATUS_STYLES.procesamiento.label}`}>ORIGEN</span>
+                      <span
+                        className={`text-center text-xl font-bold leading-tight ${STATUS_STYLES.procesamiento.text}`}
+                      >
+                        <span className="block font-mono text-2xl">
+                          {String(nextProcTarea.numero ?? "").trim() || "—"}
+                        </span>
+                        <span className="mt-2 block text-sm font-semibold normal-case">
+                          {String(nextProcTarea.productoPrimarioTitulo ?? "").trim() || "—"}
+                        </span>
+                      </span>
+                    </div>
+                    <FiArrowRight className="h-8 w-8 shrink-0 text-slate-300 sm:h-10 sm:w-10" />
+                    <div
+                      className={`flex w-full max-w-md flex-col items-center rounded-2xl border px-6 py-5 sm:px-8 sm:py-6 ${STATUS_STYLES.bodega.bg} ${STATUS_STYLES.bodega.border}`}
+                    >
+                      <FiBox className={`mb-2 h-8 w-8 ${STATUS_STYLES.bodega.icon}`} />
+                      <span className={`mb-1 text-xs ${STATUS_STYLES.bodega.label}`}>DESTINO</span>
+                      <span
+                        className={`line-clamp-4 text-center text-lg font-bold leading-snug sm:text-xl ${STATUS_STYLES.bodega.text}`}
+                      >
+                        {String(nextProcTarea.productoSecundarioTitulo ?? "").trim() || "—"}
+                      </span>
+                    </div>
                   </div>
-                  <p className="mt-6 text-center text-sm font-bold text-sky-800">
-                    {procProcesadorBusy ? "Guardando…" : "Tocá la tarjeta para marcar como terminada"}
+                  <hr className="my-8 w-full border-slate-200" />
+                  <div className="mb-6 flex w-full flex-wrap justify-center gap-4 sm:gap-8">
+                    <div className="flex items-center gap-1 text-center sm:gap-2 sm:text-left">
+                      <FiUser className="h-5 w-5 shrink-0 text-slate-400" />
+                      <span className="text-xs text-slate-500">Cuenta</span>
+                      <span className="font-semibold text-slate-700">
+                        {String(nextProcTarea.clientName ?? nextProcTarea.clientId ?? "").trim() || "—"}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1 text-center sm:gap-2 sm:text-left">
+                      <FiCalendar className="h-5 w-5 shrink-0 text-slate-400" />
+                      <span className="text-xs text-slate-500">Fecha</span>
+                      <span className="font-semibold text-slate-700">
+                        {String(nextProcTarea.fecha ?? "").trim() || "—"}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1 text-center sm:gap-2 sm:text-left">
+                      <FiPackage className="h-5 w-5 shrink-0 text-slate-400" />
+                      <span className="text-xs text-slate-500">Cantidad</span>
+                      <span className="font-semibold text-slate-700">
+                        {formatCantidadProcesamientoCola(nextProcTarea.cantidadPrimario)} ·{" "}
+                        {etiquetaUnidadProcesamientoCola(nextProcTarea)}
+                        {nextProcTarea.estimadoUnidadesSecundario != null &&
+                        Number.isFinite(Number(nextProcTarea.estimadoUnidadesSecundario))
+                          ? ` · est. sec. ${estimadoUnidadesSecundarioTexto(Number(nextProcTarea.estimadoUnidadesSecundario))}`
+                          : ""}
+                      </span>
+                    </div>
+                  </div>
+                  <p className="w-full text-center text-sm font-bold text-sky-700">
+                    {procProcesadorBusy ? "Guardando…" : "Tocá para marcar como pendiente (merma)"}
                   </p>
                 </div>
               </div>

@@ -1,3 +1,4 @@
+import { sobranteKgTotalTrasEnCurso } from "@/app/lib/sobranteKg";
 import { auth, db } from "@/lib/firebaseClient";
 import type { ProcesamientoEstado, SolicitudProcesamiento } from "@/app/types/solicitudProcesamiento";
 import { normalizeProcesamientoEstado } from "@/app/types/solicitudProcesamiento";
@@ -67,6 +68,25 @@ function mapDoc(clientId: string, id: string, data: Record<string, unknown>): So
     perdidaProcesamientoPct: Number.isFinite(Number(data.perdidaProcesamientoPct))
       ? Math.min(100, Math.max(0, Number(data.perdidaProcesamientoPct)))
       : undefined,
+    desperdicioKg:
+      data.desperdicioKg === null || data.desperdicioKg === undefined
+        ? undefined
+        : Number.isFinite(Number(data.desperdicioKg))
+          ? Math.max(0, Number(data.desperdicioKg))
+          : undefined,
+    kgPrimarioDescontadoBodega:
+      data.kgPrimarioDescontadoBodega === null || data.kgPrimarioDescontadoBodega === undefined
+        ? undefined
+        : Number.isFinite(Number(data.kgPrimarioDescontadoBodega))
+          ? Math.max(0, Number(data.kgPrimarioDescontadoBodega))
+          : undefined,
+    sobranteKg:
+      data.sobranteKg === null || data.sobranteKg === undefined
+        ? undefined
+        : Number.isFinite(Number(data.sobranteKg))
+          ? Math.max(0, Number(data.sobranteKg))
+          : undefined,
+    cierreDesdeProcesador: data.cierreDesdeProcesador === true,
     fecha: String(data.fecha ?? ""),
     estado: normalizeProcesamientoEstado(String(data.estado ?? "Iniciado")),
     createdAt: data.createdAt as Timestamp | null | undefined,
@@ -235,7 +255,23 @@ export const SolicitudProcesamientoService = {
     return normalizeProcesamientoEstado(cur.estado);
   },
 
-  async actualizarEstado(clientId: string, solicitudId: string, estado: string) {
+  /** Lectura completa de la solicitud (merma, unidad primario, cantidades) para UI que no tiene el objeto al día. */
+  async obtenerSolicitud(clientId: string, solicitudId: string): Promise<SolicitudProcesamiento | null> {
+    const cid = String(clientId ?? "").trim();
+    const sid = String(solicitudId ?? "").trim();
+    if (!cid || !sid) return null;
+    const ref = doc(db, "clientes", cid, COL, sid);
+    const snap = await getDoc(ref);
+    if (!snap.exists()) return null;
+    return mapDoc(cid, sid, snap.data() as Record<string, unknown>);
+  },
+
+  async actualizarEstado(
+    clientId: string,
+    solicitudId: string,
+    estado: string,
+    opts?: { desperdicioKg?: number; cierreDesdeProcesador?: boolean },
+  ) {
     const cid = String(clientId ?? "").trim();
     if (!cid) throw new Error("sin_cliente");
     const sid = String(solicitudId ?? "").trim();
@@ -245,13 +281,68 @@ export const SolicitudProcesamientoService = {
     const snap = await getDoc(ref);
     if (!snap.exists()) throw new Error("no_existe");
     const cur = mapDoc(cid, sid, snap.data() as Record<string, unknown>);
+    const prevNorm = normalizeProcesamientoEstado(cur.estado);
     if (cur.estado === "Iniciado" && next === "En curso") {
       const uid = auth.currentUser?.uid ?? "";
       const op = String(cur.operarioBodegaUid ?? "").trim();
       if (!op) throw new Error("sin_operario_asignado");
       if (uid !== op) throw new Error("solo_operario_asignado");
     }
+    if (next === "Terminado" && prevNorm === "En curso") {
+      throw new Error("en_curso_a_terminado_invalido");
+    }
+    if (next === "Pendiente" && prevNorm === "En curso") {
+      const dk = opts?.desperdicioKg;
+      if (dk === undefined || !Number.isFinite(Number(dk)) || Number(dk) < 0) {
+        throw new Error("desperdicio_requerido");
+      }
+      const cierreDesdeProcesador = opts?.cierreDesdeProcesador === true;
+      await updateDoc(ref, {
+        estado: next,
+        desperdicioKg: Number(dk),
+        cierreDesdeProcesador,
+      });
+      return;
+    }
+    if (next === "Terminado" && prevNorm === "Pendiente") {
+      await updateDoc(ref, { estado: next, cierreDesdeProcesador: false });
+      return;
+    }
     await updateDoc(ref, { estado: next });
+  },
+
+  /**
+   * Tras descontar primario del mapa al pasar a «En curso»: guarda kg descontados y el sobrante (fracción a devolver).
+   */
+  async registrarKgPrimarioDescontado(
+    clientId: string,
+    solicitudId: string,
+    params: {
+      deductedKg: number;
+      cantidadPrimario: number;
+      unidadPrimarioVisualizacion?: string;
+      estimadoUnidadesSecundario?: number | null;
+      reglaConversionCantidadPrimario?: number;
+      reglaConversionUnidadesSecundario?: number;
+    },
+  ) {
+    const cid = String(clientId ?? "").trim();
+    const sid = String(solicitudId ?? "").trim();
+    if (!cid || !sid) throw new Error("parametros");
+    const d = Math.max(0, Number(params.deductedKg) || 0);
+    const ref = doc(db, "clientes", cid, COL, sid);
+    const sobrante = sobranteKgTotalTrasEnCurso(
+      params.unidadPrimarioVisualizacion,
+      params.cantidadPrimario,
+      d,
+      params.estimadoUnidadesSecundario,
+      params.reglaConversionCantidadPrimario,
+      params.reglaConversionUnidadesSecundario,
+    );
+    await updateDoc(ref, {
+      kgPrimarioDescontadoBodega: d,
+      sobranteKg: sobrante,
+    });
   },
 
   async asignarOperarioBodega(

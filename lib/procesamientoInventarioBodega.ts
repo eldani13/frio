@@ -29,6 +29,24 @@ export function tareaColaOperarioToSolicitudInventario(t: Record<string, unknown
         : Number.isFinite(Number(t.estimadoUnidadesSecundario))
           ? Number(t.estimadoUnidadesSecundario)
           : undefined,
+    reglaConversionCantidadPrimario: Number.isFinite(Number(t.reglaConversionCantidadPrimario))
+      ? Number(t.reglaConversionCantidadPrimario)
+      : undefined,
+    reglaConversionUnidadesSecundario: Number.isFinite(Number(t.reglaConversionUnidadesSecundario))
+      ? Number(t.reglaConversionUnidadesSecundario)
+      : undefined,
+    perdidaProcesamientoPct:
+      t.perdidaProcesamientoPct === null || t.perdidaProcesamientoPct === undefined
+        ? undefined
+        : Number.isFinite(Number(t.perdidaProcesamientoPct))
+          ? Math.min(100, Math.max(0, Number(t.perdidaProcesamientoPct)))
+          : undefined,
+    sobranteKg:
+      t.sobranteKg === null || t.sobranteKg === undefined
+        ? undefined
+        : Number.isFinite(Number(t.sobranteKg))
+          ? Math.max(0, Number(t.sobranteKg))
+          : undefined,
     fecha: "",
     estado: normalizeProcesamientoEstado("En curso"),
   };
@@ -63,6 +81,11 @@ const SLOT_VACIO_PATCH: Partial<Slot> = {
   caducidad: undefined,
   fechaIngreso: undefined,
   llaveUnica: undefined,
+  catalogoProductId: undefined,
+  procesamientoSecundarioTitulo: undefined,
+  procesamientoUnidadesSecundario: undefined,
+  procesamientoSolicitudId: undefined,
+  procesamientoDesperdicioDevueltoSolicitudId: undefined,
 };
 
 function scoreProductoEnSlot(s: Slot, row: SolicitudProcesamiento): number {
@@ -100,7 +123,7 @@ function computeKgADescontar(row: SolicitudProcesamiento, slotRec: Record<string
 /**
  * Descuenta kg del **primario** en la primera posición de bodega que coincida (cliente + producto).
  * Se usa cuando el material **sale de la bodega** hacia procesamiento: al pasar la solicitud a **En curso**
- * (operario ya movilizó el stock). No debe llamarse de nuevo al pasar a **Terminado**.
+ * (operario ya movilizó el stock). No debe llamarse de nuevo al pasar a **Pendiente** ni a **Terminado**.
  */
 export function deductSlotsAfterProcesamientoTerminado(
   slots: Slot[],
@@ -173,4 +196,24 @@ export function deductSlotsAfterProcesamientoTerminado(
   });
 
   return { slots: nextSlots, deductedKg: applied };
+}
+
+/**
+ * Casillero del **producto primario** en bodega donde reintegrar kg de **sobrante** (misma heurística que el descuento).
+ * Permite kg actuales en 0 (p. ej. todo salió a proceso) y aun así sumar el sobrante fraccionario.
+ */
+export function findSlotPrimarioParaDevolverDesperdicio(
+  slots: Slot[],
+  row: SolicitudProcesamiento,
+): Slot | null {
+  const ranked = slots
+    .map((s) => {
+      const sc = scoreProductoEnSlot(s, row);
+      const kg = kgFromFirestoreSlotRecord(asRec(s)) ?? 0;
+      return { s, sc, kg };
+    })
+    .filter((x) => x.sc > 0)
+    .sort((a, b) => b.sc - a.sc || a.s.position - b.s.position);
+
+  return ranked[0]?.s ?? null;
 }

@@ -1,10 +1,18 @@
 "use client";
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { MdShoppingCart } from "react-icons/md";
 import { FiArrowLeft, FiBox, FiPackage, FiX } from "react-icons/fi";
+import { MdPendingActions } from "react-icons/md";
 import type { Client } from "@/app/interfaces/bodega";
-import { clientLabelFromList } from "@/app/lib/bodegaDisplay";
+import {
+  BODEGA_ZONE_STATUS_ICON_ACTIVE_CLASS,
+  BODEGA_ZONE_STATUS_ICON_INACTIVE_CLASS,
+  BODEGA_ZONE_STATUS_NUM_ACTIVE_CLASS,
+  BODEGA_ZONE_STATUS_NUM_INACTIVE_CLASS,
+  BODEGA_ZONE_STATUS_PILL_ACTIVE_CLASS,
+  BODEGA_ZONE_STATUS_PILL_INACTIVE_CLASS,
+  clientLabelFromList,
+} from "@/app/lib/bodegaDisplay";
 import { CatalogoService } from "@/app/services/catalogoService";
 import { OrdenVentaService } from "@/app/services/ordenVentaService";
 import type { VentaEnCurso, VentaEnCursoLineItem } from "@/app/types/ventaCuenta";
@@ -40,6 +48,8 @@ export default function VentasEnCursoMapButton({
   const [detalle, setDetalle] = useState<Fila | null>(null);
   const [loading, setLoading] = useState(false);
   const [filas, setFilas] = useState<Fila[]>([]);
+  /** Pendientes visibles en la barra (mismo criterio que el listado del modal). */
+  const [ventasEnCursoCount, setVentasEnCursoCount] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [operarioAsignarId, setOperarioAsignarId] = useState("");
   const [asignarSaving, setAsignarSaving] = useState(false);
@@ -52,6 +62,30 @@ export default function VentasEnCursoMapButton({
       .map((c) => c.id.trim())
       .filter(Boolean);
   }, [clients, warehouseCodeCuenta]);
+
+  const refrescarConteoVentasEnCurso = useCallback(async () => {
+    if (clientIds.length === 0) {
+      setVentasEnCursoCount(0);
+      return;
+    }
+    const code = warehouseCodeCuenta.trim();
+    try {
+      let n = 0;
+      for (const idCliente of clientIds) {
+        const list = await OrdenVentaService.getAllByCodeCuenta(idCliente, code);
+        for (const o of list) {
+          if (esEstadoEnCurso(String(o.estado ?? ""))) n++;
+        }
+      }
+      setVentasEnCursoCount(n);
+    } catch {
+      setVentasEnCursoCount(0);
+    }
+  }, [clientIds, warehouseCodeCuenta]);
+
+  useEffect(() => {
+    void refrescarConteoVentasEnCurso();
+  }, [refrescarConteoVentasEnCurso]);
 
   const cargar = useCallback(async () => {
     if (clientIds.length === 0) {
@@ -75,9 +109,11 @@ export default function VentasEnCursoMapButton({
       }
       merged.sort((a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0));
       setFilas(merged);
+      setVentasEnCursoCount(merged.length);
     } catch {
       setError("No se pudieron cargar las órdenes de venta.");
       setFilas([]);
+      setVentasEnCursoCount(0);
     } finally {
       setLoading(false);
     }
@@ -167,20 +203,48 @@ export default function VentasEnCursoMapButton({
   const cerrarModal = () => {
     setDetalle(null);
     setOpen(false);
+    void refrescarConteoVentasEnCurso();
   };
 
-  if (!String(warehouseCodeCuenta ?? "").trim()) return null;
+  const codeOk = String(warehouseCodeCuenta ?? "").trim();
+
+  if (!codeOk) {
+    return (
+      <button
+        type="button"
+        disabled
+        className={`${BODEGA_ZONE_STATUS_PILL_INACTIVE_CLASS} cursor-not-allowed opacity-80 hover:bg-slate-50/95`}
+        title="Sin código de cuenta en la bodega"
+        aria-label="Tareas pendientes — ventas en curso (no disponible sin código de cuenta)"
+      >
+        <MdPendingActions className={BODEGA_ZONE_STATUS_ICON_INACTIVE_CLASS} aria-hidden />
+        <span className={`text-[11px] ${BODEGA_ZONE_STATUS_NUM_INACTIVE_CLASS}`}>0</span>
+      </button>
+    );
+  }
+
+  const hayVentasPendientes = ventasEnCursoCount > 0;
 
   return (
     <>
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-800 shadow-sm transition hover:bg-emerald-100 hover:ring-2 hover:ring-emerald-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400"
-        title="Órdenes de venta en curso"
-        aria-label="Ver órdenes de venta en curso"
+        className={hayVentasPendientes ? BODEGA_ZONE_STATUS_PILL_ACTIVE_CLASS : BODEGA_ZONE_STATUS_PILL_INACTIVE_CLASS}
+        title={`Tareas pendientes: ventas en curso (${ventasEnCursoCount})`}
+        aria-label={`Ver tareas pendientes de ventas en curso, ${ventasEnCursoCount}`}
       >
-        <MdShoppingCart className="h-5 w-5" aria-hidden />
+        <MdPendingActions
+          className={hayVentasPendientes ? BODEGA_ZONE_STATUS_ICON_ACTIVE_CLASS : BODEGA_ZONE_STATUS_ICON_INACTIVE_CLASS}
+          aria-hidden
+        />
+        <span
+          className={`text-[11px] ${
+            hayVentasPendientes ? BODEGA_ZONE_STATUS_NUM_ACTIVE_CLASS : BODEGA_ZONE_STATUS_NUM_INACTIVE_CLASS
+          }`}
+        >
+          {ventasEnCursoCount}
+        </span>
       </button>
 
       {open ? (
@@ -192,10 +256,10 @@ export default function VentasEnCursoMapButton({
           onClick={cerrarModal}
         >
           <div
-            className="flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-3xl border border-emerald-100 bg-white shadow-2xl"
+            className="flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-3xl border border-sky-200/90 bg-white shadow-2xl shadow-sky-900/10"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="relative shrink-0 border-b border-slate-100 bg-linear-to-r from-emerald-50 via-white to-white px-4 py-4 sm:px-6 sm:py-5">
+            <div className="relative shrink-0 border-b border-sky-100 bg-linear-to-r from-sky-50 via-white to-cyan-50/80 px-4 py-4 sm:px-6 sm:py-5">
               <div className="flex items-start gap-3 sm:gap-4">
                 {detalle ? (
                   <button
@@ -207,8 +271,8 @@ export default function VentasEnCursoMapButton({
                     <FiArrowLeft className="h-5 w-5" />
                   </button>
                 ) : (
-                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-emerald-100 text-emerald-800 shadow-inner">
-                    <MdShoppingCart className="h-6 w-6" />
+                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-sky-100 text-sky-700 shadow-inner">
+                    <MdPendingActions className="h-6 w-6 shrink-0" aria-hidden />
                   </div>
                 )}
                 <div className="min-w-0 flex-1 pr-10">
@@ -219,20 +283,28 @@ export default function VentasEnCursoMapButton({
                     {detalle ? (
                       <span className="font-mono">{String(detalle.numero ?? "").trim() || detalle.id}</span>
                     ) : (
-                      "Órdenes de venta — En curso"
+                      <>
+                        <span className="block text-[11px] font-semibold uppercase tracking-wide text-sky-800/90">
+                          Tareas pendientes
+                        </span>
+                        <span className="mt-1 block text-lg font-bold tracking-tight sm:text-xl">
+                          Tareas pendientes
+                        </span>
+                      </>
                     )}
                   </h2>
                   <p className="mt-1.5 text-sm leading-relaxed text-slate-600">
                     {detalle ? (
                       <>
-                        Productos de esta venta. Comprador:{" "}
+                        Detalle de la tarea: productos de la venta. Comprador:{" "}
                         <strong className="text-slate-800">{detalle.compradorNombre}</strong>.
                       </>
                     ) : (
                       <>
-                        Cuentas con código{" "}
-                        <span className="font-mono font-semibold">{warehouseCodeCuenta}</span> en estado{" "}
-                        <strong>En curso</strong>. Tocá una cajita para ver el detalle.
+                        Órdenes de venta de cuentas con código{" "}
+                        <span className="font-mono font-semibold text-sky-900">{warehouseCodeCuenta}</span> en estado{" "}
+                        <strong className="text-sky-900">En curso</strong>. Tocá una tarjeta para ver el detalle y
+                        asignar la salida a un operario.
                       </>
                     )}
                   </p>
@@ -255,7 +327,7 @@ export default function VentasEnCursoMapButton({
 
               {detalle ? (
                 <div className="space-y-5">
-                  <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-slate-100 bg-slate-50/80 px-4 py-3 text-sm">
+                  <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-sky-100 bg-sky-50/60 px-4 py-3 text-sm">
                     <span
                       className={`rounded-full px-2.5 py-0.5 text-[11px] font-bold uppercase ${ordenCompraEstadoBadgeClass(detalle.estado)}`}
                     >
@@ -280,8 +352,8 @@ export default function VentasEnCursoMapButton({
                   </div>
 
                   <div>
-                    <h3 className="mb-3 flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-slate-500">
-                      <FiPackage className="h-4 w-4 text-emerald-600" aria-hidden />
+                    <h3 className="mb-3 flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-sky-800/85">
+                      <FiPackage className="h-4 w-4 text-sky-600" aria-hidden />
                       Productos ({Array.isArray(detalle.lineItems) ? detalle.lineItems.length : 0})
                     </h3>
                     {!detalle.lineItems?.length ? (
@@ -293,7 +365,7 @@ export default function VentasEnCursoMapButton({
                         {detalle.lineItems.map((li, idx) => (
                           <li
                             key={`${li.catalogoProductId ?? "x"}-${idx}`}
-                            className="rounded-2xl border border-emerald-100 bg-linear-to-br from-white to-emerald-50/50 p-4 shadow-sm"
+                            className="rounded-2xl border border-sky-100 bg-linear-to-br from-white to-sky-50/40 p-4 shadow-sm"
                           >
                             <p className="font-semibold leading-snug text-slate-900">
                               {li.titleSnapshot?.trim() || "Producto"}
@@ -316,7 +388,7 @@ export default function VentasEnCursoMapButton({
                 <p className="text-sm text-slate-600">No hay clientes con este código de cuenta.</p>
               ) : filas.length === 0 ? (
                 <p className="text-sm text-slate-600">
-                  No hay órdenes de venta en estado <strong>En curso</strong>.
+                  No hay <strong>tareas pendientes</strong> de ventas en estado <strong>En curso</strong>.
                 </p>
               ) : (
                 <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4">
@@ -330,9 +402,9 @@ export default function VentasEnCursoMapButton({
                         <button
                           type="button"
                           onClick={() => setDetalle(row)}
-                          className="flex w-full min-w-0 flex-col overflow-hidden rounded-3xl border border-emerald-200/90 bg-white p-3 text-left shadow-md ring-emerald-200/40 transition hover:border-emerald-300 hover:shadow-lg hover:ring-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400"
+                          className="flex w-full min-w-0 flex-col overflow-hidden rounded-3xl border border-sky-200/90 bg-white p-3 text-left shadow-md ring-sky-200/40 transition hover:border-sky-300 hover:shadow-lg hover:ring-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-400"
                         >
-                          <div className="flex min-h-[2rem] shrink-0 items-start justify-between gap-2 border-b border-emerald-100/80 pb-2">
+                          <div className="flex min-h-[2rem] shrink-0 items-start justify-between gap-2 border-b border-sky-100/90 pb-2">
                             <span className="min-w-0 truncate font-mono text-[10px] font-bold uppercase tracking-wide text-slate-800 sm:text-[11px]">
                               {num}
                             </span>
@@ -343,7 +415,7 @@ export default function VentasEnCursoMapButton({
                             </span>
                           </div>
                           <div className="flex flex-1 flex-col items-center px-1 pt-3 text-center">
-                            <FiBox className="h-5 w-5 text-emerald-600" aria-hidden />
+                            <FiBox className="h-5 w-5 text-sky-600" aria-hidden />
                             <p
                               className="mt-2 line-clamp-2 min-h-[2.25rem] w-full text-[11px] font-semibold leading-snug text-slate-900 sm:text-xs"
                               title={comprador}
@@ -354,8 +426,8 @@ export default function VentasEnCursoMapButton({
                               {cuenta}
                             </p>
                           </div>
-                          <div className="mt-3 flex shrink-0 flex-col gap-1 border-t border-emerald-100/80 pt-2">
-                            <div className="rounded-full bg-emerald-100 px-2 py-1.5 text-center text-[10px] font-semibold text-emerald-950">
+                          <div className="mt-3 flex shrink-0 flex-col gap-1 border-t border-sky-100/90 pt-2">
+                            <div className="rounded-full bg-sky-100 px-2 py-1.5 text-center text-[10px] font-semibold text-sky-950">
                               {nLineas} {nLineas === 1 ? "línea" : "líneas"}
                             </div>
                             {row.fecha ? (
@@ -370,14 +442,14 @@ export default function VentasEnCursoMapButton({
               )}
             </div>
 
-            <div className="flex shrink-0 flex-col gap-3 border-t border-slate-100 bg-slate-50/90 px-4 py-4 sm:px-6">
+            <div className="flex shrink-0 flex-col gap-3 border-t border-sky-100 bg-sky-50/50 px-4 py-4 sm:px-6">
               {detalle && esEstadoEnCurso(detalle.estado) ? (
-                <div className="rounded-2xl border border-emerald-200/80 bg-white px-4 py-3 shadow-sm">
-                  <p className="text-[11px] font-bold uppercase tracking-wide text-slate-500">
-                    Tarea de salida para operario
+                <div className="rounded-2xl border border-sky-200/80 bg-white px-4 py-3 shadow-sm">
+                  <p className="text-[11px] font-bold uppercase tracking-wide text-sky-800/90">
+                    Tarea pendiente · salida a operario
                   </p>
                   <p className="mt-1 text-xs text-slate-600">
-                    Asigná quién debe llevar del <strong>mapa de bodega</strong> a <strong>salida</strong> las
+                    Asigná quién debe llevar del <strong>almacenamiento</strong> a <strong>salida</strong> las
                     cantidades pedidas en esta venta.
                   </p>
                   {operariosBodega.length === 0 ? (
@@ -385,7 +457,7 @@ export default function VentasEnCursoMapButton({
                       No hay operarios de bodega dados de alta en esta cuenta.
                     </p>
                   ) : tareaSalidaYaExiste ? (
-                    <p className="mt-2 text-xs font-semibold text-emerald-800">
+                    <p className="mt-2 text-xs font-semibold text-sky-900">
                       Esta venta ya tiene una tarea de salida en la cola del operario.
                     </p>
                   ) : (
@@ -413,7 +485,7 @@ export default function VentasEnCursoMapButton({
                           !onPushTareaProcesamientoOperario
                         }
                         onClick={handleAsignarSalida}
-                        className="shrink-0 rounded-xl bg-linear-to-r from-emerald-600 to-teal-600 px-5 py-2.5 text-sm font-bold text-white shadow-md transition hover:from-emerald-700 hover:to-teal-700 disabled:cursor-not-allowed disabled:opacity-50"
+                        className="shrink-0 rounded-xl bg-linear-to-r from-sky-600 to-cyan-600 px-5 py-2.5 text-sm font-bold text-white shadow-md transition hover:from-sky-700 hover:to-cyan-700 disabled:cursor-not-allowed disabled:opacity-50"
                       >
                         {asignarSaving ? "Asignando…" : "Asignar"}
                       </button>

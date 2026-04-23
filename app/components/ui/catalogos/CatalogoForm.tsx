@@ -9,6 +9,7 @@ import {
   REGLA_PRIMARIO_BASE_GRAMOS,
 } from "@/lib/catalogoProcesamiento";
 import { UNIDAD_VIS_CATALOGO_OPCIONES } from "@/lib/unidadVisualizacionCatalogo";
+import { precioCatalogoNumerico } from "@/lib/catalogoPrecio";
 
 interface CatalogoFormProps {
   isOpen: boolean;
@@ -59,7 +60,7 @@ const FORM_FIELDS: FormFieldConfig[] = [
   { key: "optionName1", label: "Nombre opción 1" },
   { key: "optionValue1", label: "Valor opción 1" },
   { key: "linkedOption1", label: "Vinculado a opción 1" },
-  { key: "costPerItem", label: "Costo por artículo", inputType: "number" },
+  { key: "price", label: "Precio", inputType: "number" },
   { key: "chargeTax", label: "Cobrar impuesto", isBoolean: true },
   { key: "inventoryTracker", label: "Rastreador inventario" },
   { key: "inventoryQty", label: "Cantidad inventario", inputType: "number" },
@@ -93,8 +94,10 @@ export const CatalogoForm = ({
 
   useEffect(() => {
     if (producto) {
+      const precioEdicion = precioCatalogoNumerico(producto);
       setFormData({
         ...producto,
+        ...(precioEdicion !== undefined ? { price: precioEdicion } : {}),
         unidadVisualizacion: normalizeUnidadVisualizacion(producto),
         includedPrimarioCatalogoId: producto.includedPrimarioCatalogoId ?? "",
         conversionCantidadPrimario:
@@ -297,7 +300,7 @@ export const CatalogoForm = ({
                         ))}
                       </select>
                       <p className="mt-1 text-[11px] text-gray-500">
-                        Etiqueta de cantidad en pantallas. Solo «Peso (kg)» usa kilogramos en mapa de bodega; el resto
+                        Etiqueta de cantidad en pantallas. Solo «Peso (kg)» usa kilogramos en almacenamiento; el resto
                         cuenta como unidades discretas.
                       </p>
                     </div>

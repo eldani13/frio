@@ -11,23 +11,34 @@ import {
   FiAlertTriangle,
   FiX,
 } from "react-icons/fi";
+import { HiArrowRightOnRectangle } from "react-icons/hi2";
 
 import React, { useState, useMemo } from "react";
 import {
-  clientLabelFromList,
-  formatSlotCantidadDisplay,
-  occupiedSlotVisualClasses,
   secondaryTitleFromSlot,
   slotLooksLikeProcesamiento,
   type SlotCantidadContext,
 } from "@/app/lib/bodegaDisplay";
-import type { Client, Role, Slot } from "@/app/interfaces/bodega";
+import type { BodegaOrder, Client, Role, Slot } from "@/app/interfaces/bodega";
 import type { SolicitudProcesamiento } from "@/app/types/solicitudProcesamiento";
+import type { Catalogo } from "@/app/types/catalogo";
+import { kgSobranteParaDevolucionMapa } from "@/app/lib/sobranteKg";
+import {
+  cantidadPrimarioProcesamientoTexto,
+  primarioCatalogoPorId,
+} from "@/app/lib/procesamientoDisplay";
 import { ProcesamientoOrdenesActivasBodega } from "@/app/components/BodegaDashboard/ProcesamientoOrdenesActivasBodega";
 import { AsignarProcesadorProcesamientoModal } from "@/app/components/BodegaDashboard/AsignarProcesadorProcesamientoModal";
 import BodegaZonaCajaCard from "../bodega/BodegaZonaCajaCard";
+import SlotCard from "../bodega/SlotCard";
+import BodegaSlotLegend from "../bodega/BodegaSlotLegend";
+import {
+  EmptyZonaSlot,
+  padToLength,
+  ZONA_ENTRADA_SALIDA_SLOTS,
+  ZonaCuatroSlotsRow,
+} from "../bodega/ZonaCuatroSlotsRow";
 import VentasEnCursoMapButton from "../bodega/VentasEnCursoMapButton";
-import EntradaAlertButton from "../common/EntradaAlertButton";
 import { RiUserReceivedLine } from "react-icons/ri";
 import { temperatureStringFromAnalyzeResponse } from "@/app/lib/imageAnalyzeApi";
 
@@ -186,11 +197,188 @@ function JefeModalField({
   );
 }
 
+const jefeNestedShellBorder: Record<JefeModalAccent, string> = {
+  emerald: "border-emerald-100",
+  blue: "border-blue-100",
+  orange: "border-orange-100",
+  pink: "border-pink-100",
+};
+
+/** Modal secundario encima del modal de orden (z-index mayor). */
+function JefeNestedPickerShell({
+  title,
+  onClose,
+  children,
+  accent = "blue",
+}: {
+  title: string;
+  onClose: () => void;
+  children: React.ReactNode;
+  accent?: JefeModalAccent;
+}) {
+  const a = jefeModalAccentClass[accent];
+  return (
+    <div
+      className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/55 p-3 backdrop-blur-[2px] sm:p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="jefe-nested-picker-title"
+      onClick={onClose}
+    >
+      <div
+        className={`w-full max-w-lg overflow-hidden rounded-2xl border bg-white shadow-2xl ring-1 ring-black/5 ${jefeNestedShellBorder[accent]}`}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div
+          className={`flex items-center justify-between border-b border-slate-100 bg-linear-to-r px-4 py-3 sm:px-5 ${a.header}`}
+        >
+          <h3 id="jefe-nested-picker-title" className="text-base font-bold tracking-tight text-slate-900">
+            {title}
+          </h3>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-xl p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-300"
+            aria-label="Cerrar"
+          >
+            <FiX className="h-5 w-5" strokeWidth={2} />
+          </button>
+        </div>
+        <div className="max-h-[min(60vh,520px)] overflow-y-auto px-4 py-4 sm:px-5 sm:py-5">{children}</div>
+      </div>
+    </div>
+  );
+}
+
+/** Picker secundario compartido por todos los formularios de orden del jefe. */
+type JefeInteractivePicker =
+  | null
+  | { flow: "traslado"; step: "origen" | "caja" | "posicion" | "procesamiento" }
+  | { flow: "ingreso"; step: "caja" | "posicion" }
+  | { flow: "revisar"; step: "caja" }
+  | { flow: "salida"; step: "caja" };
+
+function jefePickerTitle(p: NonNullable<JefeInteractivePicker>): string {
+  if (p.flow === "traslado") {
+    switch (p.step) {
+      case "origen":
+        return "Elegir origen del traslado";
+      case "caja":
+        return "Elegir caja en bodega";
+      case "posicion":
+        return "Elegir casillero de destino";
+      case "procesamiento":
+        return "Elegir orden terminada (procesamiento)";
+      default:
+        return "Seleccionar";
+    }
+  }
+  if (p.flow === "ingreso") {
+    return p.step === "caja" ? "Elegir caja en ingresos" : "Elegir posición en bodega";
+  }
+  if (p.flow === "revisar") return "Elegir caja a revisar";
+  if (p.flow === "salida") return "Elegir caja para salida";
+  return "Seleccionar";
+}
+
+function jefePickerAccent(p: NonNullable<JefeInteractivePicker>): JefeModalAccent {
+  if (p.flow === "traslado") return "blue";
+  if (p.flow === "ingreso") return "emerald";
+  if (p.flow === "revisar") return "orange";
+  return "pink";
+}
+
+function jefePickerCardClass(selected: boolean, accent: JefeModalAccent): string {
+  const on = {
+    emerald: "border-emerald-600 bg-emerald-50",
+    blue: "border-blue-600 bg-blue-50",
+    orange: "border-orange-600 bg-orange-50",
+    pink: "border-pink-600 bg-pink-50",
+  }[accent];
+  return selected
+    ? `border-2 ${on}`
+    : "border-2 border-slate-200 hover:border-slate-300 hover:bg-slate-50/90";
+}
+
+const jefePickerInputHover: Record<JefeModalAccent, string> = {
+  emerald: "hover:border-emerald-200",
+  blue: "hover:border-blue-200",
+  orange: "hover:border-orange-200",
+  pink: "hover:border-pink-200",
+};
+
+const jefePickerTriggerBtn: Record<JefeModalAccent, string> = {
+  emerald: "border-slate-200/80 bg-emerald-50/95 text-emerald-800 hover:bg-emerald-100",
+  blue: "border-slate-200/80 bg-blue-50/95 text-blue-700 hover:bg-blue-100",
+  orange: "border-slate-200/80 bg-orange-50/95 text-orange-800 hover:bg-orange-100",
+  pink: "border-slate-200/80 bg-pink-50/95 text-pink-800 hover:bg-pink-100",
+};
+
 function JefeModalEmptyHint({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex gap-2.5 rounded-xl border border-amber-200/80 bg-amber-50/90 px-3.5 py-2.5 text-xs leading-snug text-amber-950">
       <FiAlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" aria-hidden />
       <div>{children}</div>
+    </div>
+  );
+}
+
+/** Campo tipo «select» sin desplegable: valor de solo lectura + lupa dentro del input para abrir el picker. */
+function JefeOrderPickerTrigger({
+  accent,
+  value,
+  placeholder,
+  onOpen,
+  disabled,
+  "aria-label": ariaLabel = "Abrir selector interactivo",
+}: {
+  accent: JefeModalAccent;
+  value: string;
+  placeholder: string;
+  onOpen: () => void;
+  disabled?: boolean;
+  "aria-label"?: string;
+}) {
+  const ring = jefeModalAccentClass[accent].selectFocus;
+  return (
+    <div className="relative">
+      <input
+        type="text"
+        readOnly
+        value={value}
+        placeholder={placeholder}
+        disabled={disabled}
+        onClick={() => {
+          if (!disabled) onOpen();
+        }}
+        onKeyDown={(e) => {
+          if (disabled) return;
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            onOpen();
+          }
+        }}
+        className={`${jefeSelectClass} pr-11 text-left ${
+          disabled
+            ? "cursor-not-allowed bg-slate-50 text-slate-400"
+            : `cursor-pointer ${jefePickerInputHover[accent]}`
+        } ${ring}`}
+        aria-readonly="true"
+        autoComplete="off"
+      />
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={(e) => {
+          e.stopPropagation();
+          if (!disabled) onOpen();
+        }}
+        className={`absolute inset-y-0 right-0 z-10 flex w-11 items-center justify-center rounded-r-xl border-l transition disabled:cursor-not-allowed disabled:opacity-40 ${jefePickerTriggerBtn[accent]}`}
+        aria-label={ariaLabel}
+        title="Elegir…"
+      >
+        <FiSearch className="h-4 w-4 shrink-0" strokeWidth={2} />
+      </button>
     </div>
   );
 }
@@ -218,8 +406,6 @@ export default function OrdenesJefeSection(props: {
     next: Array<{ position: number; [key: string]: unknown }>,
   ) => void;
   onUpdateLlamadasJefe: (next: Array<Record<string, unknown>>) => void;
-  selectedBoxModal: any;
-  setSelectedBoxModal: (box: any) => void;
   editTempModal: any;
   setEditTempModal: (modal: any) => void;
   handleUpdateBoxTemperature: (position: number, temp: number) => void;
@@ -269,12 +455,16 @@ export default function OrdenesJefeSection(props: {
   ) => void | Promise<void>;
   /** Órdenes de procesamiento en **Terminado** (disponibles para devolver al mapa vía traslado). */
   solicitudesProcesamientoTerminadasDisponibles?: SolicitudProcesamiento[];
+  /** Terminadas con sobrante (kg fraccionarios) pendiente de reintegrar al primario en mapa. */
+  solicitudesProcesamientoTerminadasDisponiblesDesperdicio?: SolicitudProcesamiento[];
   /** Todas las solicitudes terminadas (suscripción); sirve para mostrar unidades secundario en el mapa aunque no estén persistidas en el slot. */
   solicitudesProcesamientoTerminadas?: SolicitudProcesamiento[];
+  ordenesBodegaPendientes?: BodegaOrder[];
+  /** Alertas y tareas por zona (mismo modal que el tab Estado del padre). */
+  renderStatusButtons?: (zone: "entrada" | "bodega" | "salida") => React.ReactNode;
+  /** Catálogo (opcional): unidad del primario en textos de traslado desde procesamiento. */
+  productosCatalogo?: Catalogo[];
 }) {
-  const ITEMS_PER_PAGE = 4;
-  const [entradaPage, setEntradaPage] = useState(0);
-  const [salidaPage, setSalidaPage] = useState(0);
   const {
     isJefe,
     inboundBoxes,
@@ -285,8 +475,6 @@ export default function OrdenesJefeSection(props: {
     llamadasJefe = [],
     onUpdateAlertasOperario,
     onUpdateLlamadasJefe,
-    selectedBoxModal,
-    setSelectedBoxModal,
     editTempModal,
     setEditTempModal,
     handleUpdateBoxTemperature,
@@ -324,7 +512,11 @@ export default function OrdenesJefeSection(props: {
     warehouseId = "",
     onProcesamientoTerminadoInventario,
     solicitudesProcesamientoTerminadasDisponibles = [],
+    solicitudesProcesamientoTerminadasDisponiblesDesperdicio = [],
     solicitudesProcesamientoTerminadas = [],
+    ordenesBodegaPendientes = [],
+    renderStatusButtons,
+    productosCatalogo,
   } = props;
 
   const slotCantidadProcesamientoCtx = useMemo((): SlotCantidadContext | undefined => {
@@ -341,6 +533,13 @@ export default function OrdenesJefeSection(props: {
     "bodega",
   );
   const [trasladoProcesamientoKey, setTrasladoProcesamientoKey] = useState("");
+  /** Picker secundario (lupa): traslado, ingreso, revisar, salida. */
+  const [jefeInteractivePicker, setJefeInteractivePicker] = useState<JefeInteractivePicker>(null);
+  const [trasladoCajaSearch, setTrasladoCajaSearch] = useState("");
+  const [trasladoProcSearch, setTrasladoProcSearch] = useState("");
+  const [ingresoCajaSearch, setIngresoCajaSearch] = useState("");
+  const [revisarSearch, setRevisarSearch] = useState("");
+  const [salidaCajaSearch, setSalidaCajaSearch] = useState("");
 
   React.useEffect(() => {
     if (orderModalType === "bodega") {
@@ -350,19 +549,176 @@ export default function OrdenesJefeSection(props: {
   }, [orderModalType]);
 
   React.useEffect(() => {
+    setJefeInteractivePicker(null);
+    setTrasladoCajaSearch("");
+    setTrasladoProcSearch("");
+    setIngresoCajaSearch("");
+    setRevisarSearch("");
+    setSalidaCajaSearch("");
+  }, [orderModalType]);
+
+  const trasladoCajasFiltradas = useMemo(() => {
+    const list = sortByPosition(availableBodegaForOrders);
+    const q = trasladoCajaSearch.trim().toLowerCase();
+    if (!q) return list;
+    return list.filter(
+      (b) =>
+        String(b.position).includes(q) ||
+        (b.name || "").toLowerCase().includes(q) ||
+        (b.autoId || "").toLowerCase().includes(q) ||
+        (b.client || "").toLowerCase().includes(q),
+    );
+  }, [availableBodegaForOrders, trasladoCajaSearch, sortByPosition]);
+
+  const trasladoProcOpciones = useMemo(() => {
+    const out: Array<{
+      key: string;
+      kind: "procesado" | "desperdicio";
+      row: SolicitudProcesamiento;
+    }> = [];
+    solicitudesProcesamientoTerminadasDisponibles.forEach((row) => {
+      out.push({ kind: "procesado", row, key: `${row.clientId}::${row.id}::procesado` });
+    });
+    solicitudesProcesamientoTerminadasDisponiblesDesperdicio.forEach((row) => {
+      out.push({ kind: "desperdicio", row, key: `${row.clientId}::${row.id}::desperdicio` });
+    });
+    return out;
+  }, [solicitudesProcesamientoTerminadasDisponibles, solicitudesProcesamientoTerminadasDisponiblesDesperdicio]);
+
+  const trasladoProcFiltradas = useMemo(() => {
+    const q = trasladoProcSearch.trim().toLowerCase();
+    if (!q) return trasladoProcOpciones;
+    return trasladoProcOpciones.filter(({ row }) => {
+      const blob = [
+        row.numero,
+        row.productoPrimarioTitulo,
+        row.productoSecundarioTitulo ?? "",
+        row.clientId,
+        row.id,
+      ]
+        .join(" ")
+        .toLowerCase();
+      return blob.includes(q);
+    });
+  }, [trasladoProcOpciones, trasladoProcSearch]);
+
+  const trasladoCajaDisplayText = useMemo(() => {
+    if (availableBodegaForOrders.length === 0) return "";
+    const box = sortByPosition(availableBodegaForOrders).find((b) => b.position === bodegaOrderSourcePosition);
+    if (!box) return "";
+    return `Casillero ${box.position} — ${box.name} (${box.autoId}) · ${box.client || "—"}`;
+  }, [availableBodegaForOrders, bodegaOrderSourcePosition, sortByPosition]);
+
+  const trasladoProcesamientoDisplayText = useMemo(() => {
+    if (trasladoProcOpciones.length === 0) return "";
+    if (!trasladoProcesamientoKey) return "";
+    const opt = trasladoProcOpciones.find((o) => o.key === trasladoProcesamientoKey);
+    if (!opt) return "";
+    const row = opt.row;
+    const pref = opt.kind === "desperdicio" ? "Sobrante · " : "Procesado · ";
+    const prim = primarioCatalogoPorId(productosCatalogo, row.productoPrimarioId);
+    const qtyLine = cantidadPrimarioProcesamientoTexto(row, prim);
+    const title =
+      row.productoPrimarioTitulo.length > 48
+        ? `${row.productoPrimarioTitulo.slice(0, 48)}…`
+        : row.productoPrimarioTitulo;
+    return `${pref}${row.numero} — ${qtyLine} · ${title}`;
+  }, [trasladoProcOpciones, trasladoProcesamientoKey, productosCatalogo]);
+
+  const trasladoSeleccionado = useMemo(() => {
+    if (!trasladoProcesamientoKey) return null;
+    return trasladoProcOpciones.find((o) => o.key === trasladoProcesamientoKey) ?? null;
+  }, [trasladoProcOpciones, trasladoProcesamientoKey]);
+
+  const ingresoCajaDisplayText = useMemo(() => {
+    if (availableInboundForOrders.length === 0) return "";
+    const box = sortByPosition(availableInboundForOrders).find((b) => b.position === ingresoOrderSourcePosition);
+    if (!box) return "";
+    return `Ingreso ${box.position} — ${box.name} (${box.autoId}) · ${box.client || "—"}`;
+  }, [availableInboundForOrders, ingresoOrderSourcePosition, sortByPosition]);
+
+  const ingresoCajasFiltradas = useMemo(() => {
+    const list = sortByPosition(availableInboundForOrders);
+    const q = ingresoCajaSearch.trim().toLowerCase();
+    if (!q) return list;
+    return list.filter(
+      (b) =>
+        String(b.position).includes(q) ||
+        (b.name || "").toLowerCase().includes(q) ||
+        (b.autoId || "").toLowerCase().includes(q) ||
+        (b.client || "").toLowerCase().includes(q),
+    );
+  }, [availableInboundForOrders, ingresoCajaSearch, sortByPosition]);
+
+  const revisarRows = useMemo(() => {
+    const rows: Array<{ zone: string; box: (typeof availableInboundForOrders)[0] }> = [];
+    for (const g of [
+      { zone: "Ingresos", list: availableInboundForOrders },
+      { zone: "Bodega", list: reviewBodegaList },
+      { zone: "Salida", list: outboundBoxes },
+    ]) {
+      sortByPosition(g.list).forEach((box) => rows.push({ zone: g.zone, box }));
+    }
+    return rows;
+  }, [availableInboundForOrders, reviewBodegaList, outboundBoxes, sortByPosition]);
+
+  const revisarFiltradas = useMemo(() => {
+    const q = revisarSearch.trim().toLowerCase();
+    if (!q) return revisarRows;
+    return revisarRows.filter(
+      ({ zone, box }) =>
+        zone.toLowerCase().includes(q) ||
+        String(box.position).includes(q) ||
+        (box.name || "").toLowerCase().includes(q) ||
+        (box.autoId || "").toLowerCase().includes(q) ||
+        (box.client || "").toLowerCase().includes(q),
+    );
+  }, [revisarRows, revisarSearch]);
+
+  const revisarDisplayText = useMemo(() => {
+    for (const g of [
+      { zone: "Ingresos", list: availableInboundForOrders },
+      { zone: "Bodega", list: reviewBodegaList },
+      { zone: "Salida", list: outboundBoxes },
+    ]) {
+      const box = sortByPosition(g.list).find((b) => b.position === reviewSourcePosition);
+      if (box) return `${g.zone} ${box.position} — ${box.name} (${box.autoId}) · ${box.client || "—"}`;
+    }
+    return "";
+  }, [availableInboundForOrders, reviewBodegaList, outboundBoxes, reviewSourcePosition, sortByPosition]);
+
+  const salidaCajaDisplayText = useMemo(() => {
+    if (availableBodegaForOrders.length === 0) return "";
+    const box = sortByPosition(availableBodegaForOrders).find((b) => b.position === salidaSourcePosition);
+    if (!box) return "";
+    return `Casillero ${box.position} — ${box.name} (${box.autoId}) · ${box.client || "—"}`;
+  }, [availableBodegaForOrders, salidaSourcePosition, sortByPosition]);
+
+  const salidaCajasFiltradas = useMemo(() => {
+    const list = sortByPosition(availableBodegaForOrders);
+    const q = salidaCajaSearch.trim().toLowerCase();
+    if (!q) return list;
+    return list.filter(
+      (b) =>
+        String(b.position).includes(q) ||
+        (b.name || "").toLowerCase().includes(q) ||
+        (b.autoId || "").toLowerCase().includes(q) ||
+        (b.client || "").toLowerCase().includes(q),
+    );
+  }, [availableBodegaForOrders, salidaCajaSearch, sortByPosition]);
+
+  React.useEffect(() => {
     if (orderModalType !== "bodega" || trasladoBodegaOrigenTipo !== "procesamiento") return;
-    const first = solicitudesProcesamientoTerminadasDisponibles[0];
+    const first = trasladoProcOpciones[0];
     if (!first) {
       setTrasladoProcesamientoKey("");
       return;
     }
-    const k = `${first.clientId}::${first.id}`;
+    const k = first.key;
     setTrasladoProcesamientoKey((prev) =>
-      solicitudesProcesamientoTerminadasDisponibles.some((s) => `${s.clientId}::${s.id}` === prev)
-        ? prev
-        : k,
+      trasladoProcOpciones.some((o) => o.key === prev) ? prev : k,
     );
-  }, [orderModalType, trasladoBodegaOrigenTipo, solicitudesProcesamientoTerminadasDisponibles]);
+  }, [orderModalType, trasladoBodegaOrigenTipo, trasladoProcOpciones]);
 
   type ZoneKey = "entrada" | "bodega" | "salida";
   type ModalKind = "alertas" | "tareas";
@@ -378,26 +734,6 @@ export default function OrdenesJefeSection(props: {
     zone: ZoneKey;
     kind: ModalKind;
   } | null>(null);
-  React.useEffect(() => {
-    const maxPage = Math.max(
-      0,
-      Math.ceil((inboundBoxes?.length || 0) / ITEMS_PER_PAGE) - 1,
-    );
-    if (entradaPage > maxPage) {
-      setEntradaPage(maxPage);
-    }
-  }, [entradaPage, inboundBoxes?.length]);
-
-  React.useEffect(() => {
-    const maxPage = Math.max(
-      0,
-      Math.ceil((outboundBoxes?.length || 0) / ITEMS_PER_PAGE) - 1,
-    );
-    if (salidaPage > maxPage) {
-      setSalidaPage(maxPage);
-    }
-  }, [salidaPage, outboundBoxes?.length]);
-
   const zoneLabels: Record<ZoneKey, string> = {
     entrada: "Entrada",
     bodega: "Bodega",
@@ -432,25 +768,8 @@ export default function OrdenesJefeSection(props: {
     [outboundBoxes, sortByPosition],
   );
 
-  const entradaTotalPages = Math.max(
-    1,
-    Math.ceil(sortedInboundBoxes.length / ITEMS_PER_PAGE),
-  );
-  const entradaStart = entradaPage * ITEMS_PER_PAGE;
-  const inboundPageItems = sortedInboundBoxes.slice(
-    entradaStart,
-    entradaStart + ITEMS_PER_PAGE,
-  );
-
-  const salidaTotalPages = Math.max(
-    1,
-    Math.ceil(sortedOutboundBoxes.length / ITEMS_PER_PAGE),
-  );
-  const salidaStart = salidaPage * ITEMS_PER_PAGE;
-  const outboundPageItems = sortedOutboundBoxes.slice(
-    salidaStart,
-    salidaStart + ITEMS_PER_PAGE,
-  );
+  const inboundSlotsItems = sortedInboundBoxes.slice(0, ZONA_ENTRADA_SALIDA_SLOTS);
+  const outboundSlotsItems = sortedOutboundBoxes.slice(0, ZONA_ENTRADA_SALIDA_SLOTS);
 
   const bodegaHighTempAlerts = useMemo(() => {
     const solvedPositions = new Set(alertasOperarioSolved ?? []);
@@ -551,100 +870,12 @@ export default function OrdenesJefeSection(props: {
           </div>
         </div>
       )}
-      {/* Mapa de Bodega para jefe */}
+      {/* Almacenamiento (mapa) para jefe */}
       {isJefe && (
         <div className="col-span-4 mb-8">
-          {/* Modal for selected box details */}
-          {selectedBoxModal && (
-            <div
-              className="fixed inset-0 z-50 flex items-center justify-center backdrop-blur-sm bg-black/10 animate-fade-in p-2 sm:p-4"
-              role="dialog"
-              aria-modal="true"
-              onClick={() => setSelectedBoxModal(null)}
-            >
-              <div
-                className="w-full max-w-lg sm:max-w-xl rounded-3xl border border-blue-100 bg-white/90 shadow-2xl backdrop-blur-lg relative overflow-hidden animate-fade-in-up"
-                onClick={(e) => e.stopPropagation()}
-                style={{ fontFamily: '"Space Grotesk", "Work Sans", sans-serif' }}
-              >
-                {/* Header con gradiente y botón cerrar flotante */}
-                <div className="flex flex-col items-center justify-center pt-8 pb-4 px-8 border-b border-blue-100 bg-linear-to-r from-blue-50 to-white rounded-t-3xl relative">
-                  <span className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-blue-100 shadow mb-2">
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      className="w-8 h-8 text-blue-500"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
-                      />
-                    </svg>
-                  </span>
-                  <h2 className="text-2xl font-extrabold text-blue-700 drop-shadow mb-1 tracking-tight">
-                    Detalles de la caja
-                  </h2>
-                  <button
-                    type="button"
-                    onClick={() => setSelectedBoxModal(null)}
-                    className="absolute top-4 right-4 text-slate-400 hover:text-blue-500 text-2xl font-bold focus:outline-none transition-colors"
-                    aria-label="Cerrar"
-                  >
-                    <svg width="28" height="28" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 6 6 18" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 6l12 12" /></svg>
-                  </button>
-                </div>
-                {/* Detalles */}
-                <div className="px-8 py-6 min-h-30 flex flex-col items-center max-h-[60vh] overflow-y-auto bg-white/80 w-full">
-                  <div className="w-full space-y-2 text-sm text-slate-700 mb-4">
-                    <div className="flex items-center gap-2">
-                      <span className="font-semibold text-slate-600">Nombre:</span>
-                      <span className="truncate">{selectedBoxModal.name || "Sin nombre"}</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className="font-semibold text-slate-600">Id único:</span>
-                      <span className="truncate">{selectedBoxModal.autoId}</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className="font-semibold text-slate-600">Cliente:</span>
-                      <span>
-                        {clientLabelFromList(selectedBoxModal.client || "", clients)}
-                      </span>
-                    </div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="font-semibold text-slate-600">Cantidad:</span>
-                      <span>
-                        {formatSlotCantidadDisplay(selectedBoxModal, slotCantidadProcesamientoCtx)}
-                      </span>
-                    </div>
-                    {slotLooksLikeProcesamiento(selectedBoxModal) ? (
-                      <div className="flex flex-wrap items-start gap-2">
-                        <span className="font-semibold text-slate-600 shrink-0">
-                          Producto secundario (procesado):
-                        </span>
-                        <span className="break-words text-left">
-                          {secondaryTitleFromSlot(selectedBoxModal) || "—"}
-                        </span>
-                      </div>
-                    ) : null}
-                    <div className="flex items-center gap-2">
-                      <span className="font-semibold text-slate-600">Posición:</span>
-                      <span>{selectedBoxModal.position}</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className="font-semibold text-slate-600">Temperatura:</span>
-                      <span>{typeof selectedBoxModal.temperature === "number" ? `${selectedBoxModal.temperature} °C` : "Sin temperatura"}</span>
-                    </div>
-                  </div>
-                 
-                </div>
-                {/* Modal para editar temperatura */}
-                {editTempModal && (
+          {editTempModal && (
                   <div
-                    className="fixed inset-0 z-100 flex items-center justify-center p-2 bg-black/40 backdrop-blur-sm"
+                    className="fixed inset-0 z-[110] flex items-center justify-center p-2 bg-black/40 backdrop-blur-sm"
                     role="dialog"
                     aria-modal="true"
                     onClick={() => setEditTempModal(null)}
@@ -881,20 +1112,21 @@ export default function OrdenesJefeSection(props: {
                     </div>
                   </div>
                 )}
-              </div>
-            </div>
-          )}
           {/* Mismo criterio que EstadoBodegaSection (admin): grid estira fila al contenido más alto; mapa completo sin recorte */}
-          <div className="grid gap-6 xl:grid-cols-[1fr_1.8fr_1fr] 2xl:grid-cols-[1fr_2.1fr_1fr]">
-            <div className="flex h-full min-h-0 flex-col items-start rounded-3xl border border-green-200 bg-emerald-50 p-2 sm:p-4 min-h-45 w-full max-w-full sm:max-w-xs lg:max-w-60">
-              <div className="flex items-center justify-between w-full mb-2">
-                <h3 className="text-sm sm:text-lg font-semibold text-emerald-600 flex items-center gap-2">
-                  <span className="inline-block">
-                    <FiArchive className="w-4 h-4 sm:w-5 sm:h-5 text-emerald-400" />
+          <div className="grid items-stretch gap-6 xl:grid-cols-[1fr_1.8fr_1fr] 2xl:grid-cols-[1fr_2.1fr_1fr]">
+            <div className="flex h-full min-h-0 w-full max-w-full flex-col rounded-3xl border border-emerald-200/95 bg-emerald-50/85 p-2 sm:max-w-lg sm:p-4">
+              <div className="mb-2 flex min-w-0 shrink-0 flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <h3 className="flex min-w-0 items-center gap-2 text-[17px] font-bold leading-tight tracking-tight text-emerald-900 sm:text-lg">
+                  <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-emerald-100 text-emerald-700">
+                    <FiBox className="h-[18px] w-[18px] sm:h-5 sm:w-5" aria-hidden />
                   </span>
                   Entrada
                 </h3>
-                <EntradaAlertButton boxes={inboundBoxes} />
+                {renderStatusButtons ? (
+                  <div className="flex shrink-0 flex-wrap items-center gap-2 sm:ml-auto sm:justify-end">
+                    {renderStatusButtons("entrada")}
+                  </div>
+                ) : null}
                 {/* {highTempAlerts.length > 0 && (
                   <div>
                     <button
@@ -1034,104 +1266,114 @@ export default function OrdenesJefeSection(props: {
                   </div>
                 </div>
               ) : null}
-              <div className="w-full flex flex-col gap-2 sm:gap-4">
-                {sortedInboundBoxes.length === 0 ? (
-                  <div className="text-xs text-emerald-500">
-                    No hay cajas en ingreso.
-                  </div>
-                ) : (
-                  <>
-                    {inboundPageItems.map((box, idx) => {
-                      const isHighTemp =
-                        typeof box.temperature === "number" &&
-                        box.temperature > HIGH_TEMP_THRESHOLD;
-                      return (
+              <div className="flex min-h-0 w-full flex-1 flex-col justify-between gap-3">
+                <div className="flex flex-col gap-2 sm:gap-4">
+                  <ZonaCuatroSlotsRow layout="dosPorColumna" slotCount={8}>
+                    {padToLength(inboundSlotsItems, ZONA_ENTRADA_SALIDA_SLOTS).map((box, idx) =>
+                      box ? (
                         <BodegaZonaCajaCard
                           key={`${box.position}-${box.autoId ?? "no-id"}-${idx}`}
                           box={box}
                           variant="entrada"
-                          alertaTemperaturaAlta={isHighTemp}
-                        />
-                      );
-                    })}
-                    {sortedInboundBoxes.length > ITEMS_PER_PAGE ? (
-                      <div className="flex items-center justify-between mt-2 text-[11px] sm:text-xs text-emerald-700">
-                        <button
-                          type="button"
-                          className="rounded-lg border border-emerald-200 px-2 py-1 bg-white font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
-                          onClick={() => setEntradaPage((prev) => Math.max(0, prev - 1))}
-                          disabled={entradaPage === 0}
-                        >
-                          Anterior
-                        </button>
-                        <span className="font-semibold">
-                          {entradaPage + 1} de {entradaTotalPages}
-                        </span>
-                        <button
-                          type="button"
-                          className="rounded-lg border border-emerald-200 px-2 py-1 bg-white font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
-                          onClick={() =>
-                            setEntradaPage((prev) =>
-                              Math.min(entradaTotalPages - 1, prev + 1),
-                            )
+                          cornerLabel={idx + 1}
+                          alertaTemperaturaAlta={
+                            typeof box.temperature === "number" &&
+                            box.temperature > HIGH_TEMP_THRESHOLD
                           }
-                          disabled={entradaPage >= entradaTotalPages - 1}
-                        >
-                          Siguiente
-                        </button>
-                      </div>
-                    ) : null}
-                  </>
-                )}
-              </div>
-            </div>
-            <div className="min-w-0 flex flex-col">
-            <div className="self-start w-full rounded-2xl border border-blue-200 bg-white p-2 sm:p-4 shadow-md relative">
-              <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 mb-2 sm:mb-4">
-                <div className="flex flex-wrap items-center gap-2">
-                  <h2 className="text-sm sm:text-lg font-semibold text-slate-900 flex items-center gap-1 sm:gap-2">
-                    <span className="inline-block">
-                      <FiArchive className="w-4 h-4 sm:w-5 sm:h-5 text-cyan-400" />
-                    </span>
-                    Mapa de Bodega
-                  </h2>
-                  {warehouseCodeCuenta.trim() ? (
-                    <VentasEnCursoMapButton
-                      clients={clients}
-                      warehouseCodeCuenta={warehouseCodeCuenta}
-                      operariosBodega={operariosBodega}
-                      tareasProcesamientoOperario={tareasProcesamientoOperario}
-                      onPushTareaProcesamientoOperario={onPushTareaProcesamientoOperario}
-                    />
+                          clients={clients}
+                          detalleChildren={
+                            box.ordenCompraId || box.ordenVentaId ? (
+                              <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/80 px-4 py-3 text-xs text-slate-600">
+                                {box.ordenCompraId ? (
+                                  <p>
+                                    <span className="font-semibold text-slate-700">OC: </span>
+                                    {box.ordenCompraId}
+                                  </p>
+                                ) : null}
+                                {box.ordenVentaId ? (
+                                  <p className={box.ordenCompraId ? "mt-1.5" : ""}>
+                                    <span className="font-semibold text-slate-700">Venta: </span>
+                                    {box.ordenVentaId}
+                                  </p>
+                                ) : null}
+                              </div>
+                            ) : null
+                          }
+                        />
+                      ) : (
+                        <EmptyZonaSlot
+                          key={`jefe-entrada-empty-${idx}`}
+                          variant="entrada"
+                          label={idx + 1}
+                        />
+                      ),
+                    )}
+                  </ZonaCuatroSlotsRow>
+                  {sortedInboundBoxes.length === 0 ? (
+                    <p className="text-center text-[11px] text-emerald-900/85">No hay cajas en ingreso.</p>
+                  ) : null}
+                  {sortedInboundBoxes.length > ZONA_ENTRADA_SALIDA_SLOTS ? (
+                    <p className="text-center text-[10px] text-emerald-900/80">
+                      Mostrando {ZONA_ENTRADA_SALIDA_SLOTS} de {sortedInboundBoxes.length} cajas en ingreso.
+                    </p>
                   ) : null}
                 </div>
-                {/* Indicadores de alertas y ocupadas para jefe */}
-                <div className="flex items-center gap-2 sm:justify-end sm:ml-auto">
-                  {bodegaHighTempAlerts.length > 0 && (
-                    <button
-                      className="flex items-center px-2 py-0.5 rounded-full bg-[#e6003a] hover:bg-[#c20030] transition text-white relative shadow focus:outline-none min-h-6 min-w-6"
-                      style={{ fontSize: "12px", height: "24px" }}
-                      title="Ver alertas de temperatura en bodega"
-                      onClick={() => setShowAlertModal(true)}
-                    >
-                      <FiAlertTriangle className="w-4 h-4 mr-1" />
-                      <span className="text-[11px] font-semibold leading-none">
-                        {bodegaHighTempAlerts.length}
-                      </span>
-                    </button>
-                  )}
-                  {/* Botón de llamados solo si hay llamados activos */}
-                  {llamadasJefe.length > 0 && (
-                    <>
-                      <button
-                        className="flex items-center px-2 py-0.5 rounded-full bg-yellow-200 hover:bg-yellow-300 transition text-blue-900 relative shadow focus:outline-none min-h-6 min-w-6"
-                        style={{ fontSize: "12px", height: "24px" }}
-                        title="Ver llamados"
-                        onClick={() => setShowLlamadosModal(true)}
-                      >
-                        <RiUserReceivedLine />
-                      </button>
-                      {showLlamadosModal && (
+              </div>
+            </div>
+            <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+            <div className="relative flex w-full shrink-0 flex-col rounded-xl border border-slate-200 bg-white px-4 pb-8 pt-4 shadow-sm sm:px-6 sm:pb-10 sm:pt-5">
+              <div className="flex min-w-0 flex-col">
+              <div className="mb-5 flex min-w-0 flex-col gap-4 sm:mb-6 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex min-w-0 flex-wrap items-center gap-2">
+                  <h2 className="flex min-w-0 items-center gap-2.5 text-[17px] font-bold leading-tight tracking-tight text-slate-900 sm:text-lg">
+                    <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-violet-100 text-violet-600">
+                      <FiArchive className="h-[18px] w-[18px] sm:h-5 sm:w-5" aria-hidden />
+                    </span>
+                    <span>Almacenamiento</span>
+                  </h2>
+                </div>
+                <div className="flex flex-wrap items-center gap-2 sm:ml-auto sm:justify-end">
+                  <button
+                    type="button"
+                    className={
+                      bodegaHighTempAlerts.length === 0
+                        ? "inline-flex h-8 shrink-0 items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-2.5 text-xs font-semibold text-slate-500 transition hover:bg-slate-100"
+                        : "inline-flex h-8 shrink-0 items-center gap-1 rounded-full bg-[#e6003a] px-2.5 text-xs font-semibold text-white shadow-sm transition hover:bg-[#c20030] focus:outline-none focus-visible:ring-2 focus-visible:ring-red-400/50"
+                    }
+                    title="Ver alertas de temperatura en bodega"
+                    onClick={() => setShowAlertModal(true)}
+                  >
+                    <FiAlertTriangle className="h-4 w-4 shrink-0" aria-hidden />
+                    <span className="text-[11px] font-semibold tabular-nums leading-none">
+                      {bodegaHighTempAlerts.length}
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    className={
+                      llamadasJefe.length === 0
+                        ? "inline-flex h-8 shrink-0 items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-2.5 text-xs font-semibold text-slate-500 transition hover:bg-slate-100"
+                        : "inline-flex h-8 shrink-0 items-center gap-1 rounded-full bg-yellow-200 px-2.5 text-xs font-semibold text-blue-900 shadow-sm transition hover:bg-yellow-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-yellow-400/60"
+                    }
+                    title={`Llamados pendientes (${llamadasJefe.length})`}
+                    aria-label={`Ver llamados, ${llamadasJefe.length} pendientes`}
+                    onClick={() => setShowLlamadosModal(true)}
+                  >
+                    <RiUserReceivedLine className="h-4 w-4 shrink-0" aria-hidden />
+                    <span className="text-[11px] font-semibold tabular-nums leading-none">
+                      {llamadasJefe.length}
+                    </span>
+                  </button>
+                  <VentasEnCursoMapButton
+                    clients={clients}
+                    warehouseCodeCuenta={warehouseCodeCuenta}
+                    operariosBodega={operariosBodega}
+                    tareasProcesamientoOperario={tareasProcesamientoOperario}
+                    onPushTareaProcesamientoOperario={onPushTareaProcesamientoOperario}
+                  />
+                </div>
+              </div>
+              {showLlamadosModal && (
                         <div
                           className="fixed inset-0 z-50 flex items-center justify-center backdrop-blur-sm bg-black/10 animate-fade-in p-2 sm:p-4"
                           role="dialog"
@@ -1229,10 +1471,6 @@ export default function OrdenesJefeSection(props: {
                           </div>
                         </div>
                       )}
-                    </>
-                  )}
-                </div>
-              </div>
               {showAlertModal && (
                 <div
                   className="fixed inset-0 z-50 flex items-center justify-center backdrop-blur-sm bg-black/10 animate-fade-in p-2 sm:p-4"
@@ -1410,81 +1648,41 @@ export default function OrdenesJefeSection(props: {
                   </div>
                 </div>
               )}
-              <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-4">
-                {slots.slice(0, 12).map((slot) => {
-                  const isOccupied = slot.autoId && slot.autoId.trim() !== "";
-                  const tone = isOccupied ? occupiedSlotVisualClasses(slot as Slot) : null;
-                  return (
-                    <div
-                      key={slot.position}
-                      className={`relative flex flex-col items-center justify-center rounded-3xl border p-2 sm:p-4 transition ${
-                        isOccupied && tone
-                          ? tone.card
-                          : "border border-slate-300 bg-slate-50 text-slate-400"
-                      }`}
-                      style={{ minHeight: 90, maxWidth: 140 }}
-                      onClick={() => isOccupied && setSelectedBoxModal(slot)}
-                    >
-                      <span className="absolute top-1 left-1 text-[9px] font-semibold rounded-full px-1 py-0.5  text-slate-600">
-                        {slot.position}
-                      </span>
-                      {isOccupied && tone ? (
-                        <>
-                          <div className="mb-1">
-                            <FiBox className={`w-4 h-4 sm:w-6 sm:h-6 ${tone.icon}`} />
-                          </div>
-                          <div className="font-semibold text-[clamp(0.65rem,1vw,0.85rem)] text-center truncate w-full">
-                            {slot.name || "Sin nombre"}
-                          </div>
-                          <div className="text-[clamp(0.7rem,1.5vw,0.85rem)] mt-1 text-center truncate w-full">
-                            {slot.autoId}
-                          </div>
-                          <div
-                            className={`mt-2 text-[clamp(0.7rem,1.5vw,0.85rem)] font-medium rounded-full px-1.5 sm:px-3 py-0.5 inline-block ${tone.pill}`}
-                          >
-                            {typeof slot.temperature === "number"
-                              ? `${slot.temperature} °C`
-                              : "Sin temperatura"}
-                          </div>
-                        </>
-                      ) : (
-                        <div className="flex flex-col items-center gap-1">
-                          <div className="border-2 border-dashed border-slate-300 rounded-3xl w-7 h-7 sm:w-9 sm:h-9 flex items-center justify-center">
-                            <span className="text-base sm:text-lg">+</span>
-                          </div>
-                          <div className="text-[clamp(0.7rem,1.5vw,0.85rem)] mt-1">
-                            Vacía
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-2 sm:gap-4 md:grid-cols-3 md:gap-4 lg:grid-cols-4 lg:gap-4">
+                {slots.slice(0, 12).map((slot) => (
+                  <SlotCard
+                    key={slot.position}
+                    slot={slot}
+                    isSelected={false}
+                    onSelect={() => undefined}
+                    clients={clients}
+                    slotCantidadContext={slotCantidadProcesamientoCtx}
+                    detalleChildren={
+                      slotLooksLikeProcesamiento(slot) ? (
+                        <div className="space-y-2 text-sm">
+                          <div className="flex flex-col gap-0.5 sm:flex-row sm:items-baseline sm:gap-2">
+                            <span className="shrink-0 font-bold text-slate-700">
+                              Producto secundario (procesado):
+                            </span>
+                            <span className="min-w-0 break-words text-slate-600">
+                              {secondaryTitleFromSlot(slot) || "—"}
+                            </span>
                           </div>
                         </div>
-                      )}
-                    </div>
-                  );
-                })}
+                      ) : null
+                    }
+                  />
+                ))}
               </div>
-              <div className="flex flex-wrap items-center justify-end mt-2 sm:mt-4 gap-x-3 gap-y-1 sm:gap-3">
-                <div className="flex items-center gap-1">
-                  <span className="h-2.5 w-3 sm:h-3 sm:w-4 rounded-sm bg-cyan-200 border border-cyan-400 inline-block" />
-                  <span className="text-[10px] sm:text-xs text-slate-600">Ocupada (primario)</span>
-                </div>
-                <div className="flex items-center gap-1">
-                  <span className="h-2.5 w-3 sm:h-3 sm:w-4 rounded-sm bg-sky-500 border border-sky-700 inline-block" />
-                  <span className="text-[10px] sm:text-xs text-slate-600">Ocupada (procesado)</span>
-                </div>
-                <div className="flex items-center gap-1">
-                  <span className="w-2 h-2 sm:w-3 sm:h-3 rounded-full bg-slate-300 inline-block"></span>
-                  <span className="text-[10px] sm:text-xs text-slate-600">
-                    Vacía
-                  </span>
-                </div>
               </div>
             </div>
-            <div className="mt-3 w-full rounded-2xl border border-sky-200 bg-white p-3 shadow-md sm:p-4">
+            <div className="mt-3 flex min-h-0 w-full flex-1 flex-col rounded-2xl border border-sky-200 bg-white p-3 shadow-md sm:p-4">
               <ProcesamientoOrdenesActivasBodega
                 clients={clients}
                 warehouseCodeCuenta={warehouseCodeCuenta}
                 warehouseId={warehouseId}
                 slots={slots as Slot[]}
-                layout="cards"
+                layout="slots4"
                 sessionUid={sessionUid}
                 sessionRole={sessionRole}
                 operariosBodega={operariosBodega}
@@ -1492,61 +1690,80 @@ export default function OrdenesJefeSection(props: {
                 tareasProcesamientoOperario={tareasProcesamientoOperario}
                 onPushTareaProcesamientoOperario={onPushTareaProcesamientoOperario}
                 onProcesamientoTerminadoInventario={onProcesamientoTerminadoInventario}
+                ordenesBodegaPendientes={ordenesBodegaPendientes}
+                availableBodegaTargets={availableBodegaTargets}
+                onCrearOrdenBodega={handleCreateOrder}
+                productosCatalogo={productosCatalogo}
               />
             </div>
             </div>
-            <div className="flex h-full min-h-0 flex-col items-start rounded-3xl border border-pink-200 bg-pink-50 p-4 sm:p-6 min-h-30 w-full max-w-full sm:max-w-xs lg:max-w-60">
-              <h3 className="text-base sm:text-lg font-semibold text-pink-600 mb-2 flex items-center gap-2">
-                <span className="inline-block">
-                  <FiBox className="w-5 h-5 text-pink-400" />
-                </span>
-                Salida
-              </h3>
-              <div className="w-full flex flex-col gap-2 sm:gap-4">
-                {sortedOutboundBoxes.length === 0 ? (
-                  <div className="text-xs text-pink-500">
-                    No hay cajas en salida.
+            <div className="flex h-full min-h-0 w-full max-w-full flex-col rounded-3xl border border-pink-300 bg-pink-100/90 p-4 sm:max-w-lg sm:p-6">
+              <div className="mb-2 flex min-w-0 shrink-0 flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <h3 className="flex min-w-0 shrink-0 items-center gap-2 text-[17px] font-bold leading-tight tracking-tight text-pink-900 sm:text-lg">
+                  <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-pink-200/90 text-pink-900">
+                    <HiArrowRightOnRectangle className="h-[18px] w-[18px] sm:h-5 sm:w-5" aria-hidden />
+                  </span>
+                  Salida
+                </h3>
+                {renderStatusButtons ? (
+                  <div className="flex shrink-0 flex-wrap items-center gap-2 sm:ml-auto sm:justify-end">
+                    {renderStatusButtons("salida")}
                   </div>
-                ) : (
-                  <>
-                    {outboundPageItems.map((box, idx) => (
-                      <BodegaZonaCajaCard
-                        key={`${box.position}-${box.autoId ?? "no-id"}-${idx}`}
-                        box={box}
-                        variant="salida"
-                      />
-                    ))}
-                    {sortedOutboundBoxes.length > ITEMS_PER_PAGE ? (
-                      <div className="flex items-center justify-between mt-2 text-[11px] sm:text-xs text-pink-700">
-                        <button
-                          type="button"
-                          className="rounded-lg border border-pink-200 px-2 py-1 bg-white font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
-                          onClick={() => setSalidaPage((prev) => Math.max(0, prev - 1))}
-                          disabled={salidaPage === 0}
-                        >
-                          Anterior
-                        </button>
-                        <span className="font-semibold">
-                          {salidaPage + 1} de {salidaTotalPages}
-                        </span>
-                        <button
-                          type="button"
-                          className="rounded-lg border border-pink-200 px-2 py-1 bg-white font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
-                          onClick={() =>
-                            setSalidaPage((prev) =>
-                              Math.min(salidaTotalPages - 1, prev + 1),
-                            )
+                ) : null}
+              </div>
+              <div className="flex min-h-0 w-full flex-1 flex-col justify-between gap-3">
+                <div className="flex flex-col gap-2 sm:gap-4">
+                  <ZonaCuatroSlotsRow layout="dosPorColumna" slotCount={8}>
+                    {padToLength(outboundSlotsItems, ZONA_ENTRADA_SALIDA_SLOTS).map((box, idx) =>
+                      box ? (
+                        <BodegaZonaCajaCard
+                          key={`${box.position}-${box.autoId ?? "no-id"}-${idx}`}
+                          box={box}
+                          variant="salida"
+                          cornerLabel={idx + 1}
+                          clients={clients}
+                          detalleChildren={
+                            box.ordenCompraId || box.ordenVentaId ? (
+                              <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/80 px-4 py-3 text-xs text-slate-600">
+                                {box.ordenCompraId ? (
+                                  <p>
+                                    <span className="font-semibold text-slate-700">OC: </span>
+                                    {box.ordenCompraId}
+                                  </p>
+                                ) : null}
+                                {box.ordenVentaId ? (
+                                  <p className={box.ordenCompraId ? "mt-1.5" : ""}>
+                                    <span className="font-semibold text-slate-700">Venta: </span>
+                                    {box.ordenVentaId}
+                                  </p>
+                                ) : null}
+                              </div>
+                            ) : null
                           }
-                          disabled={salidaPage >= salidaTotalPages - 1}
-                        >
-                          Siguiente
-                        </button>
-                      </div>
-                    ) : null}
-                  </>
-                )}
+                        />
+                      ) : (
+                        <EmptyZonaSlot
+                          key={`jefe-salida-empty-${idx}`}
+                          variant="salida"
+                          label={idx + 1}
+                        />
+                      ),
+                    )}
+                  </ZonaCuatroSlotsRow>
+                  {sortedOutboundBoxes.length === 0 ? (
+                    <p className="text-center text-[11px] text-pink-900/80">No hay cajas en salida.</p>
+                  ) : null}
+                  {sortedOutboundBoxes.length > ZONA_ENTRADA_SALIDA_SLOTS ? (
+                    <p className="text-center text-[10px] text-pink-900/75">
+                      Mostrando {ZONA_ENTRADA_SALIDA_SLOTS} de {sortedOutboundBoxes.length} cajas en salida.
+                    </p>
+                  ) : null}
+                </div>
               </div>
             </div>
+          </div>
+          <div className="mt-4 flex w-full justify-center rounded-2xl border border-slate-200/80 bg-slate-50/60 px-3 py-2.5 sm:mt-5 sm:px-4">
+            <BodegaSlotLegend variant="global" align="center" spacing="none" />
           </div>
         </div>
       )}
@@ -1594,24 +1811,21 @@ export default function OrdenesJefeSection(props: {
             icon={<FiPackage className="h-4 w-4" />}
             hint="Solo aparecen cajas que aún no tienen una orden pendiente hacia bodega."
           >
-            <select
-              value={ingresoOrderSourcePosition}
-              onChange={(event) =>
-                setIngresoOrderSourcePosition(Number(event.target.value))
+            <JefeOrderPickerTrigger
+              accent="emerald"
+              value={ingresoCajaDisplayText}
+              placeholder={
+                availableInboundForOrders.length === 0
+                  ? "Sin cajas disponibles"
+                  : "Tocá o usá la lupa para elegir caja…"
               }
+              onOpen={() => {
+                setIngresoCajaSearch("");
+                setJefeInteractivePicker({ flow: "ingreso", step: "caja" });
+              }}
               disabled={availableInboundForOrders.length === 0}
-              className={`${jefeSelectClass} ${jefeModalAccentClass.emerald.selectFocus} disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400`}
-            >
-              {availableInboundForOrders.length === 0 ? (
-                <option value={1}>Sin cajas disponibles</option>
-              ) : (
-                sortByPosition(availableInboundForOrders).map((box) => (
-                  <option key={box.position} value={box.position}>
-                    {`Ingreso ${box.position} — ${box.name} (${box.autoId}) · ${box.client || "—"}`}
-                  </option>
-                ))
-              )}
-            </select>
+              aria-label="Elegir caja en ingresos"
+            />
             {availableInboundForOrders.length === 0 ? (
               <JefeModalEmptyHint>
                 No hay cajas en ingreso. Cuando el custodio registre mercancía, vas a poder elegirla acá.
@@ -1623,24 +1837,20 @@ export default function OrdenesJefeSection(props: {
             icon={<FiGrid className="h-4 w-4" />}
             hint="El operario ubicará la caja en el casillero que elijas."
           >
-            <select
-              value={ingresoOrderTargetPosition}
-              onChange={(event) =>
-                setIngresoOrderTargetPosition(Number(event.target.value))
+            <JefeOrderPickerTrigger
+              accent="emerald"
+              value={
+                availableBodegaTargets.length === 0 ? "" : `Casillero ${ingresoOrderTargetPosition}`
               }
+              placeholder={
+                availableBodegaTargets.length === 0
+                  ? "Sin posiciones libres"
+                  : "Tocá o usá la lupa para elegir casillero…"
+              }
+              onOpen={() => setJefeInteractivePicker({ flow: "ingreso", step: "posicion" })}
               disabled={availableBodegaTargets.length === 0}
-              className={`${jefeSelectClass} ${jefeModalAccentClass.emerald.selectFocus} disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400`}
-            >
-              {availableBodegaTargets.length === 0 ? (
-                <option value={1}>Sin posiciones libres</option>
-              ) : (
-                availableBodegaTargets.map((position) => (
-                  <option key={position} value={position}>
-                    Casillero {position}
-                  </option>
-                ))
-              )}
-            </select>
+              aria-label="Elegir posición en bodega"
+            />
             {availableBodegaTargets.length === 0 ? (
               <JefeModalEmptyHint>
                 El mapa está lleno o no hay cupos libres. Liberá una posición o revisá la capacidad de la bodega.
@@ -1650,10 +1860,11 @@ export default function OrdenesJefeSection(props: {
         </JefeOrderModalShell>
       )}
       {isJefe && orderModalType === "bodega" && (
+        <>
         <JefeOrderModalShell
           id="jefe-modal-bodega"
           title="Transferir cajas"
-          description="Mové mercancía de un casillero a otro dentro del mapa de bodega."
+          description="Mové mercancía de un casillero a otro dentro del almacenamiento."
           accent="blue"
           icon={<FiRepeat className="h-6 w-6" strokeWidth={2} />}
           onClose={() => setOrderModalType(null)}
@@ -1665,11 +1876,15 @@ export default function OrdenesJefeSection(props: {
               <button
                 type="button"
                 disabled={
-                  availableBodegaTargets.length === 0 ||
-                  (trasladoBodegaOrigenTipo === "bodega" && availableBodegaForOrders.length === 0) ||
+                  (trasladoBodegaOrigenTipo === "bodega" &&
+                    (availableBodegaTargets.length === 0 || availableBodegaForOrders.length === 0)) ||
                   (trasladoBodegaOrigenTipo === "procesamiento" &&
-                    (solicitudesProcesamientoTerminadasDisponibles.length === 0 ||
-                      !trasladoProcesamientoKey))
+                    (trasladoProcOpciones.length === 0 ||
+                      !trasladoProcesamientoKey ||
+                      (trasladoSeleccionado?.kind === "procesado" &&
+                        (availableBodegaTargets.length === 0 ||
+                          !bodegaOrderTargetPosition ||
+                          !availableBodegaTargets.includes(bodegaOrderTargetPosition)))))
                 }
                 onClick={() => {
                   if (trasladoBodegaOrigenTipo === "bodega") {
@@ -1680,13 +1895,37 @@ export default function OrdenesJefeSection(props: {
                       targetPosition: bodegaOrderTargetPosition,
                     });
                   } else {
-                    const parts = trasladoProcesamientoKey.split("::");
-                    const cid = parts[0]?.trim() ?? "";
-                    const sid = parts[1]?.trim() ?? "";
-                    const row = solicitudesProcesamientoTerminadasDisponibles.find(
-                      (s) => s.clientId === cid && s.id === sid,
-                    );
-                    if (!row) return;
+                    const opt = trasladoSeleccionado;
+                    if (!opt) return;
+                    const row = opt.row;
+                    if (opt.kind === "desperdicio") {
+                      const sk = Number(row.sobranteKg) || 0;
+                      handleCreateOrder({
+                        destination: "a_bodega",
+                        sourceZone: "procesamiento",
+                        sourcePosition: 0,
+                        procesamientoOrigen: {
+                          cuentaClientId: row.clientId,
+                          solicitudId: row.id,
+                          numero: row.numero,
+                          productoPrimarioTitulo: row.productoPrimarioTitulo,
+                          productoSecundarioTitulo: row.productoSecundarioTitulo,
+                          productoPrimarioId: row.productoPrimarioId,
+                          cantidadPrimario: row.cantidadPrimario,
+                          unidadPrimarioVisualizacion: "peso",
+                          estimadoUnidadesSecundario:
+                            typeof row.estimadoUnidadesSecundario === "number" &&
+                            Number.isFinite(row.estimadoUnidadesSecundario)
+                              ? row.estimadoUnidadesSecundario
+                              : row.estimadoUnidadesSecundario === null
+                                ? null
+                                : undefined,
+                          rolDevolucion: "desperdicio",
+                          sobranteKg: sk,
+                        },
+                      });
+                      return;
+                    }
                     const uv = row.unidadPrimarioVisualizacion;
                     handleCreateOrder({
                       destination: "a_bodega",
@@ -1710,6 +1949,7 @@ export default function OrdenesJefeSection(props: {
                             : row.estimadoUnidadesSecundario === null
                               ? null
                               : undefined,
+                        rolDevolucion: "procesado",
                       },
                     });
                   }
@@ -1722,25 +1962,26 @@ export default function OrdenesJefeSection(props: {
           }
         >
           <JefeModalField label="Destino de la orden" icon={<FiMapPin className="h-4 w-4" />}>
-            <select
-              value="a_bodega"
-              disabled
+            <input
+              readOnly
+              value="Bodega (mapa interno)"
               className={`${jefeReadonlyClass} cursor-not-allowed opacity-90`}
-            >
-              <option value="a_bodega">Bodega (mapa interno)</option>
-            </select>
+              tabIndex={-1}
+              aria-label="Destino de la orden"
+            />
           </JefeModalField>
           <JefeModalField label="Origen" icon={<FiBox className="h-4 w-4" />}>
-            <select
-              value={trasladoBodegaOrigenTipo}
-              onChange={(e) =>
-                setTrasladoBodegaOrigenTipo(e.target.value === "procesamiento" ? "procesamiento" : "bodega")
+            <JefeOrderPickerTrigger
+              accent="blue"
+              value={
+                trasladoBodegaOrigenTipo === "bodega"
+                  ? "Bodega (casillero ocupado)"
+                  : "Procesamiento (solo órdenes terminadas)"
               }
-              className={`${jefeSelectClass} ${jefeModalAccentClass.blue.selectFocus}`}
-            >
-              <option value="bodega">Bodega (casillero ocupado)</option>
-              <option value="procesamiento">Procesamiento (solo órdenes terminadas)</option>
-            </select>
+              placeholder="Tocá o usá la lupa para elegir origen…"
+              onOpen={() => setJefeInteractivePicker({ flow: "traslado", step: "origen" })}
+              aria-label="Elegir origen del traslado"
+            />
           </JefeModalField>
           {trasladoBodegaOrigenTipo === "bodega" ? (
             <JefeModalField
@@ -1748,24 +1989,21 @@ export default function OrdenesJefeSection(props: {
               icon={<FiPackage className="h-4 w-4" />}
               hint="Cajas ocupadas en el mapa que aún no tienen orden de traslado pendiente."
             >
-              <select
-                value={bodegaOrderSourcePosition}
-                onChange={(event) =>
-                  setBodegaOrderSourcePosition(Number(event.target.value))
+              <JefeOrderPickerTrigger
+                accent="blue"
+                value={trasladoCajaDisplayText}
+                placeholder={
+                  availableBodegaForOrders.length === 0
+                    ? "Sin cajas disponibles"
+                    : "Tocá o usá la lupa para elegir caja…"
                 }
+                onOpen={() => {
+                  setTrasladoCajaSearch("");
+                  setJefeInteractivePicker({ flow: "traslado", step: "caja" });
+                }}
                 disabled={availableBodegaForOrders.length === 0}
-                className={`${jefeSelectClass} ${jefeModalAccentClass.blue.selectFocus} disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400`}
-              >
-                {availableBodegaForOrders.length === 0 ? (
-                  <option value={1}>Sin cajas en bodega</option>
-                ) : (
-                  sortByPosition(availableBodegaForOrders).map((box) => (
-                    <option key={box.position} value={box.position}>
-                      {`Casillero ${box.position} — ${box.name} (${box.autoId}) · ${box.client || "—"}`}
-                    </option>
-                  ))
-                )}
-              </select>
+                aria-label="Elegir caja en bodega"
+              />
               {availableBodegaForOrders.length === 0 ? (
                 <JefeModalEmptyHint>
                   No hay cajas disponibles para trasladar. Verificá el mapa o si ya hay órdenes pendientes.
@@ -1776,71 +2014,90 @@ export default function OrdenesJefeSection(props: {
             <JefeModalField
               label="Orden terminada (procesamiento)"
               icon={<FiCpu className="h-4 w-4" />}
-              hint="Solo aparecen solicitudes en estado Terminado y sin orden de devolución al mapa pendiente."
+              hint="Incluye devolver el procesado (secundario) a un casillero libre o reintegrar sobrante (kg fraccionarios del primario) al mapa."
             >
-              <select
-                value={trasladoProcesamientoKey}
-                onChange={(e) => setTrasladoProcesamientoKey(e.target.value)}
-                disabled={solicitudesProcesamientoTerminadasDisponibles.length === 0}
-                className={`${jefeSelectClass} ${jefeModalAccentClass.blue.selectFocus} disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400`}
-              >
-                {solicitudesProcesamientoTerminadasDisponibles.length === 0 ? (
-                  <option value="">Sin órdenes terminadas disponibles</option>
-                ) : (
-                  solicitudesProcesamientoTerminadasDisponibles.map((row) => {
-                    const key = `${row.clientId}::${row.id}`;
-                    const u =
-                      row.unidadPrimarioVisualizacion === "peso"
-                        ? "Peso"
-                        : row.unidadPrimarioVisualizacion === "cantidad"
-                          ? "Cant."
-                          : "";
-                    const qty = Number(row.cantidadPrimario) || 0;
-                    const qtyStr = Number.isInteger(qty)
-                      ? String(qty)
-                      : qty.toLocaleString("es-CO", { maximumFractionDigits: 4 });
-                    return (
-                      <option key={key} value={key}>
-                        {`${row.numero} — ${qtyStr}${u ? ` · ${u}` : ""} · ${row.productoPrimarioTitulo.slice(0, 48)}${row.productoPrimarioTitulo.length > 48 ? "…" : ""}`}
-                      </option>
-                    );
-                  })
-                )}
-              </select>
-              {solicitudesProcesamientoTerminadasDisponibles.length === 0 ? (
+              <JefeOrderPickerTrigger
+                accent="blue"
+                value={trasladoProcesamientoDisplayText}
+                placeholder={
+                  trasladoProcOpciones.length === 0
+                    ? "Sin traslados pendientes"
+                    : "Tocá o usá la lupa para elegir orden…"
+                }
+                onOpen={() => {
+                  setTrasladoProcSearch("");
+                  setJefeInteractivePicker({ flow: "traslado", step: "procesamiento" });
+                }}
+                disabled={trasladoProcOpciones.length === 0}
+                aria-label="Elegir orden de procesamiento terminada"
+              />
+              {trasladoProcOpciones.length === 0 ? (
                 <JefeModalEmptyHint>
-                  No hay órdenes de procesamiento terminadas para devolver, o ya tienen una orden de traslado
-                  pendiente.
+                  No hay traslados pendientes (procesado o sobrante), o ya hay una orden creada para esa solicitud.
                 </JefeModalEmptyHint>
+              ) : null}
+              {trasladoSeleccionado ? (
+                <p className="mt-2 rounded-xl border border-sky-100 bg-sky-50/90 px-3 py-2 text-xs leading-snug text-sky-950">
+                  {trasladoSeleccionado.kind === "desperdicio" ? (
+                    <>
+                      <span className="font-semibold">Sobrante (kg):</span> al crear la orden, los kg se{" "}
+                      <strong>suman automáticamente</strong> al <strong>mismo casillero</strong> donde está el producto
+                      primario en el mapa (la app busca la misma posición que usó el inventario al sacar material a
+                      proceso). <span className="text-sky-800/90">No elegís casillero.</span> La{" "}
+                      <strong>merma</strong> no se devuelve: queda solo en el reporte.
+                    </>
+                  ) : (
+                    <>
+                      <span className="font-semibold">Producto procesado (secundario):</span> elegí un{" "}
+                      <strong>casillero libre</strong> abajo; es el destino del resultado del procesamiento, no del
+                      sobrante.
+                    </>
+                  )}
+                </p>
+              ) : trasladoProcOpciones.length > 0 ? (
+                <p className="mt-2 text-xs text-slate-500">
+                  En la lista hay hasta <strong>dos filas</strong> por la misma orden si falta devolver ambas cosas:
+                  una para <strong>sobrante</strong> (kg fraccionarios al primario) y otra para el{" "}
+                  <strong>procesado</strong> (casillero libre).
+                </p>
               ) : null}
             </JefeModalField>
           )}
+          {trasladoBodegaOrigenTipo === "procesamiento" && trasladoSeleccionado?.kind === "desperdicio" ? (
+            <JefeModalField label="Destino en mapa" icon={<FiGrid className="h-4 w-4" />}>
+              <input
+                readOnly
+                value="Automático: casillero del producto primario (misma coincidencia que el inventario)"
+                className={`${jefeReadonlyClass} cursor-not-allowed opacity-90`}
+                tabIndex={-1}
+                aria-label="Destino del sobrante"
+              />
+            </JefeModalField>
+          ) : (
           <JefeModalField label="Nueva posición" icon={<FiGrid className="h-4 w-4" />}>
-            <select
-              value={bodegaOrderTargetPosition}
-              onChange={(event) =>
-                setBodegaOrderTargetPosition(Number(event.target.value))
+            <JefeOrderPickerTrigger
+              accent="blue"
+              value={
+                availableBodegaTargets.length === 0 ? "" : `Casillero ${bodegaOrderTargetPosition}`
               }
+              placeholder={
+                availableBodegaTargets.length === 0
+                  ? "Sin posiciones libres"
+                  : "Tocá o usá la lupa para elegir casillero…"
+              }
+              onOpen={() => setJefeInteractivePicker({ flow: "traslado", step: "posicion" })}
               disabled={availableBodegaTargets.length === 0}
-              className={`${jefeSelectClass} ${jefeModalAccentClass.blue.selectFocus} disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400`}
-            >
-              {availableBodegaTargets.length === 0 ? (
-                <option value={1}>Sin posiciones libres</option>
-              ) : (
-                availableBodegaTargets.map((position) => (
-                  <option key={position} value={position}>
-                    Casillero {position}
-                  </option>
-                ))
-              )}
-            </select>
+              aria-label="Elegir casillero de destino"
+            />
             {availableBodegaTargets.length === 0 ? (
               <JefeModalEmptyHint>
                 No quedan casilleros libres. Liberá uno antes de crear la orden de traslado.
               </JefeModalEmptyHint>
             ) : null}
           </JefeModalField>
+          )}
         </JefeOrderModalShell>
+        </>
       )}
       {isJefe && orderModalType === "revisar" && (
         <JefeOrderModalShell
@@ -1875,40 +2132,27 @@ export default function OrdenesJefeSection(props: {
             icon={<FiPackage className="h-4 w-4" />}
             hint="Las opciones se agrupan por zona para ubicarla más rápido."
           >
-            <select
-              value={reviewSourcePosition}
-              onChange={(event) =>
-                setReviewSourcePosition(Number(event.target.value))
+            <JefeOrderPickerTrigger
+              accent="orange"
+              value={revisarDisplayText}
+              placeholder={
+                availableInboundForOrders.length === 0 &&
+                reviewBodegaList.length === 0 &&
+                outboundBoxes.length === 0
+                  ? "Sin cajas en el sistema"
+                  : "Tocá o usá la lupa para elegir caja…"
               }
+              onOpen={() => {
+                setRevisarSearch("");
+                setJefeInteractivePicker({ flow: "revisar", step: "caja" });
+              }}
               disabled={
                 availableInboundForOrders.length === 0 &&
                 reviewBodegaList.length === 0 &&
                 outboundBoxes.length === 0
               }
-              className={`${jefeSelectClass} ${jefeModalAccentClass.orange.selectFocus} disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400`}
-            >
-              {[
-                { label: "Ingresos", list: availableInboundForOrders },
-                { label: "Bodega", list: reviewBodegaList },
-                { label: "Salida", list: outboundBoxes },
-              ].map((group) =>
-                group.list.length > 0 ? (
-                  <optgroup key={group.label} label={group.label}>
-                    {sortByPosition(group.list).map((box) => (
-                      <option
-                        key={`${group.label}-${box.position}`}
-                        value={box.position}
-                      >
-                        {`${group.label} ${box.position} — ${box.name} (${box.autoId}) · ${box.client || "—"}`}
-                      </option>
-                    ))}
-                  </optgroup>
-                ) : null,
-              )}
-              {availableInboundForOrders.length === 0 &&
-                reviewBodegaList.length === 0 &&
-                outboundBoxes.length === 0 && <option value={1}>Sin cajas en el sistema</option>}
-            </select>
+              aria-label="Elegir caja a revisar"
+            />
             {availableInboundForOrders.length === 0 &&
             reviewBodegaList.length === 0 &&
             outboundBoxes.length === 0 ? (
@@ -1923,7 +2167,7 @@ export default function OrdenesJefeSection(props: {
         <JefeOrderModalShell
           id="jefe-modal-salida"
           title="Registrar salida"
-          description="La caja pasará del mapa a la zona de salida para preparar el despacho."
+          description="La caja pasará del almacenamiento a la zona de salida para preparar el despacho."
           accent="pink"
           icon={<FiBox className="h-6 w-6" strokeWidth={2} />}
           onClose={() => setOrderModalType(null)}
@@ -1955,26 +2199,23 @@ export default function OrdenesJefeSection(props: {
           <JefeModalField
             label="Caja en bodega"
             icon={<FiPackage className="h-4 w-4" />}
-            hint="Solo cajas del mapa sin orden pendiente hacia salida."
+            hint="Solo cajas del almacenamiento sin orden pendiente hacia salida."
           >
-            <select
-              value={salidaSourcePosition}
-              onChange={(event) =>
-                setSalidaSourcePosition(Number(event.target.value))
+            <JefeOrderPickerTrigger
+              accent="pink"
+              value={salidaCajaDisplayText}
+              placeholder={
+                availableBodegaForOrders.length === 0
+                  ? "Sin cajas disponibles"
+                  : "Tocá o usá la lupa para elegir caja…"
               }
+              onOpen={() => {
+                setSalidaCajaSearch("");
+                setJefeInteractivePicker({ flow: "salida", step: "caja" });
+              }}
               disabled={availableBodegaForOrders.length === 0}
-              className={`${jefeSelectClass} ${jefeModalAccentClass.pink.selectFocus} disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400`}
-            >
-              {availableBodegaForOrders.length === 0 ? (
-                <option value={1}>Sin cajas disponibles</option>
-              ) : (
-                sortByPosition(availableBodegaForOrders).map((box) => (
-                  <option key={box.position} value={box.position}>
-                    {`Casillero ${box.position} — ${box.name} (${box.autoId}) · ${box.client || "—"}`}
-                  </option>
-                ))
-              )}
-            </select>
+              aria-label="Elegir caja para salida"
+            />
             {availableBodegaForOrders.length === 0 ? (
               <JefeModalEmptyHint>
                 No hay cajas en bodega para enviar a salida, o ya tienen una orden asignada.
@@ -1996,6 +2237,376 @@ export default function OrdenesJefeSection(props: {
           </JefeModalField>
         </JefeOrderModalShell>
       )}
+      {jefeInteractivePicker ? (
+        <JefeNestedPickerShell
+          accent={jefePickerAccent(jefeInteractivePicker)}
+          title={jefePickerTitle(jefeInteractivePicker)}
+          onClose={() => setJefeInteractivePicker(null)}
+        >
+          {jefeInteractivePicker.flow === "traslado" && jefeInteractivePicker.step === "origen" ? (
+            <div className="flex flex-col gap-3">
+              <p className="text-sm text-slate-600">
+                Tocá una opción para definir si el traslado sale de un casillero ocupado o de procesamiento.
+              </p>
+              <button
+                type="button"
+                onClick={() => {
+                  setTrasladoBodegaOrigenTipo("bodega");
+                  setJefeInteractivePicker(null);
+                }}
+                className={`rounded-2xl border-2 p-4 text-left transition ${
+                  trasladoBodegaOrigenTipo === "bodega"
+                    ? "border-blue-600 bg-blue-50 shadow-sm"
+                    : "border-slate-200 hover:border-blue-300 hover:bg-slate-50/80"
+                }`}
+              >
+                <p className="font-semibold text-slate-900">Bodega (casillero ocupado)</p>
+                <p className="mt-1 text-sm text-slate-600">
+                  Mové una caja que ya está en el mapa interno de la bodega.
+                </p>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setTrasladoBodegaOrigenTipo("procesamiento");
+                  setJefeInteractivePicker(null);
+                }}
+                className={`rounded-2xl border-2 p-4 text-left transition ${
+                  trasladoBodegaOrigenTipo === "procesamiento"
+                    ? "border-blue-600 bg-blue-50 shadow-sm"
+                    : "border-slate-200 hover:border-blue-300 hover:bg-slate-50/80"
+                }`}
+              >
+                <p className="font-semibold text-slate-900">Procesamiento (solo órdenes terminadas)</p>
+                <p className="mt-1 text-sm text-slate-600">
+                  Devolvé al mapa el resultado de una solicitud ya terminada.
+                </p>
+              </button>
+            </div>
+          ) : null}
+          {jefeInteractivePicker.flow === "traslado" && jefeInteractivePicker.step === "caja" ? (
+            <div className="flex flex-col gap-3">
+              <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Buscar
+              </label>
+              <input
+                type="search"
+                value={trasladoCajaSearch}
+                onChange={(e) => setTrasladoCajaSearch(e.target.value)}
+                placeholder="Casillero, nombre, id o cliente…"
+                className={`w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm ${jefeModalAccentClass.blue.selectFocus}`}
+                autoComplete="off"
+              />
+              {trasladoCajasFiltradas.length === 0 ? (
+                <p className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-4 text-center text-sm text-slate-600">
+                  {availableBodegaForOrders.length === 0
+                    ? "No hay cajas disponibles para trasladar."
+                    : "Ninguna caja coincide con la búsqueda."}
+                </p>
+              ) : (
+                <ul className="flex max-h-[min(44vh,360px)] flex-col gap-2 overflow-y-auto pr-0.5 [scrollbar-gutter:stable]">
+                  {trasladoCajasFiltradas.map((box) => {
+                    const selected = bodegaOrderSourcePosition === box.position;
+                    return (
+                      <li key={box.position}>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setBodegaOrderSourcePosition(box.position);
+                            setJefeInteractivePicker(null);
+                          }}
+                          className={`w-full rounded-xl px-3 py-3 text-left text-sm transition ${jefePickerCardClass(selected, "blue")} ${
+                            selected ? "" : "hover:border-blue-300 hover:bg-slate-50/90"
+                          }`}
+                        >
+                          <span className="font-semibold text-slate-900">Casillero {box.position}</span>
+                          <span className="mt-0.5 block text-slate-700">{box.name}</span>
+                          <span className="mt-1 block font-mono text-xs text-slate-500">
+                            {box.autoId} · {box.client || "—"}
+                          </span>
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </div>
+          ) : null}
+          {jefeInteractivePicker.flow === "traslado" && jefeInteractivePicker.step === "posicion" ? (
+            <div className="flex flex-col gap-3">
+              <p className="text-sm text-slate-600">
+                Elegí un casillero libre del almacenamiento para el destino del traslado.
+              </p>
+              {availableBodegaTargets.length === 0 ? (
+                <p className="rounded-xl border border-amber-200/80 bg-amber-50 px-3 py-4 text-center text-sm text-amber-950">
+                  No hay posiciones libres en este momento.
+                </p>
+              ) : (
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                  {availableBodegaTargets.map((position) => {
+                    const selected = bodegaOrderTargetPosition === position;
+                    return (
+                      <button
+                        key={position}
+                        type="button"
+                        onClick={() => {
+                          setBodegaOrderTargetPosition(position);
+                          setJefeInteractivePicker(null);
+                        }}
+                        className={`rounded-xl px-2 py-3 text-center text-sm font-semibold transition ${
+                          selected
+                            ? "border-2 border-blue-600 bg-blue-50 text-blue-900"
+                            : "border-2 border-slate-200 text-slate-800 hover:border-blue-300 hover:bg-slate-50"
+                        }`}
+                      >
+                        Casillero {position}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          ) : null}
+          {jefeInteractivePicker.flow === "traslado" && jefeInteractivePicker.step === "procesamiento" ? (
+            <div className="flex flex-col gap-3">
+              <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Buscar
+              </label>
+              <input
+                type="search"
+                value={trasladoProcSearch}
+                onChange={(e) => setTrasladoProcSearch(e.target.value)}
+                placeholder="Número de orden, producto…"
+                className={`w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm ${jefeModalAccentClass.blue.selectFocus}`}
+                autoComplete="off"
+              />
+              {trasladoProcFiltradas.length === 0 ? (
+                <p className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-4 text-center text-sm text-slate-600">
+                  {trasladoProcOpciones.length === 0
+                    ? "No hay órdenes terminadas con traslado pendiente."
+                    : "Ninguna orden coincide con la búsqueda."}
+                </p>
+              ) : (
+                <ul className="flex max-h-[min(44vh,360px)] flex-col gap-2 overflow-y-auto pr-0.5 [scrollbar-gutter:stable]">
+                  {trasladoProcFiltradas.map((opt) => {
+                    const { row, key, kind } = opt;
+                    const prim = primarioCatalogoPorId(productosCatalogo, row.productoPrimarioId);
+                    const qtyLine = cantidadPrimarioProcesamientoTexto(row, prim);
+                    const selected = trasladoProcesamientoKey === key;
+                    const sub =
+                      kind === "desperdicio"
+                        ? `Sobrante: ${kgSobranteParaDevolucionMapa(row).toLocaleString("es-CO", { maximumFractionDigits: 4 })} kg al primario en mapa`
+                        : `Procesado (secundario) → casillero libre`;
+                    return (
+                      <li key={key}>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setTrasladoProcesamientoKey(key);
+                            setJefeInteractivePicker(null);
+                          }}
+                          className={`w-full rounded-xl px-3 py-3 text-left text-sm transition ${jefePickerCardClass(selected, "blue")} ${
+                            selected ? "" : "hover:border-blue-300 hover:bg-slate-50/90"
+                          }`}
+                        >
+                          <span className="font-semibold text-slate-900">{row.numero}</span>
+                          <span className="mt-0.5 block text-xs font-medium text-sky-800">{sub}</span>
+                          <span className="mt-0.5 block text-slate-700">
+                            {qtyLine} · {row.productoPrimarioTitulo}
+                          </span>
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </div>
+          ) : null}
+          {jefeInteractivePicker.flow === "ingreso" && jefeInteractivePicker.step === "caja" ? (
+            <div className="flex flex-col gap-3">
+              <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Buscar
+              </label>
+              <input
+                type="search"
+                value={ingresoCajaSearch}
+                onChange={(e) => setIngresoCajaSearch(e.target.value)}
+                placeholder="Posición, nombre, id o cliente…"
+                className={`w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm ${jefeModalAccentClass.emerald.selectFocus}`}
+                autoComplete="off"
+              />
+              {ingresoCajasFiltradas.length === 0 ? (
+                <p className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-4 text-center text-sm text-slate-600">
+                  {availableInboundForOrders.length === 0
+                    ? "No hay cajas en ingresos."
+                    : "Ninguna caja coincide con la búsqueda."}
+                </p>
+              ) : (
+                <ul className="flex max-h-[min(44vh,360px)] flex-col gap-2 overflow-y-auto pr-0.5 [scrollbar-gutter:stable]">
+                  {ingresoCajasFiltradas.map((box) => {
+                    const selected = ingresoOrderSourcePosition === box.position;
+                    return (
+                      <li key={box.position}>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setIngresoOrderSourcePosition(box.position);
+                            setJefeInteractivePicker(null);
+                          }}
+                          className={`w-full rounded-xl px-3 py-3 text-left text-sm transition ${jefePickerCardClass(selected, "emerald")} ${
+                            selected ? "" : "hover:border-emerald-300 hover:bg-slate-50/90"
+                          }`}
+                        >
+                          <span className="font-semibold text-slate-900">Ingreso {box.position}</span>
+                          <span className="mt-0.5 block text-slate-700">{box.name}</span>
+                          <span className="mt-1 block font-mono text-xs text-slate-500">
+                            {box.autoId} · {box.client || "—"}
+                          </span>
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </div>
+          ) : null}
+          {jefeInteractivePicker.flow === "ingreso" && jefeInteractivePicker.step === "posicion" ? (
+            <div className="flex flex-col gap-3">
+              <p className="text-sm text-slate-600">
+                Elegí el casillero libre en bodega donde el operario ubicará la caja.
+              </p>
+              {availableBodegaTargets.length === 0 ? (
+                <p className="rounded-xl border border-amber-200/80 bg-amber-50 px-3 py-4 text-center text-sm text-amber-950">
+                  No hay posiciones libres en este momento.
+                </p>
+              ) : (
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                  {availableBodegaTargets.map((position) => {
+                    const selected = ingresoOrderTargetPosition === position;
+                    return (
+                      <button
+                        key={position}
+                        type="button"
+                        onClick={() => {
+                          setIngresoOrderTargetPosition(position);
+                          setJefeInteractivePicker(null);
+                        }}
+                        className={`rounded-xl px-2 py-3 text-center text-sm font-semibold transition ${
+                          selected
+                            ? "border-2 border-emerald-600 bg-emerald-50 text-emerald-900"
+                            : "border-2 border-slate-200 text-slate-800 hover:border-emerald-300 hover:bg-slate-50"
+                        }`}
+                      >
+                        Casillero {position}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          ) : null}
+          {jefeInteractivePicker.flow === "revisar" && jefeInteractivePicker.step === "caja" ? (
+            <div className="flex flex-col gap-3">
+              <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Buscar
+              </label>
+              <input
+                type="search"
+                value={revisarSearch}
+                onChange={(e) => setRevisarSearch(e.target.value)}
+                placeholder="Zona, casillero, nombre, id…"
+                className={`w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm ${jefeModalAccentClass.orange.selectFocus}`}
+                autoComplete="off"
+              />
+              {revisarFiltradas.length === 0 ? (
+                <p className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-4 text-center text-sm text-slate-600">
+                  {revisarRows.length === 0
+                    ? "No hay cajas en el sistema."
+                    : "Ninguna caja coincide con la búsqueda."}
+                </p>
+              ) : (
+                <ul className="flex max-h-[min(44vh,360px)] flex-col gap-2 overflow-y-auto pr-0.5 [scrollbar-gutter:stable]">
+                  {revisarFiltradas.map(({ zone, box }) => {
+                    const selected = reviewSourcePosition === box.position;
+                    return (
+                      <li key={`${zone}-${box.position}-${box.autoId}`}>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setReviewSourcePosition(box.position);
+                            setJefeInteractivePicker(null);
+                          }}
+                          className={`w-full rounded-xl px-3 py-3 text-left text-sm transition ${jefePickerCardClass(selected, "orange")} ${
+                            selected ? "" : "hover:border-orange-300 hover:bg-slate-50/90"
+                          }`}
+                        >
+                          <span className="inline-block rounded-full bg-orange-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-orange-900">
+                            {zone}
+                          </span>
+                          <span className="mt-1 block font-semibold text-slate-900">
+                            {zone} {box.position} — {box.name}
+                          </span>
+                          <span className="mt-1 block font-mono text-xs text-slate-500">
+                            {box.autoId} · {box.client || "—"}
+                          </span>
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </div>
+          ) : null}
+          {jefeInteractivePicker.flow === "salida" && jefeInteractivePicker.step === "caja" ? (
+            <div className="flex flex-col gap-3">
+              <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Buscar
+              </label>
+              <input
+                type="search"
+                value={salidaCajaSearch}
+                onChange={(e) => setSalidaCajaSearch(e.target.value)}
+                placeholder="Casillero, nombre, id o cliente…"
+                className={`w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm ${jefeModalAccentClass.pink.selectFocus}`}
+                autoComplete="off"
+              />
+              {salidaCajasFiltradas.length === 0 ? (
+                <p className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-4 text-center text-sm text-slate-600">
+                  {availableBodegaForOrders.length === 0
+                    ? "No hay cajas disponibles."
+                    : "Ninguna caja coincide con la búsqueda."}
+                </p>
+              ) : (
+                <ul className="flex max-h-[min(44vh,360px)] flex-col gap-2 overflow-y-auto pr-0.5 [scrollbar-gutter:stable]">
+                  {salidaCajasFiltradas.map((box) => {
+                    const selected = salidaSourcePosition === box.position;
+                    return (
+                      <li key={box.position}>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSalidaSourcePosition(box.position);
+                            setJefeInteractivePicker(null);
+                          }}
+                          className={`w-full rounded-xl px-3 py-3 text-left text-sm transition ${jefePickerCardClass(selected, "pink")} ${
+                            selected ? "" : "hover:border-pink-300 hover:bg-slate-50/90"
+                          }`}
+                        >
+                          <span className="font-semibold text-slate-900">Casillero {box.position}</span>
+                          <span className="mt-0.5 block text-slate-700">{box.name}</span>
+                          <span className="mt-1 block font-mono text-xs text-slate-500">
+                            {box.autoId} · {box.client || "—"}
+                          </span>
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </div>
+          ) : null}
+        </JefeNestedPickerShell>
+      ) : null}
       <AsignarProcesadorProcesamientoModal
         isOpen={modalAsignarProcesadorOpen}
         onClose={() => setModalAsignarProcesadorOpen(false)}
