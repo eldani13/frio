@@ -35,7 +35,7 @@ function CatalogoSortableHeader({ label, sortKey, onSort }: SortableHeaderProps)
       className={`sticky top-0 z-20 border-b border-slate-200 bg-slate-50 p-4 ${sortKey ? "cursor-pointer transition-colors hover:bg-slate-100" : ""}`}
       onClick={() => sortKey && onSort(sortKey)}
     >
-      <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-wide text-slate-500">
+      <div className="flex items-center gap-2 text-base font-bold uppercase tracking-wide text-slate-500">
         {label}
         {sortKey && <HiArrowsUpDown className="text-slate-400" size={12} />}
       </div>
@@ -73,12 +73,12 @@ export const CatalogoTable = ({ productos, productosCatalogo, onEdit, onDelete, 
               <CatalogoSortableHeader label="Stock" sortKey="inventoryQty" onSort={onSort} />
               
               {/* HEADER DE ACCIONES: Sticky a la derecha Y arriba */}
-              <th className="sticky top-0 right-0 z-30 border-b border-slate-200 bg-slate-50 p-4 text-right text-[10px] font-bold uppercase tracking-wide text-slate-500 shadow-[-4px_0_8px_-2px_rgba(0,0,0,0.05)]">
+              <th className="sticky top-0 right-0 z-30 border-b border-slate-200 bg-slate-50 p-4 text-right text-base font-bold uppercase tracking-wide text-slate-500 shadow-[-4px_0_8px_-2px_rgba(0,0,0,0.05)]">
                 Acciones
               </th>
             </tr>
           </thead>
-          <tbody className="text-[13px]">
+          <tbody className="text-base">
             {productos.map((p) => (
               <tr
                 key={p.id}
@@ -97,7 +97,7 @@ export const CatalogoTable = ({ productos, productosCatalogo, onEdit, onDelete, 
                 <td className="p-4 bg-white group-hover:bg-violet-50/80 transition-colors">{p.tags}</td>
                 <td className="p-4 bg-white group-hover:bg-violet-50/80 transition-colors">{p.publishedOnline ? "SÍ" : "NO"}</td>
                 <td className="p-4 bg-white group-hover:bg-violet-50/80 transition-colors">
-                  <span className="rounded-md bg-slate-100 px-2 py-1 text-[11px] font-semibold text-slate-800">{p.status}</span>
+                  <span className="rounded-md bg-slate-100 px-2 py-1 text-base font-semibold text-slate-800">{p.status}</span>
                 </td>
                 <td className="p-4 bg-white group-hover:bg-violet-50/80 transition-colors">{p.sku}</td>
                 <td className="p-4 bg-white group-hover:bg-violet-50/80 transition-colors">{p.barcode}</td>

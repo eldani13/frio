@@ -9,7 +9,7 @@ export default function ProveedoresPage() {
   return (
     <div className="p-6">
       <div className="flex flex-col gap-2 sm:flex-row sm:justify-between sm:items-center mb-6">
-        <h1 className="text-2xl font-bold text-slate-800">Proveedores</h1>
+        <h1 className="app-title">Proveedores</h1>
 
         <div className="flex gap-2 bg-slate-100 p-1 rounded-xl shadow-inner">
           <button

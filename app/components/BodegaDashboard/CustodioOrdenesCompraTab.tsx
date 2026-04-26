@@ -54,7 +54,7 @@ export default function CustodioOrdenesCompraTab({ warehousesFallback = [] }: Pr
             <MdAssignment size={28} />
           </span>
           <div>
-            <h2 className="text-xl font-bold text-slate-900">Órdenes de compra</h2>
+            <h2 className="app-title">Órdenes de compra</h2>
             <p className="mt-1 text-sm text-slate-600">
               Listado global de todas las cuentas. Abrí el detalle para ver líneas, destino y estados.
             </p>
@@ -81,28 +81,28 @@ export default function CustodioOrdenesCompraTab({ warehousesFallback = [] }: Pr
           <table className="w-full min-w-[720px] border-collapse text-left text-sm">
             <thead>
               <tr className="border-b border-slate-200 bg-slate-50">
-                <th className="px-3 py-2 text-[10px] font-bold uppercase tracking-wide text-slate-500">
+                <th className="px-3 py-2 text-base font-bold uppercase tracking-wide text-slate-500">
                   Orden
                 </th>
-                <th className="px-3 py-2 text-[10px] font-bold uppercase tracking-wide text-slate-500">
+                <th className="px-3 py-2 text-base font-bold uppercase tracking-wide text-slate-500">
                   Cuenta
                 </th>
-                <th className="px-3 py-2 text-[10px] font-bold uppercase tracking-wide text-slate-500">
+                <th className="px-3 py-2 text-base font-bold uppercase tracking-wide text-slate-500">
                   Proveedor
                 </th>
-                <th className="px-3 py-2 text-[10px] font-bold uppercase tracking-wide text-slate-500">
+                <th className="px-3 py-2 text-base font-bold uppercase tracking-wide text-slate-500">
                   Estado
                 </th>
-                <th className="px-3 py-2 text-[10px] font-bold uppercase tracking-wide text-slate-500">
+                <th className="px-3 py-2 text-base font-bold uppercase tracking-wide text-slate-500">
                   Fecha OC
                 </th>
-                <th className="px-3 py-2 text-[10px] font-bold uppercase tracking-wide text-slate-500">
+                <th className="px-3 py-2 text-base font-bold uppercase tracking-wide text-slate-500">
                   Llegada
                 </th>
-                <th className="px-3 py-2 text-[10px] font-bold uppercase tracking-wide text-slate-500">
+                <th className="px-3 py-2 text-base font-bold uppercase tracking-wide text-slate-500">
                   Destino
                 </th>
-                <th className="px-3 py-2 text-[10px] font-bold uppercase tracking-wide text-slate-500">
+                <th className="px-3 py-2 text-base font-bold uppercase tracking-wide text-slate-500">
                   Productos
                 </th>
               </tr>
@@ -138,7 +138,7 @@ export default function CustodioOrdenesCompraTab({ warehousesFallback = [] }: Pr
                     <td className="whitespace-nowrap px-3 py-2 font-mono text-xs font-semibold text-slate-900">
                       {o.numero}
                     </td>
-                    <td className="px-3 py-2 font-mono text-[11px] text-slate-600">{o.codeCuenta || "—"}</td>
+                    <td className="px-3 py-2 font-mono text-base text-slate-600">{o.codeCuenta || "—"}</td>
                     <td className="max-w-[120px] px-3 py-2 text-xs text-slate-800">
                       <span className="line-clamp-2" title={o.proveedorNombre}>
                         {o.proveedorNombre || "—"}
@@ -146,7 +146,7 @@ export default function CustodioOrdenesCompraTab({ warehousesFallback = [] }: Pr
                     </td>
                     <td className="px-3 py-2">
                       <span
-                        className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ${ordenCompraEstadoBadgeClass(o.estado)}`}
+                        className={`inline-flex rounded-full px-2 py-0.5 text-base font-semibold ${ordenCompraEstadoBadgeClass(o.estado)}`}
                       >
                         {o.estado}
                       </span>
@@ -155,7 +155,7 @@ export default function CustodioOrdenesCompraTab({ warehousesFallback = [] }: Pr
                     <td className="whitespace-nowrap px-3 py-2 text-xs text-slate-700">
                       {o.fechaLlegadaEstipulada?.trim() || "—"}
                     </td>
-                    <td className="max-w-[140px] px-3 py-2 text-[11px] text-slate-600">
+                    <td className="max-w-[140px] px-3 py-2 text-base text-slate-600">
                       {o.destinoTipo ? `${o.destinoTipo === "interna" ? "Int." : "Ext."} ` : ""}
                       <span className="line-clamp-2" title={o.destinoWarehouseNombre}>
                         {o.destinoWarehouseNombre || "—"}

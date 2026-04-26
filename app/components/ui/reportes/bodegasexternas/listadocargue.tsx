@@ -51,10 +51,10 @@ export default function ListadoCargue({ items, loading, error, onRetry, lastUpda
   const showEmpty = !loading && !error && items.length === 0;
 
   return (
-    <div className="border border-slate-100 rounded-2xl overflow-hidden font-['Inter'] bg-white shadow-sm">
+    <div className="border border-slate-100 rounded-2xl overflow-hidden  bg-white shadow-sm">
       <div className="bg-[#A8D5BA]/20 p-5 border-b border-slate-100 flex items-center justify-between">
         <div>
-          <h3 className="text-[18px] font-bold text-slate-800 tracking-tight uppercase">En Inventario en bodega externa</h3>
+          <h3 className="app-title uppercase tracking-tight">En Inventario en bodega externa</h3>
           <p className="text-xs text-slate-600 mt-1">
             {items.length} registros · Página {currentPage} de {pageCount}
           </p>
@@ -102,7 +102,7 @@ export default function ListadoCargue({ items, loading, error, onRetry, lastUpda
               <th className="whitespace-nowrap px-4 py-3 text-xs font-bold text-slate-400 uppercase tracking-widest border-b border-slate-200 text-center">Estado</th>
             </tr>
           </thead>
-          <tbody className="text-slate-700 text-[14px]">
+          <tbody className="text-slate-700 text-base">
             {loading
               ? Array.from({ length: 4 }).map((_, idx) => (
                   <tr key={`skeleton-${idx}`} className="animate-pulse">
@@ -141,7 +141,7 @@ export default function ListadoCargue({ items, loading, error, onRetry, lastUpda
                       className="whitespace-nowrap px-4 py-4 border-b border-slate-100"
                       title={d.descripcion}
                     >
-                      <span className="inline-block rounded-lg bg-slate-100 px-3 py-1.5 font-semibold text-[13px] text-slate-700">
+                      <span className="inline-block rounded-lg bg-slate-100 px-3 py-1.5 font-semibold text-base text-slate-700">
                         {d.descripcion}
                       </span>
                     </td>
@@ -181,7 +181,7 @@ export default function ListadoCargue({ items, loading, error, onRetry, lastUpda
           aria-label="Total de inventario"
         >
           <div className="flex flex-col items-stretch sm:flex-row sm:items-center sm:justify-end sm:gap-4">
-            <span className="text-center text-[11px] font-bold uppercase tracking-[0.2em] text-slate-500 sm:text-right sm:pt-1">
+            <span className="text-center text-base font-bold uppercase tracking-[0.2em] text-slate-500 sm:text-right sm:pt-1">
               Total cantidad registrada
             </span>
             <div className="mt-2 flex justify-center sm:mt-0 sm:justify-end">

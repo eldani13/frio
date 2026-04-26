@@ -87,7 +87,6 @@ import {
   DEFAULT_WAREHOUSE_ID,
   ensureHistoryState,
   ensureWarehouseState,
-  recordMermaProcesamientoKg,
   saveWarehouseState,
   subscribeWarehouseState,
 } from "../../lib/bodegaCloudState";
@@ -853,7 +852,7 @@ async function mirrorUsersProfileToUsuariosIfNeeded(
 }
 
 export default function BodegaDashboard() {
-  const [selectedBoxModal, setSelectedBoxModal] = useState<Box | Slot | null>(null);
+  const [_selectedBoxModal, setSelectedBoxModal] = useState<Box | Slot | null>(null);
   const [editTempModal, setEditTempModal] = useState<{
     position: number;
     autoId: string;
@@ -5113,7 +5112,7 @@ export default function BodegaDashboard() {
                 <div className="rounded-2xl bg-white p-6 shadow-sm">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div>
-                      <h2 className="text-lg font-semibold text-slate-900">Gestion de alertas</h2>
+                      <h2 className="app-title">Gestion de alertas</h2>
                       <p className="mt-1 text-sm text-slate-600">Solo lectura para el administrador.</p>
                     </div>
                     <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
@@ -5166,7 +5165,7 @@ export default function BodegaDashboard() {
                 <div className="rounded-2xl bg-white p-6 shadow-sm">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div>
-                      <h2 className="text-lg font-semibold text-slate-900">Solicitudes pendientes</h2>
+                      <h2 className="app-title">Solicitudes pendientes</h2>
                       <p className="mt-1 text-sm text-slate-600">Vista consolidada para el administrador.</p>
                     </div>
                     <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
@@ -5241,7 +5240,7 @@ export default function BodegaDashboard() {
                 <div className="rounded-2xl bg-white p-6 shadow-sm">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div>
-                      <h2 className="text-lg font-semibold text-slate-900">Gestion de alertas</h2>
+                      <h2 className="app-title">Gestion de alertas</h2>
                       <p className="mt-1 text-sm text-slate-600">
                         {canManageAlerts
                           ? "Revisa y asigna las alertas al operario."
@@ -5328,7 +5327,7 @@ export default function BodegaDashboard() {
                   <p className="text-xs font-semibold uppercase tracking-[0.25em] text-slate-400">
                     Alertas
                   </p>
-                  <h3 className="mt-2 text-2xl font-semibold text-slate-900">Alertas activas</h3>
+                  <h3 className="app-title mt-2">Alertas activas</h3>
                   <p className="mt-1 text-sm text-slate-600">
                     {canManageAlerts
                       ? "Revisa y gestiona las alertas activas."
@@ -5415,7 +5414,7 @@ export default function BodegaDashboard() {
                   <p className="text-xs font-semibold uppercase tracking-[0.25em] text-slate-400">
                     Alertas asignadas
                   </p>
-                  <h3 className="mt-2 text-2xl font-semibold text-slate-900">Tareas del jefe</h3>
+                  <h3 className="app-title mt-2">Tareas del jefe</h3>
                   <p className="mt-1 text-sm text-slate-600">Ejecuta las alertas asignadas por el jefe.</p>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
@@ -5533,7 +5532,7 @@ export default function BodegaDashboard() {
                   <p className="text-xs font-semibold uppercase tracking-[0.25em] text-slate-400">
                     Solucionar alerta
                   </p>
-                  <h3 className="mt-2 text-2xl font-semibold text-slate-900">{resolveModalAlert.title}</h3>
+                  <h3 className="app-title mt-2">{resolveModalAlert.title}</h3>
                   <p className="mt-1 text-sm text-slate-600">{resolveModalAlert.description}</p>
                 </div>
                 <button

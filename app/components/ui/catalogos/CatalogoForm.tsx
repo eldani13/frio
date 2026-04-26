@@ -1,8 +1,17 @@
 "use client";
 
 import React, { Fragment, useEffect, useMemo, useState } from "react";
-import { HiOutlineXMark } from "react-icons/hi2";
 import type { Catalogo } from "@/app/types/catalogo";
+import {
+  FORMULARIO_CREACION_BODY,
+  FORMULARIO_CREACION_BOOLEAN_ROW,
+  FORMULARIO_CREACION_GRID,
+  FORMULARIO_CREACION_INPUT,
+  FORMULARIO_CREACION_LABEL,
+  FORMULARIO_CREACION_SELECT,
+  FormularioPlantilla,
+  FormularioPlantillaAcciones,
+} from "@/app/components/ui/FormularioPlantilla";
 import {
   esCatalogoSecundario,
   gramosPorUnidadDesdeReglaConversion,
@@ -213,47 +222,48 @@ export const CatalogoForm = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm">
-      <div className="flex max-h-[90vh] w-full max-w-4xl flex-col overflow-hidden rounded-[24px] border border-gray-100 bg-white shadow-2xl animate-in fade-in zoom-in duration-200">
-        <div className="z-10 flex items-center justify-between border-b border-gray-50 bg-white p-6">
-          <div>
-            <h2 className="text-[20px] font-bold text-gray-900">
-              {producto ? "Editar producto" : "Nuevo producto"}
-            </h2>
-            <p className="text-[12px] font-medium uppercase tracking-tight text-gray-500">
-              Formulario completo de catálogo
-            </p>
-          </div>
-          <button type="button" onClick={onClose} className="rounded-full p-2 transition-colors hover:bg-gray-100">
-            <HiOutlineXMark size={24} className="text-gray-500" />
-          </button>
-        </div>
-
-        <form id="catalogo-form" onSubmit={handleSubmit} className="flex-1 overflow-y-auto bg-gray-50/30 p-6">
-          <div className="grid grid-cols-1 gap-x-6 gap-y-5 md:grid-cols-2 lg:grid-cols-3">
+    <FormularioPlantilla
+      isOpen={isOpen}
+      onClose={onClose}
+      titulo={producto ? "Editar producto" : "Nuevo producto"}
+      subtitulo="Alta catálogo"
+      titleId="catalogo-form-title"
+      maxWidthClass="max-w-4xl"
+      footer={
+        <FormularioPlantillaAcciones
+          formId="catalogo-form"
+          onCancel={onClose}
+          submitLabel={producto ? "Actualizar producto" : "Registrar producto"}
+          loading={loading}
+          loadingLabel="Guardando información…"
+        />
+      }
+    >
+        <form id="catalogo-form" onSubmit={handleSubmit} className={FORMULARIO_CREACION_BODY}>
+          <div className={FORMULARIO_CREACION_GRID}>
             {FORM_FIELDS.map((field) => (
               <Fragment key={String(field.key)}>
                 <div className={field.multiline ? "md:col-span-2 lg:col-span-3" : ""}>
-                  <label className="mb-1.5 ml-1 block text-[10px] font-bold uppercase tracking-widest text-gray-400">
+                  <label className={FORMULARIO_CREACION_LABEL}>
                     {field.label} {field.required ? <span className="text-red-400">*</span> : null}
                   </label>
 
                   {field.isBoolean ? (
-                    <div className="flex h-[48px] items-center rounded-[12px] border border-gray-200 bg-white px-4 shadow-sm">
+                    <div className={FORMULARIO_CREACION_BOOLEAN_ROW}>
                       <input
                         type="checkbox"
                         checked={Boolean(formData[field.key])}
                         onChange={(e) => handleChange(field.key, e.target.checked)}
                         className="h-5 w-5 cursor-pointer rounded border-gray-300 text-[#A8D5BA] focus:ring-[#A8D5BA]"
                       />
-                      <span className="ml-3 text-[13px] font-medium text-gray-600">Habilitar / Sí</span>
+                      <span className="ml-3 text-base font-medium text-gray-600">Sí / online</span>
                     </div>
                   ) : field.multiline ? (
                     <textarea
                       value={String(formData[field.key] ?? "")}
                       onChange={(e) => handleChange(field.key, e.target.value)}
                       rows={3}
-                      className="w-full rounded-[12px] border border-gray-200 bg-white px-4 py-3 text-[14px] shadow-sm transition-all focus:border-[#A8D5BA] focus:outline-none focus:ring-1 focus:ring-[#A8D5BA]"
+                      className={FORMULARIO_CREACION_INPUT}
                       required={field.required}
                     />
                   ) : (
@@ -274,7 +284,7 @@ export const CatalogoForm = ({
                             : e.target.value,
                         )
                       }
-                      className="w-full rounded-[12px] border border-gray-200 bg-white px-4 py-3 text-[14px] shadow-sm transition-all focus:border-[#A8D5BA] focus:outline-none focus:ring-1 focus:ring-[#A8D5BA]"
+                      className={FORMULARIO_CREACION_INPUT}
                       required={field.required}
                       placeholder={`Ingresá ${field.label.toLowerCase()}`}
                     />
@@ -284,14 +294,14 @@ export const CatalogoForm = ({
                 {field.key === "weightValue" ? (
                   <>
                     <div>
-                      <label className="mb-1.5 ml-1 block text-[10px] font-bold uppercase tracking-widest text-gray-400">
+                      <label className={FORMULARIO_CREACION_LABEL}>
                         Unidad de visualización <span className="text-red-400">*</span>
                       </label>
                       <select
                         value={formData.unidadVisualizacion ?? "cantidad"}
                         onChange={(e) => handleChange("unidadVisualizacion", e.target.value)}
                         required
-                        className="w-full rounded-[12px] border border-gray-200 bg-white px-4 py-3 text-[14px] shadow-sm focus:border-[#A8D5BA] focus:outline-none focus:ring-1 focus:ring-[#A8D5BA]"
+                        className={FORMULARIO_CREACION_SELECT}
                       >
                         {UNIDAD_VIS_CATALOGO_OPCIONES.map((o) => (
                           <option key={o.value} value={o.value}>
@@ -299,19 +309,14 @@ export const CatalogoForm = ({
                           </option>
                         ))}
                       </select>
-                      <p className="mt-1 text-[11px] text-gray-500">
-                        Etiqueta de cantidad en pantallas. Solo «Peso (kg)» usa kilogramos en almacenamiento; el resto
-                        cuenta como unidades discretas.
-                      </p>
+                      <p className="mt-1 text-base text-gray-500">Etiqueta en pantalla.</p>
                     </div>
                     <div>
-                      <label className="mb-1.5 ml-1 block text-[10px] font-bold uppercase tracking-widest text-gray-400">
-                        Incluido primario
-                      </label>
+                      <label className={FORMULARIO_CREACION_LABEL}>Incluido primario</label>
                       <select
                         value={String(formData.includedPrimarioCatalogoId ?? "")}
                         onChange={(e) => handleChange("includedPrimarioCatalogoId", e.target.value)}
-                        className="w-full rounded-[12px] border border-gray-200 bg-white px-4 py-3 text-[14px] shadow-sm focus:border-[#A8D5BA] focus:outline-none focus:ring-1 focus:ring-[#A8D5BA]"
+                        className={FORMULARIO_CREACION_SELECT}
                       >
                         <option value="">— Sin vínculo —</option>
                         {opcionesPrimario.map((p) => (
@@ -320,33 +325,26 @@ export const CatalogoForm = ({
                           </option>
                         ))}
                       </select>
-                      <p className="mt-1 text-[11px] text-gray-500">
-                        Opcional: elegí otro producto del catálogo (excluye secundarios). Para altas rápidas de
-                        derivados usá <strong>Crear secundario</strong>.
-                      </p>
+                      <p className="mt-1 text-base text-gray-500">Derivado opcional.</p>
                     </div>
                     {esCatalogoSecundario(formData as Catalogo) && primarioVinculadoId ? (
                       <div className="grid grid-cols-1 gap-4 md:col-span-2 md:grid-cols-2 lg:col-span-3 lg:grid-cols-2">
                         <div className="rounded-[12px] border border-violet-100 bg-violet-50/40 p-4 md:col-span-2 lg:col-span-2">
-                          <p className="text-[10px] font-bold uppercase tracking-widest text-violet-900">
-                            Regla de conversión (base {REGLA_PRIMARIO_BASE_GRAMOS} g de primario)
+                          <p className="text-base font-bold uppercase tracking-widest text-violet-900">
+                            Regla g → ud.
                           </p>
-                          <p className="mt-1 text-[11px] text-violet-950/90">
-                            El insumo de referencia es siempre <strong>{REGLA_PRIMARIO_BASE_GRAMOS} g</strong> (1 kg).
-                            Indicá los <strong>gramos netos por unidad</strong> de este secundario. Unidades por kg de
-                            primario: <strong>{REGLA_PRIMARIO_BASE_GRAMOS} ÷ gramos por unidad</strong>.
-                          </p>
+                          <p className="mt-1 text-base text-violet-950/90">Gramos netos / ud.</p>
                           <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
                             <div>
-                              <label className="mb-1 block text-[10px] font-bold uppercase tracking-widest text-gray-500">
+                              <label className={`${FORMULARIO_CREACION_LABEL} mb-1 ml-0`}>
                                 Insumo primario (fijo)
                               </label>
-                              <div className="rounded-[12px] border border-violet-200 bg-violet-100/60 px-4 py-3 text-[14px] font-semibold tabular-nums text-violet-950">
+                              <div className="rounded-[12px] border border-violet-200 bg-violet-100/60 px-4 py-3 text-base font-semibold tabular-nums text-violet-950">
                                 {REGLA_PRIMARIO_BASE_GRAMOS} g
                               </div>
                             </div>
                             <div>
-                              <label className="mb-1 block text-[10px] font-bold uppercase tracking-widest text-gray-500">
+                              <label className={`${FORMULARIO_CREACION_LABEL} mb-1 ml-0`}>
                                 Gramos por unidad de este secundario <span className="text-red-400">*</span>
                               </label>
                               <input
@@ -354,15 +352,13 @@ export const CatalogoForm = ({
                                 inputMode="decimal"
                                 value={gramosPorUnidadSecundario}
                                 onChange={(e) => setGramosPorUnidadSecundario(e.target.value)}
-                                className="w-full rounded-[12px] border border-gray-200 bg-white px-4 py-3 text-[14px] shadow-sm"
+                                className={FORMULARIO_CREACION_INPUT}
                                 placeholder="Ej. 200"
                               />
                             </div>
                           </div>
                           <div className="mt-3">
-                            <label className="mb-1 block text-[10px] font-bold uppercase tracking-widest text-gray-500">
-                              Merma típica (%)
-                            </label>
+                            <label className={`${FORMULARIO_CREACION_LABEL} mb-1 ml-0`}>Merma típica (%)</label>
                             <input
                               type="number"
                               min={0}
@@ -375,12 +371,10 @@ export const CatalogoForm = ({
                                   e.target.value === "" ? "" : Number(e.target.value),
                                 )
                               }
-                              className="w-full max-w-[12rem] rounded-[12px] border border-gray-200 bg-white px-4 py-3 text-[14px] shadow-sm"
+                              className={`${FORMULARIO_CREACION_INPUT} max-w-[12rem]`}
                               placeholder="0"
                             />
-                            <p className="mt-1 text-[11px] text-violet-950/80">
-                              Se aplica al crear solicitudes de procesamiento con este secundario (0–100). Opcional.
-                            </p>
+                            <p className="mt-1 text-base text-violet-950/80">Merma en procesos.</p>
                           </div>
                         </div>
                       </div>
@@ -391,25 +385,7 @@ export const CatalogoForm = ({
             ))}
           </div>
         </form>
-
-        <div className="flex gap-3 border-t border-gray-100 bg-white p-6">
-          <button
-            type="button"
-            onClick={onClose}
-            className="flex-1 rounded-[16px] border border-gray-200 px-4 py-3 text-[14px] font-bold text-gray-500 transition-all hover:bg-gray-50"
-          >
-            Cancelar
-          </button>
-          <button
-            form="catalogo-form"
-            type="submit"
-            disabled={loading}
-            className="flex-[2] rounded-[16px] bg-[#A8D5BA] px-4 py-3 text-[14px] font-bold text-[#2D5A3F] shadow-lg shadow-[#A8D5BA]/20 transition-all hover:bg-[#97c4a9] active:scale-[0.98] disabled:opacity-50"
-          >
-            {loading ? "Guardando información…" : producto ? "Actualizar producto" : "Registrar producto"}
-          </button>
-        </div>
-      </div>
-    </div>
+    </FormularioPlantilla>
   );
 };
+

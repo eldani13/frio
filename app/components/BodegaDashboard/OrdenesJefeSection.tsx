@@ -146,7 +146,7 @@ function JefeOrderModalShell({
           <div className="min-w-0 flex-1 pr-10">
             <h2
               id={`${id}-title`}
-              className="text-lg font-bold tracking-tight text-slate-900 sm:text-xl"
+              className="app-title"
             >
               {title}
             </h2>
@@ -234,7 +234,7 @@ function JefeNestedPickerShell({
         <div
           className={`flex items-center justify-between border-b border-slate-100 bg-linear-to-r px-4 py-3 sm:px-5 ${a.header}`}
         >
-          <h3 id="jefe-nested-picker-title" className="text-base font-bold tracking-tight text-slate-900">
+          <h3 id="jefe-nested-picker-title" className="app-title">
             {title}
           </h3>
           <button
@@ -811,7 +811,7 @@ export default function OrdenesJefeSection(props: {
                 <FiArchive className="w-5 h-5 text-slate-500" />
                 <span className="text-base font-semibold">Ingresos</span>
               </div>
-              <span className="text-[11px] text-slate-500">
+              <span className="text-base text-slate-500">
                 Registrar entrada
               </span>
             </button>
@@ -825,7 +825,7 @@ export default function OrdenesJefeSection(props: {
                 <FiRepeat className="w-5 h-5 text-slate-500" />
                 <span className="text-base font-semibold">Bodega a Bodega</span>
               </div>
-              <span className="text-[11px] text-slate-500">
+              <span className="text-base text-slate-500">
                 Transferir cajas
               </span>
             </button>
@@ -839,7 +839,7 @@ export default function OrdenesJefeSection(props: {
                 <FiSearch className="w-5 h-5 text-slate-500" />
                 <span className="text-base font-semibold">Revisar</span>
               </div>
-              <span className="text-[11px] text-slate-500">
+              <span className="text-base text-slate-500">
                 Consultar inventario
               </span>
             </button>
@@ -853,7 +853,7 @@ export default function OrdenesJefeSection(props: {
                 <FiCpu className="w-5 h-5 text-slate-500" />
                 <span className="text-base font-semibold">Procesamiento</span>
               </div>
-              <span className="text-[11px] text-slate-500">Finalizados</span>
+              <span className="text-base text-slate-500">Finalizados</span>
             </button>
             {/* Crear Salida */}
             <button
@@ -865,7 +865,7 @@ export default function OrdenesJefeSection(props: {
                 <FiBox className="w-5 h-5 text-slate-500" />
                 <span className="text-base font-semibold">Crear Salida</span>
               </div>
-              <span className="text-[11px] text-slate-500">
+              <span className="text-base text-slate-500">
                 Registrar salida
               </span>
             </button>
@@ -883,9 +883,8 @@ export default function OrdenesJefeSection(props: {
                     onClick={() => setEditTempModal(null)}
                   >
                     <div
-                      className="w-full max-w-xs rounded-2xl border border-blue-100 bg-white/95 shadow-xl relative overflow-hidden animate-fade-in-up"
+                      className="relative w-full max-w-xs animate-fade-in-up overflow-hidden rounded-2xl border border-blue-100 bg-white/95 shadow-xl"
                       onClick={(e) => e.stopPropagation()}
-                      style={{ fontFamily: '"Space Grotesk", "Work Sans", sans-serif' }}
                     >
                       {/* Header minimalista */}
                       <div className="flex flex-col items-center justify-center pt-5 pb-2 px-4 border-b border-blue-100 bg-linear-to-r from-blue-50 to-white rounded-t-2xl relative">
@@ -905,7 +904,7 @@ export default function OrdenesJefeSection(props: {
                             />
                           </svg>
                         </span>
-                        <h2 className="text-lg font-bold text-blue-700 mb-0.5 tracking-tight">
+                        <h2 className="app-title mb-0.5">
                           Editar temperatura
                         </h2>
                         <button
@@ -1115,10 +1114,10 @@ export default function OrdenesJefeSection(props: {
                   </div>
                 )}
           {/* Mismo criterio que EstadoBodegaSection (admin): grid estira fila al contenido más alto; mapa completo sin recorte */}
-          <div className="grid items-stretch gap-6 xl:grid-cols-[1fr_1.8fr_1fr] 2xl:grid-cols-[1fr_2.1fr_1fr]">
-            <div className="flex h-full min-h-0 w-full max-w-full flex-col rounded-3xl border border-emerald-200/95 bg-emerald-50/85 p-2 sm:max-w-lg sm:p-4">
+          <div className="grid items-stretch gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.8fr)_minmax(0,1fr)] 2xl:grid-cols-[minmax(0,1fr)_minmax(0,2.1fr)_minmax(0,1fr)]">
+            <div className="flex h-full min-h-0 w-full min-w-0 max-w-full flex-col rounded-3xl border border-emerald-200/95 bg-emerald-50/85 p-2 sm:max-w-lg sm:p-4">
               <div className="mb-2 flex min-w-0 shrink-0 flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <h3 className="flex min-w-0 items-center gap-2 text-[17px] font-bold leading-tight tracking-tight text-emerald-900 sm:text-lg">
+                <h3 className="app-title flex min-w-0 items-center gap-2">
                   <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-emerald-100 text-emerald-700">
                     <FiBox className="h-[18px] w-[18px] sm:h-5 sm:w-5" aria-hidden />
                   </span>
@@ -1138,7 +1137,7 @@ export default function OrdenesJefeSection(props: {
                       onClick={() => setShowAlertModal(true)}
                     >
                       <FiAlertTriangle className="w-4 h-4 mr-1" />
-                      <span className="text-[11px] font-semibold leading-none">{highTempAlerts.length}</span>
+                      <span className="text-base font-semibold leading-none">{highTempAlerts.length}</span>
                     </button>
                   </div>
                 )} */}
@@ -1236,10 +1235,10 @@ export default function OrdenesJefeSection(props: {
                     )}
                   </ZonaCuatroSlotsRow>
                   {sortedInboundBoxes.length === 0 ? (
-                    <p className="text-center text-[11px] text-emerald-900/85">No hay cajas en ingreso.</p>
+                    <p className="text-center text-base text-emerald-900/85">No hay cajas en ingreso.</p>
                   ) : null}
                   {sortedInboundBoxes.length > ZONA_ENTRADA_SALIDA_SLOTS ? (
-                    <p className="text-center text-[10px] text-emerald-900/80">
+                    <p className="text-center text-base text-emerald-900/80">
                       Mostrando {ZONA_ENTRADA_SALIDA_SLOTS} de {sortedInboundBoxes.length} cajas en ingreso.
                     </p>
                   ) : null}
@@ -1251,7 +1250,7 @@ export default function OrdenesJefeSection(props: {
               <div className="flex min-w-0 flex-col">
               <div className="mb-5 flex min-w-0 flex-col gap-4 sm:mb-6 sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex min-w-0 flex-wrap items-center gap-2">
-                  <h2 className="flex min-w-0 items-center gap-2.5 text-[17px] font-bold leading-tight tracking-tight text-slate-900 sm:text-lg">
+                  <h2 className="app-title flex min-w-0 items-center gap-2.5">
                     <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-violet-100 text-violet-600">
                       <FiArchive className="h-[18px] w-[18px] sm:h-5 sm:w-5" aria-hidden />
                     </span>
@@ -1270,7 +1269,7 @@ export default function OrdenesJefeSection(props: {
                     onClick={() => setShowAlertModal(true)}
                   >
                     <FiAlertTriangle className="h-4 w-4 shrink-0" aria-hidden />
-                    <span className="text-[11px] font-semibold tabular-nums leading-none">
+                    <span className="text-base font-semibold tabular-nums leading-none">
                       {bodegaHighTempAlerts.length}
                     </span>
                   </button>
@@ -1286,7 +1285,7 @@ export default function OrdenesJefeSection(props: {
                     onClick={() => setShowLlamadosModal(true)}
                   >
                     <RiUserReceivedLine className="h-4 w-4 shrink-0" aria-hidden />
-                    <span className="text-[11px] font-semibold tabular-nums leading-none">
+                    <span className="text-base font-semibold tabular-nums leading-none">
                       {llamadasJefe.length}
                     </span>
                   </button>
@@ -1332,7 +1331,7 @@ export default function OrdenesJefeSection(props: {
                                   {(llamado as any).message || (llamado as any).titulo || "Llamado"}
                                 </span>
                                 {(llamado as any).from ? (
-                                  <span className="rounded-md border border-sky-200 bg-sky-50 px-2 py-0.5 text-[11px] font-semibold text-sky-900">
+                                  <span className="rounded-md border border-sky-200 bg-sky-50 px-2 py-0.5 text-base font-semibold text-sky-900">
                                     {(llamado as any).from}
                                   </span>
                                 ) : null}
@@ -1400,13 +1399,12 @@ export default function OrdenesJefeSection(props: {
                   onClick={() => setShowAlertModal(false)}
                 >
                   <div
-                    className="w-full max-w-lg sm:max-w-xl rounded-3xl border border-blue-100 bg-white/90 shadow-2xl backdrop-blur-lg relative overflow-hidden animate-fade-in-up"
+                    className="relative w-full max-w-lg animate-fade-in-up overflow-hidden rounded-3xl border border-blue-100 bg-white/90 shadow-2xl backdrop-blur-lg sm:max-w-xl"
                     onClick={(e) => e.stopPropagation()}
-                    style={{ fontFamily: '"Space Grotesk", "Work Sans", sans-serif' }}
                   >
                     <div className="flex items-start gap-3 px-6 pt-6 pb-4 border-b border-blue-100">
                       <div className="flex flex-col">
-                        <h3 className="text-xl sm:text-2xl font-bold text-slate-900 drop-shadow">
+                        <h3 className="app-title">
                           Bodega
                         </h3>
                         <p className="mt-1 text-xs sm:text-sm text-slate-700 font-medium">
@@ -1469,7 +1467,7 @@ export default function OrdenesJefeSection(props: {
                                   {slot.name || "Sin nombre"}
                                 </p>
                                 <span
-                                  className="inline-block animate-pulse bg-red-500 text-white text-[10px] font-bold rounded-full px-2 py-0.5 ml-1 shadow-sm"
+                                  className="inline-block animate-pulse bg-red-500 text-white text-base font-bold rounded-full px-2 py-0.5 ml-1 shadow-sm"
                                   title="Prioridad alta"
                                 >
                                   ¡ALERTA!
@@ -1619,9 +1617,9 @@ export default function OrdenesJefeSection(props: {
               />
             </div>
             </div>
-            <div className="flex h-full min-h-0 w-full max-w-full flex-col rounded-3xl border border-pink-300 bg-pink-100/90 p-4 sm:max-w-lg sm:p-6">
+            <div className="flex h-full min-h-0 w-full min-w-0 max-w-full flex-col rounded-3xl border border-pink-300 bg-pink-100/90 p-2 sm:max-w-lg sm:p-4">
               <div className="mb-2 flex min-w-0 shrink-0 flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <h3 className="flex min-w-0 shrink-0 items-center gap-2 text-[17px] font-bold leading-tight tracking-tight text-pink-900 sm:text-lg">
+                <h3 className="app-title flex min-w-0 items-center gap-2">
                   <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-pink-200/90 text-pink-900">
                     <HiArrowRightOnRectangle className="h-[18px] w-[18px] sm:h-5 sm:w-5" aria-hidden />
                   </span>
@@ -1673,10 +1671,10 @@ export default function OrdenesJefeSection(props: {
                     )}
                   </ZonaCuatroSlotsRow>
                   {sortedOutboundBoxes.length === 0 ? (
-                    <p className="text-center text-[11px] text-pink-900/80">No hay cajas en salida.</p>
+                    <p className="text-center text-base text-pink-900/80">No hay cajas en salida.</p>
                   ) : null}
                   {sortedOutboundBoxes.length > ZONA_ENTRADA_SALIDA_SLOTS ? (
-                    <p className="text-center text-[10px] text-pink-900/75">
+                    <p className="text-center text-base text-pink-900/75">
                       Mostrando {ZONA_ENTRADA_SALIDA_SLOTS} de {sortedOutboundBoxes.length} cajas en salida.
                     </p>
                   ) : null}
@@ -2462,7 +2460,7 @@ export default function OrdenesJefeSection(props: {
                             selected ? "" : "hover:border-orange-300 hover:bg-slate-50/90"
                           }`}
                         >
-                          <span className="inline-block rounded-full bg-orange-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-orange-900">
+                          <span className="inline-block rounded-full bg-orange-100 px-2 py-0.5 text-base font-bold uppercase tracking-wide text-orange-900">
                             {zone}
                           </span>
                           <span className="mt-1 block font-semibold text-slate-900">

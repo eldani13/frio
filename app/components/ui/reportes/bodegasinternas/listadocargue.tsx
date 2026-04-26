@@ -124,9 +124,9 @@ export default function ListadoCargue({ warehouseId, onTotalChange }: Props) {
   }
 
   return (
-    <div className="border border-slate-100 rounded-2xl overflow-hidden font-['Inter'] bg-white shadow-sm">
+    <div className="border border-slate-100 rounded-2xl overflow-hidden  bg-white shadow-sm">
       <div className="bg-[#A8D5BA]/20 p-5 border-b border-slate-100">
-        <h3 className="text-[18px] font-bold text-slate-800 tracking-tight uppercase">
+        <h3 className="app-title uppercase tracking-tight">
           Inventario en bodega INTERNA
         </h3>
         {filas.length > 0 ? (
@@ -187,7 +187,7 @@ export default function ListadoCargue({ warehouseId, onTotalChange }: Props) {
                 </th>
               </tr>
             </thead>
-            <tbody className="text-slate-700 text-[14px]">
+            <tbody className="text-slate-700 text-base">
               {filasPagina.map((d) => (
                 <tr key={d.key} className="hover:bg-slate-50/80 transition-colors">
                   <td className="whitespace-nowrap px-4 py-4 border-b border-slate-100 text-slate-700 tabular-nums">
@@ -204,7 +204,7 @@ export default function ListadoCargue({ warehouseId, onTotalChange }: Props) {
                     title={d.descripcion || undefined}
                   >
                     {d.descripcion.trim() ? (
-                      <span className="inline-block rounded-lg bg-slate-100 px-3 py-1.5 font-semibold text-[13px] text-slate-700">
+                      <span className="inline-block rounded-lg bg-slate-100 px-3 py-1.5 font-semibold text-base text-slate-700">
                         {d.descripcion}
                       </span>
                     ) : (
@@ -267,7 +267,7 @@ export default function ListadoCargue({ warehouseId, onTotalChange }: Props) {
           aria-label="Total de inventario"
         >
           <div className="flex flex-col items-stretch sm:flex-row sm:items-center sm:justify-end sm:gap-4">
-            <span className="text-center text-[11px] font-bold uppercase tracking-[0.2em] text-slate-500 sm:text-right sm:pt-1">
+            <span className="text-center text-base font-bold uppercase tracking-[0.2em] text-slate-500 sm:text-right sm:pt-1">
               Total cantidad registrada
             </span>
             <div className="mt-2 flex justify-center sm:mt-0 sm:justify-end">

@@ -241,7 +241,7 @@ export function OcOrdenIngresoPanel({ warehouseId, isBodegaInterna, onRegistrar,
             <FiArchive className="h-[18px] w-[18px] sm:h-5 sm:w-5" aria-hidden />
           </span>
           <div className="min-w-0">
-            <h2 className="text-[17px] font-bold leading-tight tracking-tight text-emerald-900 sm:text-lg">
+            <h2 className="app-title">
               Orden de ingreso
             </h2>
           </div>
@@ -370,7 +370,7 @@ export function OcOrdenIngresoPanel({ warehouseId, isBodegaInterna, onRegistrar,
           </ul>
 
           <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50/80 p-3">
-            <p className="mb-2 text-[11px] font-bold uppercase text-slate-500">
+            <p className="mb-2 text-base font-bold uppercase text-slate-500">
               Producto adicional 
             </p>
           

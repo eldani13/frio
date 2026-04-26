@@ -81,15 +81,15 @@ export default function BodegaSlotLegend({
       <div className="flex flex-wrap items-center gap-x-5 gap-y-2 sm:gap-x-6">
         <div className="flex items-center gap-2" role="listitem">
           <span className={tone.primario} aria-hidden />
-          <span className={`text-[10px] sm:text-xs ${tone.label}`}>Ocupada (primario)</span>
+          <span className={`text-base sm:text-xs ${tone.label}`}>Ocupada (primario)</span>
         </div>
         <div className="flex items-center gap-2" role="listitem">
           <span className={tone.procesado} aria-hidden />
-          <span className={`text-[10px] sm:text-xs ${tone.label}`}>Ocupada (procesado)</span>
+          <span className={`text-base sm:text-xs ${tone.label}`}>Ocupada (procesado)</span>
         </div>
         <div className="flex items-center gap-2" role="listitem">
           <span className={tone.vacia} aria-hidden />
-          <span className={`text-[10px] sm:text-xs ${tone.label}`}>Vacía</span>
+          <span className={`text-base sm:text-xs ${tone.label}`}>Vacía</span>
         </div>
       </div>
     </div>

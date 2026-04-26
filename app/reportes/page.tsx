@@ -480,7 +480,7 @@ const ReportesSection = () => {
   if (!activeModule) {
     return (
       <section className="rounded-2xl bg-[#f8fafc] p-8 shadow-sm border border-slate-200">
-        <h2 className="text-xl font-bold text-slate-800 mb-8 text-center uppercase tracking-wider">Inventario de Mercancía</h2>
+        <h2 className="app-title mb-8 text-center uppercase tracking-wider">Inventario de Mercancía</h2>
 
         <div className="grid grid-cols-2 gap-4 max-w-5xl mx-auto">
           {modulos.map((m) => (
@@ -499,8 +499,9 @@ const ReportesSection = () => {
               </div>
 
               <div className="text-left">
-                <h3 className="text-xl font-extrabold text-slate-900 leading-tight">
-                  {m.label} <span className="text-slate-500 font-medium text-lg">{m.value}</span>
+                <h3 className="app-title leading-tight">
+                  {m.label}{" "}
+                  <span className="text-slate-500 font-medium text-base">{m.value}</span>
                 </h3>
               </div>
             </button>
@@ -518,12 +519,12 @@ const ReportesSection = () => {
         className="flex items-center gap-3 px-6 py-3 border-2 border-[#A8D5BA] rounded-2xl bg-white text-slate-900 hover:bg-[#A8D5BA]/10 transition-all active:scale-95 font-bold shadow-sm cursor-pointer mb-6"
       >
         <BiArrowBack size={26} className="text-[#3a5a40]" />
-        <span className="text-[18px]">Regresar</span>
+        <span className="text-base">Regresar</span>
       </button>
 
       {enPasoListadoBodegas && (
         <div className="max-w-2xl mx-auto">
-          <h2 className="text-xl font-bold text-slate-900 mb-2">{listTitle}</h2>
+          <h2 className="app-title mb-2">{listTitle}</h2>
 
           {authLoading ? (
             <p className="text-slate-400 text-sm italic py-8 text-center">Cargando sesión…</p>
@@ -552,7 +553,7 @@ const ReportesSection = () => {
                   >
                     <div>
                       <span
-                        className={`text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded ${
+                        className={`text-base font-bold uppercase tracking-widest px-2 py-1 rounded ${
                           b.status === "interna" ? "bg-blue-50 text-blue-600" : "bg-purple-50 text-purple-600"
                         }`}
                       >

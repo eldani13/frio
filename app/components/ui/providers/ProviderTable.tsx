@@ -16,25 +16,25 @@ export const ProviderTable = ({ providers, onEdit, onDelete, onSelectProvider }:
         <table className="w-full min-w-[800px] border-collapse text-left text-sm">
           <thead>
             <tr className="border-b border-slate-200 bg-slate-50">
-              <th className="whitespace-nowrap px-4 py-3 text-left text-[11px] font-bold uppercase tracking-wide text-slate-500">
+              <th className="whitespace-nowrap px-4 py-3 text-left text-base font-bold uppercase tracking-wide text-slate-500">
                 ID
               </th>
-              <th className="whitespace-nowrap px-4 py-3 text-left text-[11px] font-bold uppercase tracking-wide text-slate-500">
+              <th className="whitespace-nowrap px-4 py-3 text-left text-base font-bold uppercase tracking-wide text-slate-500">
                 Código
               </th>
-              <th className="px-4 py-3 text-left text-[11px] font-bold uppercase tracking-wide text-slate-500">
+              <th className="px-4 py-3 text-left text-base font-bold uppercase tracking-wide text-slate-500">
                 Proveedor
               </th>
-              <th className="px-4 py-3 text-left text-[11px] font-bold uppercase tracking-wide text-slate-500">
+              <th className="px-4 py-3 text-left text-base font-bold uppercase tracking-wide text-slate-500">
                 Nombre
               </th>
-              <th className="px-4 py-3 text-left text-[11px] font-bold uppercase tracking-wide text-slate-500">
+              <th className="px-4 py-3 text-left text-base font-bold uppercase tracking-wide text-slate-500">
                 Teléfono
               </th>
-              <th className="px-4 py-3 text-left text-[11px] font-bold uppercase tracking-wide text-slate-500">
+              <th className="px-4 py-3 text-left text-base font-bold uppercase tracking-wide text-slate-500">
                 Email
               </th>
-              <th className="px-4 py-3 text-right text-[11px] font-bold uppercase tracking-wide text-slate-500">
+              <th className="px-4 py-3 text-right text-base font-bold uppercase tracking-wide text-slate-500">
                 Acciones
               </th>
             </tr>
@@ -46,16 +46,16 @@ export const ProviderTable = ({ providers, onEdit, onDelete, onSelectProvider }:
                 className={`border-b border-slate-100 transition-colors hover:bg-violet-50/80 ${onSelectProvider ? "cursor-pointer" : ""}`}
                 onClick={() => onSelectProvider?.(p)}
               >
-                <td className="whitespace-nowrap px-4 py-3 text-[13px] tabular-nums text-slate-600">
+                <td className="whitespace-nowrap px-4 py-3 text-base tabular-nums text-slate-600">
                   {p.numericId}
                 </td>
-                <td className="whitespace-nowrap px-4 py-3 font-mono text-[13px] font-semibold text-slate-900">
+                <td className="whitespace-nowrap px-4 py-3 font-mono text-base font-semibold text-slate-900">
                   {p.code}
                 </td>
-                <td className="px-4 py-3 text-[13px] font-medium text-slate-800">{p.name}</td>
-                <td className="px-4 py-3 text-[13px] text-slate-700">{p.nombre?.trim() || "—"}</td>
-                <td className="px-4 py-3 text-[13px] text-slate-700">{p.telefono?.trim() || "—"}</td>
-                <td className="max-w-[200px] break-all px-4 py-3 text-[13px] text-slate-700">
+                <td className="px-4 py-3 text-base font-medium text-slate-800">{p.name}</td>
+                <td className="px-4 py-3 text-base text-slate-700">{p.nombre?.trim() || "—"}</td>
+                <td className="px-4 py-3 text-base text-slate-700">{p.telefono?.trim() || "—"}</td>
+                <td className="max-w-[200px] break-all px-4 py-3 text-base text-slate-700">
                   {p.email?.trim() || "—"}
                 </td>
                 <td className="px-4 py-3 text-right" onClick={(e) => e.stopPropagation()}>

@@ -282,15 +282,6 @@ export default function RequestsQueue(props: RequestsQueueProps) {
 
   const nextProcTarea = tareasProcesamientoOperarioVisibles[0];
 
-  /** Órdenes aún en fase operario («asignado» / no en curso): el procesador espera a que pasen a en curso. */
-  const tareasProcesadorEsperandoOperario = useMemo(() => {
-    if (llamadaDesdeRol !== "procesador" || !canExecuteProcesamientoTasks) return 0;
-    return tareasProcesamientoOperario.filter(
-      (t) =>
-        !esTareaVentaSalida(t) && String(t.faseCola ?? "asignado").trim() !== "en_curso",
-    ).length;
-  }, [llamadaDesdeRol, canExecuteProcesamientoTasks, tareasProcesamientoOperario]);
-
   const nextProcTareaBusyKey = nextProcTarea
     ? `${String(nextProcTarea.clientId ?? "").trim()}::${String(nextProcTarea.solicitudId ?? "").trim()}`
     : "";
@@ -300,7 +291,8 @@ export default function RequestsQueue(props: RequestsQueueProps) {
   const deshabilitarBandejaYllamarProcesador =
     esVistaSoloProcesador && tareasProcesamientoOperarioVisibles.length > 0;
 
-  const bandejaLabel = showTemperaturaAlertasAsignadas ? "Alertas" : "Tareas";
+  /** Misma etiqueta que la vista operario (referencia de inicio). */
+  const bandejaLabel = "Alertas";
 
   const handleCompletarTareaVentaSalida = async (tarea: Record<string, unknown>) => {
     if (!onUpdateTareasProcesamientoOperario) return;
@@ -648,7 +640,7 @@ export default function RequestsQueue(props: RequestsQueueProps) {
             className="relative z-10 w-full max-w-md rounded-2xl border border-slate-200 bg-white p-5 shadow-xl sm:p-6"
             onClick={(e) => e.stopPropagation()}
           >
-            <h3 id="rq-proc-desperdicio-titulo" className="text-lg font-bold text-slate-900">
+            <h3 id="rq-proc-desperdicio-titulo" className="app-title">
               Merma (kg)
             </h3>
             <p className="mt-1 text-sm text-slate-600">
@@ -738,7 +730,7 @@ export default function RequestsQueue(props: RequestsQueueProps) {
                   <FiAlertCircle className="h-8 w-8 text-red-500" />
                 </span>
               </div>
-              <h2 className="mb-1 text-center text-2xl font-extrabold text-slate-800 drop-shadow">Alertas asignadas</h2>
+              <h2 className="app-title mb-1 text-center">Alertas asignadas</h2>
               <p className="max-w-sm text-center text-sm font-medium text-slate-500">
                 Alertas de temperatura alta que tenés asignadas.
               </p>
@@ -1102,8 +1094,17 @@ export default function RequestsQueue(props: RequestsQueueProps) {
           >
             <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <span className="flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-6 py-2 text-lg font-semibold text-white sm:w-auto sm:justify-start">
-                <FiCpu className="h-5 w-5" />
-                Procesar
+                {nextProcTarea ? (
+                  <>
+                    <FiCpu className="h-5 w-5" />
+                    Procesar
+                  </>
+                ) : (
+                  <>
+                    <FiBox className="h-5 w-5" />
+                    A bodega
+                  </>
+                )}
               </span>
               <div className="flex w-full flex-wrap items-center justify-start gap-2 sm:w-auto sm:justify-end sm:gap-3">
                 <span className="flex w-full items-center justify-center gap-2 rounded-xl border border-yellow-300 bg-yellow-50 px-4 py-1 text-base font-semibold text-yellow-700 sm:w-auto sm:justify-start">
@@ -1115,18 +1116,8 @@ export default function RequestsQueue(props: RequestsQueueProps) {
               </div>
             </div>
             {!nextProcTarea ? (
-              <div className="flex min-h-88 flex-col items-center justify-center gap-3 rounded-3xl border border-slate-200 bg-slate-50 px-6 py-10 text-center">
-                <p className="text-2xl font-semibold text-slate-700">
-                  {esVistaSoloProcesador && tareasProcesadorEsperandoOperario > 0
-                    ? "Ninguna orden en curso todavía."
-                    : "No hay órdenes en curso para procesar."}
-                </p>
-                {esVistaSoloProcesador && tareasProcesadorEsperandoOperario > 0 ? (
-                  <p className="max-w-md text-sm text-slate-600">
-                    Cuando el operario pase una orden a <strong>en curso</strong>, aparecerá acá para que la marques
-                    como <strong>pendiente</strong> (merma) hasta que el operario ubique el resultado en almacenamiento.
-                  </p>
-                ) : null}
+              <div className="flex min-h-88 items-center justify-center rounded-3xl border border-slate-200 bg-slate-50 px-6 py-10 text-center">
+                <p className="text-2xl font-semibold text-slate-700">No hay solicitudes pendientes.</p>
               </div>
             ) : (
               <div className="rounded-2xl bg-white p-4 sm:p-8">
@@ -1263,15 +1254,14 @@ export default function RequestsQueue(props: RequestsQueueProps) {
           onClick={() => setReviewModal(null)}
         >
           <div
-            className="w-full max-w-lg sm:max-w-xl rounded-3xl border border-yellow-100 bg-white/95 shadow-2xl backdrop-blur-lg relative overflow-hidden animate-fade-in-up"
+            className="relative w-full max-w-lg animate-fade-in-up overflow-hidden rounded-3xl border border-yellow-100 bg-white/95 shadow-2xl backdrop-blur-lg sm:max-w-xl"
             onClick={(e) => e.stopPropagation()}
-            style={{ fontFamily: '"Space Grotesk", "Work Sans", sans-serif' }}
           >
             <div className="flex flex-col items-center justify-center pt-8 pb-4 px-8 border-b border-yellow-100 bg-linear-to-r from-yellow-50 to-white rounded-t-3xl relative">
               <span className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-yellow-100 shadow mb-2">
                 <FiAlertCircle className="w-8 h-8 text-yellow-500" />
               </span>
-              <h2 className="text-2xl font-extrabold text-yellow-700 drop-shadow mb-1 tracking-tight">
+              <h2 className="app-title mb-1">
                 Revisar caja
               </h2>
               <p className="text-sm text-slate-600 font-medium text-center">
@@ -1395,9 +1385,8 @@ export default function RequestsQueue(props: RequestsQueueProps) {
           onClick={() => setShowCallModal(false)}
         >
           <div
-            className="w-full max-w-lg sm:max-w-xl rounded-3xl border border-blue-100 bg-white/90 shadow-2xl backdrop-blur-lg relative overflow-hidden animate-fade-in-up"
+            className="relative w-full max-w-lg animate-fade-in-up overflow-hidden rounded-3xl border border-blue-100 bg-white/90 shadow-2xl backdrop-blur-lg sm:max-w-xl"
             onClick={(e) => e.stopPropagation()}
-            style={{ fontFamily: '"Space Grotesk", "Work Sans", sans-serif' }}
           >
             <div className="flex flex-col items-center justify-center pt-8 pb-4 px-8 border-b border-blue-100 bg-linear-to-r from-blue-50 to-white rounded-t-3xl relative">
               <span className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-blue-100 shadow mb-2">
@@ -1416,7 +1405,7 @@ export default function RequestsQueue(props: RequestsQueueProps) {
                   />
                 </svg>
               </span>
-              <h2 className="text-2xl font-extrabold text-blue-700 drop-shadow mb-1 tracking-tight">
+              <h2 className="app-title mb-1">
                 Llamado enviado
               </h2>
               <p className="text-sm text-slate-600 font-medium text-center">
@@ -1450,15 +1439,14 @@ export default function RequestsQueue(props: RequestsQueueProps) {
           aria-modal="true"
         >
           <div
-            className="w-full max-w-lg sm:max-w-xl rounded-3xl border border-red-100 bg-white/90 shadow-2xl backdrop-blur-lg relative overflow-hidden animate-fade-in-up"
+            className="relative w-full max-w-lg animate-fade-in-up overflow-hidden rounded-3xl border border-red-100 bg-white/90 shadow-2xl backdrop-blur-lg sm:max-w-xl"
             onClick={(e) => e.stopPropagation()}
-            style={{ fontFamily: '"Space Grotesk", "Work Sans", sans-serif' }}
           >
             <div className="flex flex-col items-center justify-center pt-8 pb-4 px-8 border-b border-red-100 bg-linear-to-r from-red-50 to-white rounded-t-3xl relative">
               <span className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-red-100 shadow animate-pulse mb-2">
                 <FiAlertCircle className="w-9 h-9 text-red-500" />
               </span>
-              <h3 className="text-2xl font-extrabold text-red-700 drop-shadow mb-1 tracking-tight">
+              <h3 className="app-title mb-1">
                 Alerta {alertaSeleccionada.alerta.position}
               </h3>
               <p className="text-sm text-slate-500 font-medium text-center">
@@ -1583,9 +1571,8 @@ export default function RequestsQueue(props: RequestsQueueProps) {
           onClick={() => setEditTempModal(null)}
         >
           <div
-            className="w-full max-w-xs rounded-2xl border border-blue-100 bg-white/95 shadow-xl relative overflow-hidden animate-fade-in-up"
+            className="relative w-full max-w-xs animate-fade-in-up overflow-hidden rounded-2xl border border-blue-100 bg-white/95 shadow-xl"
             onClick={(e) => e.stopPropagation()}
-            style={{ fontFamily: '"Space Grotesk", "Work Sans", sans-serif' }}
           >
             <div className="flex flex-col items-center justify-center pt-5 pb-2 px-4 border-b border-blue-100 bg-linear-to-r from-blue-50 to-white rounded-t-2xl relative">
               <span className="inline-flex items-center justify-center w-9 h-9 rounded-full bg-blue-100 mb-1">
@@ -1604,7 +1591,7 @@ export default function RequestsQueue(props: RequestsQueueProps) {
                   />
                 </svg>
               </span>
-              <h2 className="text-lg font-bold text-blue-700 mb-0.5 tracking-tight">
+              <h2 className="app-title mb-0.5">
                 Editar temperatura
               </h2>
               <button

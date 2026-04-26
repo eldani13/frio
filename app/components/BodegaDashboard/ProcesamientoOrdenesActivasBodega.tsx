@@ -48,6 +48,7 @@ import {
   normalizeProcesamientoEstado,
 } from "@/app/types/solicitudProcesamiento";
 import { BodegaDetalleModalFila } from "@/app/components/bodega/CajaDetalleModal";
+import { ModalPlantilla } from "@/app/components/ui/ModalPlantilla";
 import { EmptyZonaSlot, ZonaCuatroSlotsRow } from "@/app/components/bodega/ZonaCuatroSlotsRow";
 import {
   BODEGA_SLOT_BODY_CLASS,
@@ -200,12 +201,12 @@ function TarjetaSlotProcesamientoPrimario({
             />
             <div className="min-w-0 flex-1">
               <div
-                className={`truncate font-semibold leading-tight text-[clamp(0.65rem,1vw,0.8rem)] ${tone.name}`}
+                className={`truncate font-semibold leading-tight text-base ${tone.name}`}
               >
                 {row.productoPrimarioTitulo?.trim() || "—"}
               </div>
               <div
-                className={`mt-0.5 truncate leading-tight text-[clamp(0.65rem,1.4vw,0.78rem)] ${tone.id}`}
+                className={`mt-0.5 truncate leading-tight text-base ${tone.id}`}
                 title={lineaSub}
               >
                 {lineaSub}
@@ -214,7 +215,7 @@ function TarjetaSlotProcesamientoPrimario({
           </div>
           <div className="mt-2 flex shrink-0 justify-center">
             <span
-              className={`inline-block max-w-full truncate rounded-full px-2 py-0.5 text-[clamp(0.65rem,1.4vw,0.78rem)] font-medium ${procesamientoEstadoBadgeClass(row.estado)}`}
+              className={`inline-block max-w-full truncate rounded-full px-2 py-0.5 text-base font-medium ${procesamientoEstadoBadgeClass(row.estado)}`}
             >
               {row.estado}
             </span>
@@ -263,12 +264,12 @@ function TarjetaSlotProcesamientoSecundario({
             />
             <div className="min-w-0 flex-1">
               <div
-                className={`truncate font-semibold leading-tight text-[clamp(0.65rem,1vw,0.8rem)] ${tone.name}`}
+                className={`truncate font-semibold leading-tight text-base ${tone.name}`}
               >
                 {row.productoSecundarioTitulo?.trim() || "—"}
               </div>
               <div
-                className={`mt-0.5 truncate leading-tight text-[clamp(0.65rem,1.4vw,0.78rem)] ${tone.id}`}
+                className={`mt-0.5 truncate leading-tight text-base ${tone.id}`}
                 title={lineaSub}
               >
                 {lineaSub}
@@ -277,7 +278,7 @@ function TarjetaSlotProcesamientoSecundario({
           </div>
           <div className="mt-2 flex shrink-0 justify-center">
             <span
-              className={`inline-block max-w-full truncate rounded-full px-2 py-0.5 text-[clamp(0.65rem,1.4vw,0.78rem)] font-medium ${procesamientoEstadoBadgeClass(row.estado)}`}
+              className={`inline-block max-w-full truncate rounded-full px-2 py-0.5 text-base font-medium ${procesamientoEstadoBadgeClass(row.estado)}`}
             >
               {row.estado}
             </span>
@@ -322,12 +323,12 @@ export function TarjetaOrdenProcesamientoSlotInner({
             />
             <div className="min-w-0 flex-1">
               <div
-                className={`truncate font-semibold leading-tight text-[clamp(0.65rem,1vw,0.8rem)] ${tone.name}`}
+                className={`truncate font-semibold leading-tight text-base ${tone.name}`}
               >
                 {row.productoPrimarioTitulo?.trim() || "—"}
               </div>
               <div
-                className={`mt-0.5 truncate leading-tight text-[clamp(0.65rem,1.4vw,0.78rem)] ${tone.id}`}
+                className={`mt-0.5 truncate leading-tight text-base ${tone.id}`}
                 title={sub}
               >
                 {sub}
@@ -336,7 +337,7 @@ export function TarjetaOrdenProcesamientoSlotInner({
           </div>
           <div className="mt-2 flex shrink-0 justify-center">
             <span
-              className={`inline-block max-w-full truncate rounded-full px-2 py-0.5 text-[clamp(0.65rem,1.4vw,0.78rem)] font-medium ${procesamientoEstadoBadgeClass(row.estado)}`}
+              className={`inline-block max-w-full truncate rounded-full px-2 py-0.5 text-base font-medium ${procesamientoEstadoBadgeClass(row.estado)}`}
             >
               {row.estado}
             </span>
@@ -422,13 +423,13 @@ function CajaPendienteMovimientoBodega({
               <FiBox className={`mt-0.5 h-4 w-4 shrink-0 sm:h-[18px] sm:w-[18px] ${tone.icon}`} aria-hidden />
               <div className="min-w-0 flex-1">
                 <div
-                  className={`truncate font-semibold leading-tight text-[clamp(0.65rem,1vw,0.8rem)] ${tone.name}`}
+                  className={`truncate font-semibold leading-tight text-base ${tone.name}`}
                   title={titulo}
                 >
                   {titulo}
                 </div>
                 <div
-                  className={`mt-0.5 truncate leading-tight text-[clamp(0.65rem,1.4vw,0.78rem)] ${tone.id}`}
+                  className={`mt-0.5 truncate leading-tight text-base ${tone.id}`}
                   title={subtitulo}
                 >
                   {subtitulo}
@@ -437,7 +438,7 @@ function CajaPendienteMovimientoBodega({
             </div>
             <div className="mt-2 flex shrink-0 justify-center">
               <span
-                className={`inline-block max-w-full truncate rounded-full px-2 py-0.5 text-[clamp(0.65rem,1.4vw,0.78rem)] font-medium ${tone.pill}`}
+                className={`inline-block max-w-full truncate rounded-full px-2 py-0.5 text-base font-medium ${tone.pill}`}
               >
                 {p.kind === "procesado" ? "A bodega" : "Sobrante"}
               </span>
@@ -454,7 +455,7 @@ function CajaPendienteMovimientoBodega({
               e.stopPropagation();
               onCrearOrden();
             }}
-            className="rounded-lg bg-sky-600 px-3 py-1.5 text-[11px] font-bold text-white shadow-sm transition hover:bg-sky-700 sm:text-xs"
+            className="rounded-lg bg-sky-600 px-3 py-1.5 text-base font-bold text-white shadow-sm transition hover:bg-sky-700 sm:text-xs"
           >
             Crear orden
           </button>
@@ -1033,7 +1034,7 @@ export function ProcesamientoOrdenesActivasBodega({
           }
           void handleEstado(row, v);
         }}
-        className={`w-full cursor-pointer truncate rounded-lg border border-slate-200/80 bg-white py-1.5 pl-2 pr-7 text-left text-[11px] font-semibold shadow-sm outline-none ring-0 focus-visible:ring-2 focus-visible:ring-sky-400/50 [appearance:none] disabled:opacity-60 ${procesamientoEstadoBadgeClass(row.estado)}`}
+        className={`w-full cursor-pointer truncate rounded-lg border border-slate-200/80 bg-white py-1.5 pl-2 pr-7 text-left text-base font-semibold shadow-sm outline-none ring-0 focus-visible:ring-2 focus-visible:ring-sky-400/50 [appearance:none] disabled:opacity-60 ${procesamientoEstadoBadgeClass(row.estado)}`}
       >
         {opcionesEstadoParaSesion(row, sessionUid).map((opt) => (
           <option key={opt} value={opt}>
@@ -1079,48 +1080,28 @@ export function ProcesamientoOrdenesActivasBodega({
 
   const detalleModal =
     detalle && (layout === "cards" || layout === "slots4") ? (
-      <div
-        className="fixed inset-0 z-[110] flex items-center justify-center bg-slate-900/45 p-3 backdrop-blur-[2px] sm:p-4"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="proc-bodega-detalle-titulo"
-        onClick={cerrarDetalleOrden}
+      <ModalPlantilla
+        open
+        onClose={cerrarDetalleOrden}
+        titulo={String(detalle.numero ?? "").trim() || detalle.id}
+        tituloClassName="font-mono"
+        tituloId="proc-bodega-detalle-titulo"
+        headerIcon={<FiCpu className="h-7 w-7 text-blue-600" strokeWidth={2} aria-hidden />}
+        headerStart={
+          <button
+            type="button"
+            onClick={cerrarDetalleOrden}
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 shadow-sm transition hover:bg-slate-50"
+            aria-label="Volver al listado"
+          >
+            <FiArrowLeft className="h-5 w-5" />
+          </button>
+        }
+        subtitulo={subtituloDetalleOrden}
+        maxWidthClass="max-w-3xl"
+        cardMaxHeightClass="max-h-[90vh]"
+        zIndexClass="z-[110]"
       >
-        <div
-          className="flex max-h-[90vh] w-full max-w-3xl flex-col overflow-hidden rounded-3xl border border-sky-200/90 bg-white shadow-2xl shadow-sky-900/10"
-          onClick={(e) => e.stopPropagation()}
-        >
-          <div className="relative shrink-0 border-b border-sky-100 bg-linear-to-r from-sky-50 via-white to-cyan-50/80 px-4 py-4 sm:px-6 sm:py-5">
-            <div className="flex items-start gap-3 sm:gap-4">
-              <button
-                type="button"
-                onClick={cerrarDetalleOrden}
-                className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 shadow-sm transition hover:bg-slate-50"
-                aria-label="Volver al listado"
-              >
-                <FiArrowLeft className="h-5 w-5" />
-              </button>
-              <div className="min-w-0 flex-1 pr-10">
-                <h2
-                  id="proc-bodega-detalle-titulo"
-                  className="text-lg font-bold tracking-tight text-slate-900 sm:text-xl"
-                >
-                  <span className="font-mono">{String(detalle.numero ?? "").trim() || detalle.id}</span>
-                </h2>
-                <p className="mt-1.5 text-sm leading-relaxed text-slate-600">{subtituloDetalleOrden}</p>
-              </div>
-              <button
-                type="button"
-                onClick={cerrarDetalleOrden}
-                className="absolute right-3 top-3 rounded-xl p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 sm:right-4 sm:top-4"
-                aria-label="Cerrar"
-              >
-                <HiOutlineXMark className="h-5 w-5" strokeWidth={2} />
-              </button>
-            </div>
-          </div>
-
-          <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-6 sm:py-5">
             {esDetalleTrasladoAlmacen ? (
               <p className="mb-4 rounded-xl border border-violet-200 bg-violet-50/90 px-3 py-2.5 text-left text-xs leading-relaxed text-violet-950">
                 <strong className="font-semibold">Pendiente en planta.</strong> La orden ya no está en{" "}
@@ -1136,13 +1117,13 @@ export function ProcesamientoOrdenesActivasBodega({
                 <FiCpu className="h-4 w-4 shrink-0 text-sky-600" aria-hidden />
               )}
               <span
-                className={`rounded-full px-2.5 py-0.5 text-[11px] font-bold uppercase ${procesamientoEstadoBadgeClass(detalle.estado)}`}
+                className={`rounded-full px-2.5 py-0.5 text-base font-bold uppercase ${procesamientoEstadoBadgeClass(detalle.estado)}`}
               >
                 {detalle.estado}
               </span>
               <span className="text-slate-600">{textoBannerContexto}</span>
             </div>
-            <dl className="mt-4 space-y-3 text-sm">
+            <dl className="mt-4 space-y-3 text-base">
               {detalleVistaMinimalMovimientoAlmacenAProc ? (
                 <>
                   <BodegaDetalleModalFila
@@ -1249,12 +1230,12 @@ export function ProcesamientoOrdenesActivasBodega({
                 </>
               )}
             </dl>
-          </div>
 
-          <div className="flex shrink-0 flex-col gap-3 border-t border-sky-100 bg-sky-50/50 px-4 py-4 sm:px-6">
+        footer={
+          <div className="flex flex-col gap-3">
             {mostrarBloqueAsignarOperario ? (
               <div className="rounded-2xl border border-sky-200/80 bg-white px-4 py-3 shadow-sm">
-                <p className="text-[11px] font-bold uppercase tracking-wide text-sky-800/90">
+                <p className="text-base font-bold uppercase tracking-wide text-sky-800/90">
                   Tarea pendiente · retiro en bodega
                 </p>
                 <p className="mt-1 text-xs text-slate-600">
@@ -1283,7 +1264,7 @@ export function ProcesamientoOrdenesActivasBodega({
                   return (
                     <>
                       {operariosBodega.length === 0 ? (
-                        <p className="mt-2 rounded-md border border-amber-100 bg-amber-50 px-2.5 py-1.5 text-[11px] text-amber-900">
+                        <p className="mt-2 rounded-md border border-amber-100 bg-amber-50 px-2.5 py-1.5 text-base text-amber-900">
                           Sin operarios configurados.
                         </p>
                       ) : null}
@@ -1328,7 +1309,7 @@ export function ProcesamientoOrdenesActivasBodega({
             ) : null}
             {mostrarCrearOrdenTrasladoDesdeDetalle && detallePendienteMovimiento ? (
               <div className="rounded-2xl border border-violet-200/80 bg-white px-4 py-3 shadow-sm">
-                <p className="text-[11px] font-bold uppercase tracking-wide text-violet-900/90">
+                <p className="text-base font-bold uppercase tracking-wide text-violet-900/90">
                   Tarea pendiente · traslado a almacenamiento
                 </p>
                 <p className="mt-1 text-xs text-slate-600">
@@ -1356,7 +1337,7 @@ export function ProcesamientoOrdenesActivasBodega({
               </div>
             ) : null}
             {mostrarAvisoTrasladoSinPermiso ? (
-              <p className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-left text-[11px] leading-relaxed text-slate-500">
+              <p className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-left text-base leading-relaxed text-slate-500">
                 Solo jefe o administrador pueden crear la orden de traslado; el operario la ejecuta desde el mapa.
               </p>
             ) : null}
@@ -1377,8 +1358,8 @@ export function ProcesamientoOrdenesActivasBodega({
               </button>
             </div>
           </div>
-        </div>
-      </div>
+        }
+      </ModalPlantilla>
     ) : null;
 
   const modalPendientesVacio =
@@ -1415,7 +1396,7 @@ export function ProcesamientoOrdenesActivasBodega({
               <div className="min-w-0 flex-1">
                 <h2
                   id="modal-pendientes-iniciado-titulo"
-                  className="text-lg font-bold tracking-tight text-slate-900 sm:text-xl"
+                  className="app-title"
                 >
                   Tareas pendientes
                 </h2>
@@ -1500,7 +1481,7 @@ export function ProcesamientoOrdenesActivasBodega({
                   <section className="min-w-0" aria-labelledby="pendientes-col-almacen-a-proc">
                     <h3
                       id="pendientes-col-almacen-a-proc"
-                      className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500"
+                      className="app-title mb-1"
                     >
                       Almacenamiento → Procesamiento
                     </h3>
@@ -1544,7 +1525,7 @@ export function ProcesamientoOrdenesActivasBodega({
                   >
                     <h3
                       id="pendientes-col-proc-a-almacen"
-                      className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500"
+                      className="app-title mb-1"
                     >
                       Procesamiento → Almacenamiento
                     </h3>
@@ -1583,7 +1564,7 @@ export function ProcesamientoOrdenesActivasBodega({
                       </div>
                     )}
                     {pendientesMovimientoBodega.length > 0 && !puedeCrearOrdenTraslado ? (
-                      <p className="mt-3 text-[11px] leading-relaxed text-slate-500">
+                      <p className="mt-3 text-base leading-relaxed text-slate-500">
                         {onCrearOrdenBodega
                           ? "Solo jefe o administrador ven «Crear orden»; el operario ejecuta la orden en el mapa."
                           : "En esta vista no está conectada la creación de órdenes de traslado (falta el enlace al flujo del jefe)."}
@@ -1622,7 +1603,7 @@ export function ProcesamientoOrdenesActivasBodega({
                 <HiArrowsRightLeft className="h-6 w-6" aria-hidden />
               </span>
               <div className="min-w-0 flex-1">
-                <h2 id="proc-modal-traslado-pend-titulo" className="text-lg font-bold tracking-tight text-slate-900">
+                <h2 id="proc-modal-traslado-pend-titulo" className="app-title">
                   Traslado a bodega
                 </h2>
                 <p className="mt-0.5 text-sm text-slate-600">
@@ -1642,7 +1623,7 @@ export function ProcesamientoOrdenesActivasBodega({
           </div>
           <div className="space-y-4 px-5 py-4 sm:px-6 sm:py-5">
             <div>
-              <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500">Destino de la orden</p>
+              <p className="text-base font-bold uppercase tracking-wide text-slate-500">Destino de la orden</p>
               <input
                 readOnly
                 value="Bodega (mapa interno)"
@@ -1652,7 +1633,7 @@ export function ProcesamientoOrdenesActivasBodega({
               />
             </div>
             <div>
-              <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500">Origen</p>
+              <p className="text-base font-bold uppercase tracking-wide text-slate-500">Origen</p>
               <input
                 readOnly
                 value="Procesamiento (orden pendiente de ubicar en mapa)"
@@ -1672,7 +1653,7 @@ export function ProcesamientoOrdenesActivasBodega({
                 return (
                   <>
                     <div>
-                      <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500">
+                      <p className="text-base font-bold uppercase tracking-wide text-slate-500">
                         Sobrante (reintegración)
                       </p>
                       <input
@@ -1699,13 +1680,13 @@ export function ProcesamientoOrdenesActivasBodega({
               return (
                 <>
                   <div>
-                    <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500">
+                    <p className="text-base font-bold uppercase tracking-wide text-slate-500">
                       Orden terminada (procesamiento)
                     </p>
                     <input
                       readOnly
                       value={`Procesado · ${row.numero} — ${insumo} — est. ${est} — ${sec}`}
-                      className="mt-1 w-full cursor-not-allowed rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 font-mono text-[13px] text-slate-800"
+                      className="mt-1 w-full cursor-not-allowed rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 font-mono text-base text-slate-800"
                       tabIndex={-1}
                     />
                   </div>
@@ -1716,7 +1697,7 @@ export function ProcesamientoOrdenesActivasBodega({
                   <div>
                     <label
                       htmlFor="proc-traslado-casillero-select"
-                      className="text-[10px] font-bold uppercase tracking-wide text-slate-500"
+                      className="text-base font-bold uppercase tracking-wide text-slate-500"
                     >
                       Nueva posición
                     </label>
@@ -1781,7 +1762,7 @@ export function ProcesamientoOrdenesActivasBodega({
         className="relative z-10 w-full max-w-md rounded-2xl border border-slate-200 bg-white p-5 shadow-xl sm:p-6"
         onClick={(e) => e.stopPropagation()}
       >
-        <h3 id="proc-modal-desperdicio-titulo" className="text-lg font-bold text-slate-900">
+        <h3 id="proc-modal-desperdicio-titulo" className="app-title">
           Merma (kg)
         </h3>
         <p className="mt-1 text-sm text-slate-600">
@@ -1916,7 +1897,7 @@ export function ProcesamientoOrdenesActivasBodega({
             <FiCpu className="h-[18px] w-[18px]" strokeWidth={2} />
           </span>
           <div className="min-w-0 flex-1">
-            <h3 className="text-sm font-bold tracking-tight text-slate-900">Procesamiento</h3>
+            <h3 className="app-title">Procesamiento</h3>
           </div>
           <button
             type="button"
@@ -1942,7 +1923,7 @@ export function ProcesamientoOrdenesActivasBodega({
               aria-hidden
             />
             <span
-              className={`min-w-[1.125rem] text-center text-[11px] ${
+              className={`min-w-[1.125rem] text-center text-base ${
                 cantidadTareasPendientesPanel > 0
                   ? BODEGA_ZONE_STATUS_NUM_ACTIVE_CLASS
                   : BODEGA_ZONE_STATUS_NUM_INACTIVE_CLASS
@@ -2005,7 +1986,7 @@ export function ProcesamientoOrdenesActivasBodega({
             <FiCpu className="h-[18px] w-[18px]" strokeWidth={2} />
           </span>
           <div className="min-w-0 flex-1">
-            <h3 className="text-sm font-bold tracking-tight text-slate-900">Procesamiento</h3>
+            <h3 className="app-title">Procesamiento</h3>
           </div>
           <button
             type="button"
@@ -2031,7 +2012,7 @@ export function ProcesamientoOrdenesActivasBodega({
               aria-hidden
             />
             <span
-              className={`min-w-[1.125rem] text-center text-[11px] ${
+              className={`min-w-[1.125rem] text-center text-base ${
                 cantidadTareasPendientesPanel > 0
                   ? BODEGA_ZONE_STATUS_NUM_ACTIVE_CLASS
                   : BODEGA_ZONE_STATUS_NUM_INACTIVE_CLASS
@@ -2105,20 +2086,20 @@ export function ProcesamientoOrdenesActivasBodega({
             <table className="w-full min-w-[720px] border-collapse text-left text-sm">
               <thead className="sticky top-0 z-10 border-b border-slate-200 bg-slate-50">
                 <tr>
-                  <th className="whitespace-nowrap px-3 py-2 text-[10px] font-bold uppercase tracking-wide text-slate-500">
+                  <th className="whitespace-nowrap px-3 py-2 text-base font-bold uppercase tracking-wide text-slate-500">
                     Orden
                   </th>
-                  <th className="px-3 py-2 text-[10px] font-bold uppercase tracking-wide text-slate-500">Cuenta</th>
-                  <th className="px-3 py-2 text-[10px] font-bold uppercase tracking-wide text-slate-500">Primario</th>
-                  <th className="px-3 py-2 text-[10px] font-bold uppercase tracking-wide text-slate-500">Secundario</th>
-                  <th className="whitespace-nowrap px-3 py-2 text-[10px] font-bold uppercase tracking-wide text-slate-500">
+                  <th className="px-3 py-2 text-base font-bold uppercase tracking-wide text-slate-500">Cuenta</th>
+                  <th className="px-3 py-2 text-base font-bold uppercase tracking-wide text-slate-500">Primario</th>
+                  <th className="px-3 py-2 text-base font-bold uppercase tracking-wide text-slate-500">Secundario</th>
+                  <th className="whitespace-nowrap px-3 py-2 text-base font-bold uppercase tracking-wide text-slate-500">
                     Insumo primario
                   </th>
-                  <th className="whitespace-nowrap px-3 py-2 text-[10px] font-bold uppercase tracking-wide text-slate-500">
+                  <th className="whitespace-nowrap px-3 py-2 text-base font-bold uppercase tracking-wide text-slate-500">
                     Estim. sec.
                   </th>
-                  <th className="px-3 py-2 text-[10px] font-bold uppercase tracking-wide text-slate-500">Estado</th>
-                  <th className="whitespace-nowrap px-3 py-2 text-[10px] font-bold uppercase tracking-wide text-slate-500">
+                  <th className="px-3 py-2 text-base font-bold uppercase tracking-wide text-slate-500">Estado</th>
+                  <th className="whitespace-nowrap px-3 py-2 text-base font-bold uppercase tracking-wide text-slate-500">
                     Fecha
                   </th>
                 </tr>
@@ -2135,19 +2116,19 @@ export function ProcesamientoOrdenesActivasBodega({
                     const key = `${row.clientId}::${row.id}`;
                     return (
                       <tr key={key} className="border-b border-slate-100">
-                        <td className="whitespace-nowrap px-3 py-2 font-mono text-[12px] font-semibold text-slate-900">
+                        <td className="whitespace-nowrap px-3 py-2 font-mono text-base font-semibold text-slate-900">
                           {row.numero}
                         </td>
                         <td className="max-w-[120px] px-3 py-2 text-slate-800">
-                          <span className="line-clamp-2 text-[12px]" title={row.clientName}>
+                          <span className="line-clamp-2 text-base" title={row.clientName}>
                             {row.clientName || row.clientId}
                           </span>
                         </td>
                         <td className="max-w-[120px] px-3 py-2 text-slate-800">
-                          <span className="line-clamp-2 text-[12px]">{row.productoPrimarioTitulo}</span>
+                          <span className="line-clamp-2 text-base">{row.productoPrimarioTitulo}</span>
                         </td>
                         <td className="max-w-[120px] px-3 py-2 text-slate-800">
-                          <span className="line-clamp-2 text-[12px]">{row.productoSecundarioTitulo}</span>
+                          <span className="line-clamp-2 text-base">{row.productoSecundarioTitulo}</span>
                         </td>
                         <td className="whitespace-nowrap px-3 py-2 tabular-nums text-slate-900">
                           {cantidadPrimarioProcesamientoTexto(

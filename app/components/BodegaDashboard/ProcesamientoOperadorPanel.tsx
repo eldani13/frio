@@ -230,7 +230,7 @@ export function ProcesamientoOperadorPanel({
             className="relative z-10 w-full max-w-md rounded-2xl border border-slate-200 bg-white p-5 shadow-xl sm:p-6"
             onClick={(e) => e.stopPropagation()}
           >
-            <h3 id="pop-proc-desperdicio-titulo" className="text-lg font-bold text-slate-900">
+            <h3 id="pop-proc-desperdicio-titulo" className="app-title">
               Merma (kg)
             </h3>
             <p className="mt-1 text-sm text-slate-600">
@@ -319,7 +319,7 @@ export function ProcesamientoOperadorPanel({
               <FiCpu size={28} />
             </div>
             <div>
-              <h1 className="text-2xl font-extrabold tracking-tight text-slate-900">
+              <h1 className="app-title">
                 Órdenes de procesamiento
               </h1>
               
@@ -363,25 +363,25 @@ export function ProcesamientoOperadorPanel({
             <table className="w-full min-w-[800px] border-collapse text-left text-sm">
               <thead>
                 <tr className="border-b border-slate-200 bg-slate-50">
-                  <th className="whitespace-nowrap px-4 py-3 text-[11px] font-bold uppercase tracking-wide text-slate-500">
+                  <th className="whitespace-nowrap px-4 py-3 text-base font-bold uppercase tracking-wide text-slate-500">
                     Orden
                   </th>
-                  <th className="min-w-[120px] px-4 py-3 text-[11px] font-bold uppercase tracking-wide text-slate-500">
+                  <th className="min-w-[120px] px-4 py-3 text-base font-bold uppercase tracking-wide text-slate-500">
                     Primario
                   </th>
-                  <th className="min-w-[120px] px-4 py-3 text-[11px] font-bold uppercase tracking-wide text-slate-500">
+                  <th className="min-w-[120px] px-4 py-3 text-base font-bold uppercase tracking-wide text-slate-500">
                     Secundario
                   </th>
-                  <th className="whitespace-nowrap px-4 py-3 text-[11px] font-bold uppercase tracking-wide text-slate-500">
+                  <th className="whitespace-nowrap px-4 py-3 text-base font-bold uppercase tracking-wide text-slate-500">
                     Insumo primario
                   </th>
-                  <th className="whitespace-nowrap px-4 py-3 text-[11px] font-bold uppercase tracking-wide text-slate-500">
+                  <th className="whitespace-nowrap px-4 py-3 text-base font-bold uppercase tracking-wide text-slate-500">
                     Estim. sec.
                   </th>
-                  <th className="px-4 py-3 text-[11px] font-bold uppercase tracking-wide text-slate-500">
+                  <th className="px-4 py-3 text-base font-bold uppercase tracking-wide text-slate-500">
                     Estado
                   </th>
-                  <th className="whitespace-nowrap px-4 py-3 text-[11px] font-bold uppercase tracking-wide text-slate-500">
+                  <th className="whitespace-nowrap px-4 py-3 text-base font-bold uppercase tracking-wide text-slate-500">
                     Fecha
                   </th>
                 </tr>
@@ -415,16 +415,16 @@ export function ProcesamientoOperadorPanel({
                       className="cursor-pointer border-b border-slate-100 transition-colors hover:bg-sky-50/70 focus-visible:bg-sky-50/70 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-sky-400"
                       aria-label={`Ver detalle de orden ${row.numero}`}
                     >
-                      <td className="whitespace-nowrap px-4 py-3 font-mono text-[13px] font-semibold text-slate-900">
+                      <td className="whitespace-nowrap px-4 py-3 font-mono text-base font-semibold text-slate-900">
                         {row.numero}
                       </td>
                       <td className="max-w-[180px] px-4 py-3 text-slate-800">
-                        <span className="line-clamp-2 text-[13px]" title={row.productoPrimarioTitulo}>
+                        <span className="line-clamp-2 text-base" title={row.productoPrimarioTitulo}>
                           {row.productoPrimarioTitulo || "—"}
                         </span>
                       </td>
                       <td className="max-w-[180px] px-4 py-3 text-slate-800">
-                        <span className="line-clamp-2 text-[13px]" title={row.productoSecundarioTitulo}>
+                        <span className="line-clamp-2 text-base" title={row.productoSecundarioTitulo}>
                           {row.productoSecundarioTitulo || "—"}
                         </span>
                       </td>
@@ -560,7 +560,7 @@ export function ProcesamientoOperadorPanel({
             onClick={() => setDetalle(null)}
           />
           <div className="relative z-10 w-full max-w-lg rounded-2xl border border-slate-200 bg-white p-6 shadow-xl">
-            <h2 id="proc-detalle-titulo" className="text-lg font-bold text-slate-900">
+            <h2 id="proc-detalle-titulo" className="app-title">
               {detalle.numero}
             </h2>
             <p className="mt-3 text-xs font-bold uppercase tracking-wide text-slate-500">Producto primario</p>

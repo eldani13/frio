@@ -298,7 +298,7 @@ export function OcOrdenVentaIngresoPanel({
               <FiArchive className="h-[18px] w-[18px] sm:h-5 sm:w-5" aria-hidden />
             </span>
             <div className="min-w-0">
-              <h2 className="text-[17px] font-bold leading-tight tracking-tight text-emerald-900 sm:text-lg">
+              <h2 className="app-title">
                 Ingreso desde venta
               </h2>
             </div>
@@ -366,7 +366,7 @@ export function OcOrdenVentaIngresoPanel({
               <p className={`text-xs font-bold uppercase tracking-wide ${sal ? "text-pink-900" : "text-emerald-900"}`}>
                 Paquete de despacho
               </p>
-              <p className={`mt-1 text-[11px] leading-relaxed ${sal ? "text-pink-900/90" : "text-emerald-800"}`}>
+              <p className={`mt-1 text-base leading-relaxed ${sal ? "text-pink-900/90" : "text-emerald-800"}`}>
                 Incluye <strong>todas las líneas</strong> de esta venta.
                 {sal
                   ? " Después usá más abajo «Enviar paquete al transporte» cuando las cajas estén en zona de salida."

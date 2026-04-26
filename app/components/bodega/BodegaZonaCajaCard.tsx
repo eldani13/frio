@@ -106,17 +106,17 @@ export default function BodegaZonaCajaCard({
               aria-hidden
             />
             <div className="min-w-0 flex-1">
-              <div className="truncate font-semibold leading-tight text-slate-800 text-[clamp(0.65rem,1vw,0.8rem)]">
+              <div className="truncate font-semibold leading-tight text-slate-800 text-base">
                 {box.name || "Sin nombre"}
               </div>
-              <div className="mt-0.5 truncate leading-tight text-slate-500 text-[clamp(0.65rem,1.4vw,0.78rem)]">
+              <div className="mt-0.5 truncate leading-tight text-slate-500 text-base">
                 {box.autoId}
               </div>
             </div>
           </div>
           <div className="mt-2 flex shrink-0 justify-center">
             <span
-              className={`inline-block max-w-full truncate rounded-full px-2 py-0.5 text-[clamp(0.65rem,1.4vw,0.78rem)] font-medium ${pillClass}`}
+              className={`inline-block max-w-full truncate rounded-full px-2 py-0.5 text-base font-medium ${pillClass}`}
             >
               {typeof box.temperature === "number" ? `${box.temperature} °C` : "Sin temperatura"}
             </span>

@@ -409,8 +409,8 @@ export default function AdminBodegaReportes({
     <div className="mx-auto flex w-full max-w-6xl flex-col gap-8 bg-gradient-to-b from-slate-50 to-white px-3 py-6 sm:px-5 animate-fade-in">
       <header className="flex flex-col gap-4 rounded-2xl border border-slate-200/80 bg-white/95 p-5 shadow-sm ring-1 ring-slate-100 sm:flex-row sm:items-center sm:justify-between sm:p-6">
         <div className="min-w-0 space-y-1">
-          <p className="text-[11px] font-semibold uppercase tracking-wider text-sky-600/90">Almacenamiento</p>
-          <h2 className="text-2xl font-bold tracking-tight text-slate-900 sm:text-[1.65rem]">Reportes</h2>
+          <p className="text-base font-semibold uppercase tracking-wider text-sky-600/90">Almacenamiento</p>
+          <h2 className="app-title">Reportes</h2>
           {/* <p className="max-w-xl text-sm leading-relaxed text-slate-600">
             Historial acumulativo en Firestore por bodega: ingresos archivados, salidas, movimientos, despachos,
             alertas y merma. Los guardados ahora usan transacciones para que varias pestañas o sesiones no se pisen
@@ -432,18 +432,18 @@ export default function AdminBodegaReportes({
       </header>
 
       <section aria-label="Resumen numérico">
-        <h3 className="mb-3 text-xs font-bold uppercase tracking-wide text-slate-500">Resumen</h3>
+        <h3 className="app-title mb-3">Resumen</h3>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           <button type="button" onClick={() => setReportDetailModal({ type: "ingresos" })} className={kpiCardClass}>
             <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600 ring-1 ring-emerald-100/80">
               <MdInbox size={24} aria-hidden />
             </span>
             <div className="min-w-0 flex-1">
-              <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Ingresos</span>
+              <span className="text-base font-semibold uppercase tracking-wide text-slate-500">Ingresos</span>
               <p className="mt-0.5 text-2xl font-bold tabular-nums tracking-tight text-slate-900">
                 {filteredIngresos.length}
               </p>
-              <p className="mt-0.5 text-[11px] text-slate-400">Archivados en historial</p>
+              <p className="mt-0.5 text-base text-slate-400">Archivados en historial</p>
             </div>
           </button>
 
@@ -452,11 +452,11 @@ export default function AdminBodegaReportes({
               <MdLogout size={24} aria-hidden />
             </span>
             <div className="min-w-0 flex-1">
-              <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Salidas</span>
+              <span className="text-base font-semibold uppercase tracking-wide text-slate-500">Salidas</span>
               <p className="mt-0.5 text-2xl font-bold tabular-nums tracking-tight text-slate-900">
                 {filteredSalidas.length}
               </p>
-              <p className="mt-0.5 text-[11px] text-slate-400">Órdenes completadas</p>
+              <p className="mt-0.5 text-base text-slate-400">Órdenes completadas</p>
             </div>
           </button>
 
@@ -465,11 +465,11 @@ export default function AdminBodegaReportes({
               <MdMoveToInbox size={24} aria-hidden />
             </span>
             <div className="min-w-0 flex-1">
-              <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Movimientos</span>
+              <span className="text-base font-semibold uppercase tracking-wide text-slate-500">Movimientos</span>
               <p className="mt-0.5 text-2xl font-bold tabular-nums tracking-tight text-slate-900">
                 {filteredMovimientos.length}
               </p>
-              <p className="mt-0.5 text-[11px] text-slate-400">A bodega / traslados</p>
+              <p className="mt-0.5 text-base text-slate-400">A bodega / traslados</p>
             </div>
           </button>
 
@@ -478,11 +478,11 @@ export default function AdminBodegaReportes({
               <MdLocalShipping size={24} aria-hidden />
             </span>
             <div className="min-w-0 flex-1">
-              <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Despachados</span>
+              <span className="text-base font-semibold uppercase tracking-wide text-slate-500">Despachados</span>
               <p className="mt-0.5 text-2xl font-bold tabular-nums tracking-tight text-slate-900">
                 {filteredDespachoHistorial.length}
               </p>
-              <p className="mt-0.5 text-[11px] text-slate-400">Salida definitiva</p>
+              <p className="mt-0.5 text-base text-slate-400">Salida definitiva</p>
             </div>
           </button>
 
@@ -491,9 +491,9 @@ export default function AdminBodegaReportes({
               <IoAlert size={24} aria-hidden />
             </span>
             <div className="min-w-0 flex-1">
-              <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Alertas</span>
+              <span className="text-base font-semibold uppercase tracking-wide text-slate-500">Alertas</span>
               <p className="mt-0.5 text-2xl font-bold tabular-nums tracking-tight text-slate-900">{filteredAlerts.length}</p>
-              <p className="mt-0.5 text-[11px] text-slate-400">Historial de eventos</p>
+              <p className="mt-0.5 text-base text-slate-400">Historial de eventos</p>
             </div>
           </button>
 
@@ -502,7 +502,7 @@ export default function AdminBodegaReportes({
               <MdTrendingDown size={24} className="text-amber-800/90" aria-hidden />
             </span>
             <div className="min-w-0 flex-1">
-              <span className="text-[11px] font-semibold uppercase tracking-wide text-amber-900/85">Merma</span>
+              <span className="text-base font-semibold uppercase tracking-wide text-amber-900/85">Merma</span>
               <p className="mt-0.5 text-2xl font-bold tabular-nums tracking-tight text-amber-950">
                 {(Number(mermaProcesamientoKgTotal) || 0).toLocaleString("es-CO", {
                   minimumFractionDigits: 0,
@@ -510,7 +510,7 @@ export default function AdminBodegaReportes({
                 })}{" "}
                 <span className="text-base font-semibold text-amber-900/80">kg</span>
               </p>
-              <p className="mt-1 text-[11px] leading-snug text-amber-900/70">
+              <p className="mt-1 text-base leading-snug text-amber-900/70">
                 Declarada al cerrar órdenes de procesamiento
               </p>
             </div>
@@ -521,7 +521,7 @@ export default function AdminBodegaReportes({
       <section aria-label="Gráficos" className="grid min-w-0 gap-5 lg:grid-cols-5">
         <div className="flex min-w-0 flex-col overflow-hidden rounded-2xl border border-slate-200/90 bg-white shadow-sm lg:col-span-3">
           <div className="border-b border-slate-100 bg-slate-50/80 px-5 py-4">
-            <h3 className="flex items-center gap-2 text-sm font-bold text-slate-800">
+            <h3 className="app-title flex items-center gap-2">
               <MdBarChart size={18} className="text-sky-600" aria-hidden />
               Totales por tipo
             </h3>
@@ -563,7 +563,7 @@ export default function AdminBodegaReportes({
 
         <div className="flex min-w-0 flex-col overflow-hidden rounded-2xl border border-slate-200/90 bg-white shadow-sm lg:col-span-2">
           <div className="border-b border-slate-100 bg-slate-50/80 px-5 py-4">
-            <h3 className="text-sm font-bold text-slate-800">Distribución</h3>
+            <h3 className="app-title">Distribución</h3>
             <p className="mt-0.5 text-xs text-slate-500">Solo categorías con al menos un registro</p>
           </div>
           <div className="flex min-h-[240px] w-full min-w-0 flex-1 items-center justify-center p-3 sm:p-4">
@@ -608,7 +608,6 @@ export default function AdminBodegaReportes({
             className="relative w-full max-w-2xl animate-fade-in-up overflow-hidden rounded-3xl shadow-2xl"
             onClick={(e) => e.stopPropagation()}
             style={{
-              fontFamily: '"Space Grotesk", "Work Sans", sans-serif',
               background: "rgba(255,255,255,0.92)",
               border: "1px solid #dbeafe",
               backdropFilter: "blur(8px)",
@@ -623,7 +622,7 @@ export default function AdminBodegaReportes({
               <span className="mb-2 inline-flex h-14 w-14 items-center justify-center rounded-full bg-blue-100 shadow">
                 <MdBarChart size={32} className="text-blue-500" />
               </span>
-              <h3 className="mb-1 text-center text-2xl font-extrabold tracking-tight text-blue-700 drop-shadow">
+              <h3 className="app-title mb-1 text-center">
                 {reportDetailModal.type === "ingresos"
                   ? "Detalle de ingresos"
                   : reportDetailModal.type === "salidas"
@@ -686,7 +685,7 @@ export default function AdminBodegaReportes({
                   <MdGpsFixed size={22} />
                 </span>
                 <div>
-                  <h3 className="text-lg font-bold text-slate-900">Rastrear caja</h3>
+                  <h3 className="app-title">Rastrear caja</h3>
                   <p className="text-xs text-slate-500">Id + recorrido (historial + mapa actual)</p>
                 </div>
               </div>
@@ -702,7 +701,7 @@ export default function AdminBodegaReportes({
 
             <div className="min-h-0 flex-1 space-y-5 overflow-y-auto overflow-x-visible px-6 py-5">
               <div ref={trackComboRef} className="relative">
-                <label className="mb-1 block text-[10px] font-bold uppercase tracking-wide text-slate-400">
+                <label className="mb-1 block text-base font-bold uppercase tracking-wide text-slate-400">
                   Id de caja
                 </label>
                 <div
@@ -744,7 +743,7 @@ export default function AdminBodegaReportes({
                     />
                   </button>
                 </div>
-                <p className="mt-1 text-[11px] text-slate-400">
+                <p className="mt-1 text-base text-slate-400">
                   {trackingPickList.length} caja(s) en mapa + historial
                 </p>
 
@@ -800,7 +799,7 @@ export default function AdminBodegaReportes({
 
               {trackingTimeline.current ? (
                 <div className="rounded-2xl border border-emerald-200 bg-emerald-50/90 px-4 py-3.5 text-sm shadow-sm">
-                  <span className="text-[10px] font-bold uppercase tracking-wide text-emerald-700">
+                  <span className="text-base font-bold uppercase tracking-wide text-emerald-700">
                     Ahora
                   </span>
                   <p className="mt-1 text-base font-bold leading-snug text-emerald-950">
@@ -829,7 +828,7 @@ export default function AdminBodegaReportes({
                         />
                         <p className="text-sm font-bold text-slate-900">{step.title}</p>
                         <p className="text-xs text-slate-600">{step.subtitle}</p>
-                        <p className="mt-0.5 text-[11px] text-slate-400">
+                        <p className="mt-0.5 text-base text-slate-400">
                           {step.atMs
                             ? new Date(step.atMs).toLocaleString("es-CO")
                             : "Sin hora en historial (registro antiguo)"}

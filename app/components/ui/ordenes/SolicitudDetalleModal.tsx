@@ -1,9 +1,10 @@
 "use client";
 
 import React from "react";
-import { HiOutlineXMark } from "react-icons/hi2";
+import { FiClipboard } from "react-icons/fi";
 import type { SolicitudCompra } from "@/app/types/solicitudCompra";
 import { formatKgEs } from "@/app/lib/decimalEs";
+import { ModalPlantilla } from "@/app/components/ui/ModalPlantilla";
 
 interface Props {
   solicitud: SolicitudCompra | null;
@@ -16,71 +17,54 @@ export function SolicitudDetalleModal({ solicitud, onClose }: Props) {
   const lineItems = solicitud.lineItems ?? [];
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/20 p-4 backdrop-blur-sm"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="solicitud-detalle-title"
-      onClick={onClose}
-    >
-      <div
-        className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-[12px] border border-gray-100 bg-white p-6 shadow-xl"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="mb-4 flex items-start justify-between gap-3">
-          <div>
-            <h2 id="solicitud-detalle-title" className="text-lg font-semibold text-gray-900">
-              Detalle de solicitud
-            </h2>
-            <p className="mt-1 font-mono text-sm font-bold text-cyan-900">{solicitud.numero}</p>
-          </div>
+    <ModalPlantilla
+      open
+      onClose={onClose}
+      titulo="Detalle de solicitud"
+      tituloId="solicitud-detalle-title"
+      headerIcon={<FiClipboard className="h-7 w-7 text-blue-600" strokeWidth={2} aria-hidden />}
+      zIndexClass="z-50"
+      maxWidthClass="max-w-lg"
+      cardMaxHeightClass="max-h-[90vh]"
+      subtitulo={<span className="font-mono font-semibold text-slate-800">{solicitud.numero}</span>}
+      footer={
+        <div className="flex justify-end">
           <button
             type="button"
             onClick={onClose}
-            className="shrink-0 text-gray-400 hover:text-gray-600"
-            aria-label="Cerrar"
-          >
-            <HiOutlineXMark size={24} />
-          </button>
-        </div>
-
-        <p className="mb-2 text-[11px] font-bold uppercase tracking-wide text-slate-500">Productos y peso</p>
-        {lineItems.length === 0 ? (
-          <p className="text-sm text-slate-500">Esta solicitud no tiene líneas registradas.</p>
-        ) : (
-          <ul className="space-y-3">
-            {lineItems.map((li, i) => (
-              <li
-                key={`${li.catalogoProductId}-${i}`}
-                className="rounded-lg border border-cyan-100 bg-cyan-50/50 px-4 py-3"
-              >
-                <p className="font-medium text-slate-900">{li.titleSnapshot || "—"}</p>
-                <div className="mt-1 flex flex-wrap items-baseline gap-x-3 gap-y-1 text-sm text-slate-600">
-                  <span>
-                    <span className="text-slate-500">Peso:</span>{" "}
-                    <span className="tabular-nums font-semibold text-slate-900">
-                      {formatKgEs(Number(li.pesoKg))} kg
-                    </span>
-                  </span>
-                  {li.skuSnapshot ? (
-                    <span className="text-xs text-slate-500">SKU {li.skuSnapshot}</span>
-                  ) : null}
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
-
-        <div className="mt-6 flex justify-end">
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-[8px] bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-200"
+            className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-base font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50"
           >
             Cerrar
           </button>
         </div>
-      </div>
-    </div>
+      }
+    >
+      <p className="mb-2 text-base font-bold uppercase tracking-wide text-slate-500">Productos y peso</p>
+      {lineItems.length === 0 ? (
+        <p className="text-base text-slate-500">Esta solicitud no tiene líneas registradas.</p>
+      ) : (
+        <ul className="space-y-3">
+          {lineItems.map((li, i) => (
+            <li
+              key={`${li.catalogoProductId}-${i}`}
+              className="rounded-lg border border-cyan-100 bg-cyan-50/50 px-4 py-3"
+            >
+              <p className="font-medium text-slate-900">{li.titleSnapshot || "—"}</p>
+              <div className="mt-1 flex flex-wrap items-baseline gap-x-3 gap-y-1 text-base text-slate-600">
+                <span>
+                  <span className="text-slate-500">Peso:</span>{" "}
+                  <span className="tabular-nums font-semibold text-slate-900">
+                    {formatKgEs(Number(li.pesoKg))} kg
+                  </span>
+                </span>
+                {li.skuSnapshot ? (
+                  <span className="text-base text-slate-500">SKU {li.skuSnapshot}</span>
+                ) : null}
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </ModalPlantilla>
   );
 }

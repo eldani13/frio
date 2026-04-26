@@ -64,12 +64,12 @@ export default function SlotCard({
                 />
                 <div className="min-w-0 flex-1">
                   <div
-                    className={`truncate font-semibold leading-tight text-[clamp(0.65rem,1vw,0.8rem)] ${tone.name}`}
+                    className={`truncate font-semibold leading-tight text-base ${tone.name}`}
                   >
                     {slot.name || "Sin nombre"}
                   </div>
                   <div
-                    className={`mt-0.5 truncate leading-tight text-[clamp(0.65rem,1.4vw,0.78rem)] ${tone.id}`}
+                    className={`mt-0.5 truncate leading-tight text-base ${tone.id}`}
                   >
                     {slot.autoId}
                   </div>
@@ -77,7 +77,7 @@ export default function SlotCard({
               </div>
               <div className="mt-2 flex shrink-0 justify-center">
                 <span
-                  className={`inline-block max-w-full truncate rounded-full px-2 py-0.5 text-[clamp(0.65rem,1.4vw,0.78rem)] font-medium ${tone.pill}`}
+                  className={`inline-block max-w-full truncate rounded-full px-2 py-0.5 text-base font-medium ${tone.pill}`}
                 >
                   {typeof slot.temperature === "number" ? `${slot.temperature}°C` : "Sin temperatura"}
                 </span>

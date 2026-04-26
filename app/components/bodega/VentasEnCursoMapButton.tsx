@@ -360,7 +360,7 @@ export default function VentasEnCursoMapButton({
         aria-label="Tareas pendientes — ventas en curso (no disponible sin código de cuenta)"
       >
         <MdPendingActions className={BODEGA_ZONE_STATUS_ICON_INACTIVE_CLASS} aria-hidden />
-        <span className={`text-[11px] ${BODEGA_ZONE_STATUS_NUM_INACTIVE_CLASS}`}>0</span>
+        <span className={`text-base ${BODEGA_ZONE_STATUS_NUM_INACTIVE_CLASS}`}>0</span>
       </button>
     );
   }
@@ -385,7 +385,7 @@ export default function VentasEnCursoMapButton({
           aria-hidden
         />
         <span
-          className={`text-[11px] ${
+          className={`text-base ${
             hayTareasPendientesAlmacen ? BODEGA_ZONE_STATUS_NUM_ACTIVE_CLASS : BODEGA_ZONE_STATUS_NUM_INACTIVE_CLASS
           }`}
         >
@@ -427,7 +427,7 @@ export default function VentasEnCursoMapButton({
                 <div className="min-w-0 flex-1 pr-10">
                   <h2
                     id="ventas-en-curso-map-title"
-                    className="text-lg font-bold tracking-tight text-slate-900 sm:text-xl"
+                    className="app-title"
                   >
                     {detalle ? (
                       <span className="font-mono">{String(detalle.numero ?? "").trim() || detalle.id}</span>
@@ -437,10 +437,10 @@ export default function VentasEnCursoMapButton({
                       </span>
                     ) : (
                       <>
-                        <span className="block text-[11px] font-semibold uppercase tracking-wide text-sky-800/90">
+                        <span className="block text-base font-semibold uppercase tracking-wide text-sky-800/90">
                           Tareas pendientes
                         </span>
-                        <span className="mt-1 block text-lg font-bold tracking-tight sm:text-xl">
+                        <span className="mt-1 block">
                           Tareas pendientes
                         </span>
                       </>
@@ -477,7 +477,7 @@ export default function VentasEnCursoMapButton({
                 <div className="space-y-5">
                   <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-sky-100 bg-sky-50/60 px-4 py-3 text-sm">
                     <span
-                      className={`rounded-full px-2.5 py-0.5 text-[11px] font-bold uppercase ${ordenCompraEstadoBadgeClass(detalle.estado)}`}
+                      className={`rounded-full px-2.5 py-0.5 text-base font-bold uppercase ${ordenCompraEstadoBadgeClass(detalle.estado)}`}
                     >
                       {detalle.estado}
                     </span>
@@ -500,7 +500,7 @@ export default function VentasEnCursoMapButton({
                   </div>
 
                   <div>
-                    <h3 className="mb-3 flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-sky-800/85">
+                    <h3 className="app-title mb-3 flex items-center gap-2">
                       <FiPackage className="h-4 w-4 text-sky-600" aria-hidden />
                       Productos ({Array.isArray(detalle.lineItems) ? detalle.lineItems.length : 0})
                     </h3>
@@ -540,7 +540,7 @@ export default function VentasEnCursoMapButton({
                   <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-sky-100 bg-sky-50/60 px-4 py-3 text-sm">
                     <FiCpu className="h-4 w-4 shrink-0 text-sky-600" aria-hidden />
                     <span
-                      className={`rounded-full px-2.5 py-0.5 text-[11px] font-bold uppercase ${procesamientoEstadoBadgeClass(detalleSolicitud.estado)}`}
+                      className={`rounded-full px-2.5 py-0.5 text-base font-bold uppercase ${procesamientoEstadoBadgeClass(detalleSolicitud.estado)}`}
                     >
                       {detalleSolicitud.estado}
                     </span>
@@ -672,7 +672,7 @@ export default function VentasEnCursoMapButton({
                   <section className="min-w-0" aria-labelledby="ventas-ec-almacen-ventas">
                     <h3
                       id="ventas-ec-almacen-ventas"
-                      className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500"
+                      className="app-title mb-2"
                     >
                       Ventas en curso
                     </h3>
@@ -696,11 +696,11 @@ export default function VentasEnCursoMapButton({
                                 className="flex w-full min-w-0 flex-col overflow-hidden rounded-3xl border border-sky-200/90 bg-white p-3 text-left shadow-md ring-sky-200/40 transition hover:border-sky-300 hover:shadow-lg hover:ring-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-400"
                               >
                                 <div className="flex min-h-[2rem] shrink-0 items-start justify-between gap-2 border-b border-sky-100/90 pb-2">
-                                  <span className="min-w-0 truncate font-mono text-[10px] font-bold uppercase tracking-wide text-slate-800 sm:text-[11px]">
+                                  <span className="min-w-0 truncate font-mono text-base font-bold uppercase tracking-wide text-slate-800 sm:text-base">
                                     {num}
                                   </span>
                                   <span
-                                    className={`shrink-0 rounded-full px-2 py-0.5 text-[8px] font-bold uppercase leading-tight ${ordenCompraEstadoBadgeClass(row.estado)}`}
+                                    className={`shrink-0 rounded-full px-2 py-0.5 text-base font-bold uppercase leading-tight ${ordenCompraEstadoBadgeClass(row.estado)}`}
                                   >
                                     {row.estado.length > 10 ? "En curso" : row.estado}
                                   </span>
@@ -708,21 +708,21 @@ export default function VentasEnCursoMapButton({
                                 <div className="flex flex-1 flex-col items-center px-1 pt-3 text-center">
                                   <FiBox className="h-5 w-5 text-sky-600" aria-hidden />
                                   <p
-                                    className="mt-2 line-clamp-2 min-h-[2.25rem] w-full text-[11px] font-semibold leading-snug text-slate-900 sm:text-xs"
+                                    className="mt-2 line-clamp-2 min-h-[2.25rem] w-full text-base font-semibold leading-snug text-slate-900 sm:text-xs"
                                     title={comprador}
                                   >
                                     {comprador}
                                   </p>
-                                  <p className="mt-1 line-clamp-1 w-full text-[10px] text-slate-500" title={cuenta}>
+                                  <p className="mt-1 line-clamp-1 w-full text-base text-slate-500" title={cuenta}>
                                     {cuenta}
                                   </p>
                                 </div>
                                 <div className="mt-3 flex shrink-0 flex-col gap-1 border-t border-sky-100/90 pt-2">
-                                  <div className="rounded-full bg-sky-100 px-2 py-1.5 text-center text-[10px] font-semibold text-sky-950">
+                                  <div className="rounded-full bg-sky-100 px-2 py-1.5 text-center text-base font-semibold text-sky-950">
                                     {nLineas} {nLineas === 1 ? "línea" : "líneas"}
                                   </div>
                                   {row.fecha ? (
-                                    <div className="text-center text-[9px] font-medium text-slate-500">{row.fecha}</div>
+                                    <div className="text-center text-base font-medium text-slate-500">{row.fecha}</div>
                                   ) : null}
                                 </div>
                               </button>
@@ -739,11 +739,11 @@ export default function VentasEnCursoMapButton({
                   >
                     <h3
                       id="ventas-ec-almacen-proc"
-                      className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500"
+                      className="app-title mb-1"
                     >
                       Almacenamiento → procesamiento
                     </h3>
-                    <p className="mb-3 text-[11px] leading-relaxed text-slate-500">
+                    <p className="mb-3 text-base leading-relaxed text-slate-500">
                       Órdenes en <strong className="text-slate-700">Iniciado</strong>: retiro de primario hacia zona de
                       procesamiento.
                     </p>
@@ -779,7 +779,7 @@ export default function VentasEnCursoMapButton({
               {detalleSolicitud && normalizeProcesamientoEstado(detalleSolicitud.estado) === "Iniciado" ? (
                 puedeAsignarSolicitud ? (
                   <div className="rounded-2xl border border-sky-200/80 bg-white px-4 py-3 shadow-sm">
-                    <p className="text-[11px] font-bold uppercase tracking-wide text-sky-800/90">
+                    <p className="text-base font-bold uppercase tracking-wide text-sky-800/90">
                       Tarea pendiente · retiro en bodega
                     </p>
                     <p className="mt-1 text-xs text-slate-600">
@@ -809,7 +809,7 @@ export default function VentasEnCursoMapButton({
                       return (
                         <>
                           {operariosBodega.length === 0 ? (
-                            <p className="mt-2 rounded-md border border-amber-100 bg-amber-50 px-2.5 py-1.5 text-[11px] text-amber-900">
+                            <p className="mt-2 rounded-md border border-amber-100 bg-amber-50 px-2.5 py-1.5 text-base text-amber-900">
                               Sin operarios configurados.
                             </p>
                           ) : null}
@@ -861,7 +861,7 @@ export default function VentasEnCursoMapButton({
               ) : null}
               {detalle && esEstadoEnCurso(detalle.estado) ? (
                 <div className="rounded-2xl border border-sky-200/80 bg-white px-4 py-3 shadow-sm">
-                  <p className="text-[11px] font-bold uppercase tracking-wide text-sky-800/90">
+                  <p className="text-base font-bold uppercase tracking-wide text-sky-800/90">
                     Tarea pendiente · salida a operario
                   </p>
                   <p className="mt-1 text-xs text-slate-600">

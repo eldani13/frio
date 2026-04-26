@@ -112,10 +112,10 @@ export default function EstadoBodegaSection(props: Props) {
 
   return (
     <div className="flex w-full flex-col gap-3 sm:gap-4">
-    <section className="grid items-stretch gap-6 xl:grid-cols-[1fr_1.8fr_1fr] 2xl:grid-cols-[1fr_2.1fr_1fr]">
-      <div className="flex h-full min-h-0 w-full max-w-full flex-col rounded-3xl border border-emerald-200/95 bg-emerald-50/85 p-2 sm:max-w-lg sm:p-4">
+    <section className="grid items-stretch gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.8fr)_minmax(0,1fr)] 2xl:grid-cols-[minmax(0,1fr)_minmax(0,2.1fr)_minmax(0,1fr)]">
+      <div className="flex h-full min-h-0 w-full min-w-0 max-w-full flex-col rounded-3xl border border-emerald-200/95 bg-emerald-50/85 p-2 sm:max-w-lg sm:p-4">
         <div className="mb-2 flex min-w-0 shrink-0 flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <h3 className="flex min-w-0 items-center gap-2 text-[17px] font-bold leading-tight tracking-tight text-emerald-900 sm:text-lg">
+          <h3 className="app-title flex min-w-0 items-center gap-2">
             <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-emerald-100 text-emerald-700">
               <FiBox className="h-[18px] w-[18px] sm:h-5 sm:w-5" aria-hidden />
             </span>
@@ -146,10 +146,10 @@ export default function EstadoBodegaSection(props: Props) {
               )}
             </ZonaCuatroSlotsRow>
             {sortedInboundBoxes.length === 0 ? (
-              <p className="text-center text-[11px] text-emerald-900/85">No hay cajas en ingreso.</p>
+              <p className="text-center text-base text-emerald-900/85">No hay cajas en ingreso.</p>
             ) : null}
             {sortedInboundBoxes.length > ZONA_ENTRADA_SALIDA_SLOTS ? (
-              <p className="text-center text-[10px] text-emerald-900/80">
+              <p className="text-center text-base text-emerald-900/80">
                 Mostrando {ZONA_ENTRADA_SALIDA_SLOTS} de {sortedInboundBoxes.length} cajas en ingreso.
               </p>
             ) : null}
@@ -209,9 +209,9 @@ export default function EstadoBodegaSection(props: Props) {
         />
       </div>
 
-      <div className="flex h-full min-h-0 w-full max-w-full flex-col rounded-3xl border border-pink-300 bg-pink-100/90 p-4 sm:max-w-lg sm:p-6">
+      <div className="flex h-full min-h-0 w-full min-w-0 max-w-full flex-col rounded-3xl border border-pink-300 bg-pink-100/90 p-2 sm:max-w-lg sm:p-4">
         <div className="mb-2 flex min-w-0 shrink-0 flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <h3 className="flex min-w-0 shrink-0 items-center gap-2 text-[17px] font-bold leading-tight tracking-tight text-pink-900 sm:text-lg">
+          <h3 className="app-title flex min-w-0 items-center gap-2">
             <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-pink-200/90 text-pink-900">
               <HiArrowRightOnRectangle className="h-[18px] w-[18px] sm:h-5 sm:w-5" aria-hidden />
             </span>
@@ -240,10 +240,10 @@ export default function EstadoBodegaSection(props: Props) {
               )}
             </ZonaCuatroSlotsRow>
             {sortedOutboundBoxes.length === 0 ? (
-                    <p className="text-center text-[11px] text-pink-900/80">No hay cajas en salida.</p>
+                    <p className="text-center text-base text-pink-900/80">No hay cajas en salida.</p>
             ) : null}
             {sortedOutboundBoxes.length > ZONA_ENTRADA_SALIDA_SLOTS ? (
-                    <p className="text-center text-[10px] text-pink-900/75">
+                    <p className="text-center text-base text-pink-900/75">
                 Mostrando {ZONA_ENTRADA_SALIDA_SLOTS} de {sortedOutboundBoxes.length} cajas en salida.
               </p>
             ) : null}

@@ -1,7 +1,15 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { HiOutlinePlus, HiOutlineTrash, HiOutlineXMark } from "react-icons/hi2";
+import { HiOutlinePlus, HiOutlineTrash } from "react-icons/hi2";
+import {
+  FORMULARIO_CREACION_BODY,
+  FORMULARIO_CREACION_INPUT,
+  FORMULARIO_CREACION_LABEL,
+  FORMULARIO_CREACION_SELECT,
+  FormularioPlantilla,
+  FormularioPlantillaAcciones,
+} from "@/app/components/ui/FormularioPlantilla";
 import type { Catalogo } from "@/app/types/catalogo";
 import type { SolicitudLineItem } from "@/app/types/solicitudCompra";
 import { SolicitudCompraService } from "@/app/services/solicitudCompraService";
@@ -39,8 +47,6 @@ export function SolicitudCompraFormModal({
     setPickPesoKg("");
     setError(null);
   }, [isOpen]);
-
-  if (!isOpen) return null;
 
   const addLine = () => {
     setError(null);
@@ -96,43 +102,31 @@ export function SolicitudCompraFormModal({
   };
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/20 p-4 backdrop-blur-sm"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="solicitud-modal-title"
-      onClick={onClose}
+    <FormularioPlantilla
+      isOpen={isOpen}
+      onClose={onClose}
+      titulo="Nueva solicitud"
+      subtitulo="Solicitud · peso/kg"
+      titleId="solicitud-modal-title"
+      maxWidthClass="max-w-lg"
+      footer={
+        <FormularioPlantillaAcciones
+          formId="solicitud-compra-form"
+          onCancel={onClose}
+          submitLabel="Guardar solicitud"
+          loading={saving}
+        />
+      }
     >
-      <div
-        className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-[12px] border border-gray-100 bg-white p-6 shadow-xl"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="mb-4 flex items-center justify-between">
-          <h2 id="solicitud-modal-title" className="text-lg font-semibold text-gray-900">
-            Nueva solicitud
-          </h2>
-          <button
-            type="button"
-            onClick={onClose}
-            className="text-gray-400 hover:text-gray-600"
-            aria-label="Cerrar"
-          >
-            <HiOutlineXMark size={24} />
-          </button>
-        </div>
-
-        <p className="mb-4 text-xs text-[#6B7280]">
-          Indicá el <strong>peso en kg</strong> por cada producto del <strong>catálogo</strong> (coma o punto:{" "}
-          <span className="whitespace-nowrap">15,6</span>).
-        </p>
+      <form id="solicitud-compra-form" onSubmit={handleSubmit} className={`${FORMULARIO_CREACION_BODY} space-y-4`}>
+        <p className="text-base text-gray-500">Peso kg por ítem.</p>
 
         {error ? (
-          <p className="mb-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>
+          <p className="rounded-lg bg-red-50 px-3 py-2 text-base text-red-700">{error}</p>
         ) : null}
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="rounded-lg border border-dashed border-cyan-200 bg-cyan-50/40 p-3">
-            <p className="mb-2 text-[11px] font-bold uppercase text-gray-500">Productos del catálogo</p>
+          <div className="rounded-lg border border-dashed border-[#A8D5BA]/60 bg-[#f8faf8] p-3">
+            <p className={`${FORMULARIO_CREACION_LABEL} mb-2`}>Líneas cat.</p>
             <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-end">
               <div className="min-w-0 flex-1 sm:min-w-[200px]">
                 <label className="sr-only" htmlFor="sol-catalogo">
@@ -142,9 +136,9 @@ export function SolicitudCompraFormModal({
                   id="sol-catalogo"
                   value={pickProductId}
                   onChange={(e) => setPickProductId(e.target.value)}
-                  className="w-full rounded-[8px] border border-gray-200 bg-white px-3 py-2 text-sm focus:border-cyan-500 focus:outline-none"
+                  className={FORMULARIO_CREACION_SELECT}
                 >
-                  <option value="">Elegí producto del catálogo…</option>
+                  <option value="">Elegí producto…</option>
                   {productos.map((c) => (
                     <option key={c.id} value={c.id}>
                       {c.title}
@@ -154,10 +148,7 @@ export function SolicitudCompraFormModal({
                 </select>
               </div>
               <div className="w-full sm:w-32">
-                <label
-                  className="mb-0.5 block text-[10px] font-bold uppercase text-gray-500 sm:sr-only"
-                  htmlFor="sol-peso-kg"
-                >
+                <label className={`${FORMULARIO_CREACION_LABEL} mb-0.5 sm:sr-only`} htmlFor="sol-peso-kg">
                   Peso (kg)
                 </label>
                 <input
@@ -167,13 +158,13 @@ export function SolicitudCompraFormModal({
                   value={pickPesoKg}
                   onChange={(e) => setPickPesoKg(e.target.value)}
                   placeholder="Ej. 15,6"
-                  className="w-full rounded-[8px] border border-gray-200 bg-white px-3 py-2 text-sm focus:border-cyan-500 focus:outline-none"
+                  className={FORMULARIO_CREACION_INPUT}
                 />
               </div>
               <button
                 type="button"
                 onClick={addLine}
-                className="inline-flex items-center justify-center gap-1 rounded-[8px] bg-cyan-700 px-3 py-2 text-sm font-semibold text-white hover:bg-cyan-800"
+                className="inline-flex items-center justify-center gap-1 rounded-[12px] bg-[#0f172a] px-4 py-3 text-base font-semibold text-white shadow-sm transition hover:bg-slate-800"
               >
                 <HiOutlinePlus className="h-4 w-4" />
                 Agregar
@@ -181,9 +172,7 @@ export function SolicitudCompraFormModal({
             </div>
 
             {lines.length === 0 ? (
-              <p className="mt-3 text-center text-xs text-gray-500">
-                Todavía no hay líneas en esta solicitud.
-              </p>
+              <p className="mt-3 text-center text-xs text-gray-500">Sin líneas.</p>
             ) : (
               <ul className="mt-3 space-y-2">
                 {lines.map((ln, i) => (
@@ -212,24 +201,7 @@ export function SolicitudCompraFormModal({
             )}
           </div>
 
-          <div className="flex justify-end gap-3 pt-2">
-            <button
-              type="button"
-              onClick={onClose}
-              className="rounded-[8px] px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-100"
-            >
-              Cancelar
-            </button>
-            <button
-              type="submit"
-              disabled={saving}
-              className="rounded-[8px] bg-cyan-600 px-5 py-2 text-sm font-semibold text-white transition hover:bg-cyan-700 active:scale-[0.98] disabled:opacity-50"
-            >
-              {saving ? "Guardando…" : "Guardar solicitud"}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+      </form>
+    </FormularioPlantilla>
   );
 }

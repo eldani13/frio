@@ -145,14 +145,14 @@ export default function CatalogoPage() {
   };
 
   return (
-    <main className="max-w-[1400px] mx-auto p-6 md:p-10 font-['Inter']">
+    <main className="max-w-[1400px] mx-auto p-6 md:p-10 ">
       <header className="mb-8 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6">
         <div className="flex items-center gap-4">
           <div className="p-3 bg-[#f8edb1] rounded-2xl text-[#2D5A3F]">
             <HiOutlineSquares2X2 size={28} />
           </div>
           <div>
-            <h1 className="text-[28px] font-extrabold text-gray-900 tracking-tight">Catálogo</h1>
+            <h1 className="app-title">Catálogo</h1>
             <p className="text-sm text-gray-500">{productos.length} productos en total</p>
           </div>
         </div>

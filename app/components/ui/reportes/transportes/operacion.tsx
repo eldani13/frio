@@ -14,7 +14,7 @@ export default function Operacion() {
           <div className="p-5 text-sm font-bold text-slate-900 text-right uppercase tracking-wider">
             Total Inventario TRANSPORTE
           </div>
-          <div className="p-5 text-[18px] font-bold text-slate-950 text-right border-l border-slate-100 bg-white tabular-nums">
+          <div className="p-5 text-base font-bold text-slate-950 text-right border-l border-slate-100 bg-white tabular-nums">
             {totalKg} Kg
           </div>
           

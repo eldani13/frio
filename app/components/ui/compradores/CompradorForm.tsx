@@ -1,7 +1,13 @@
 "use client";
 import { useState, useEffect } from "react";
-import { HiOutlineXMark } from "react-icons/hi2";
 import { Comprador } from "@/app/types/comprador"; // Importación actualizada
+import {
+  FORMULARIO_CREACION_BODY,
+  FORMULARIO_CREACION_INPUT,
+  FORMULARIO_CREACION_LABEL,
+  FormularioPlantilla,
+  FormularioPlantillaAcciones,
+} from "@/app/components/ui/FormularioPlantilla";
 
 interface CompradorFormProps {
   isOpen: boolean;
@@ -23,8 +29,6 @@ export const CompradorForm = ({ isOpen, onClose, onSuccess, comprador }: Comprad
     }
   }, [comprador, isOpen]);
 
-  if (!isOpen) return null;
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) return;
@@ -42,58 +46,39 @@ export const CompradorForm = ({ isOpen, onClose, onSuccess, comprador }: Comprad
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20 backdrop-blur-sm">
-      <div className="bg-white w-full max-w-md rounded-[12px] shadow-xl border border-gray-100 p-6 animate-in fade-in zoom-in duration-200">
-        
-        {/* Header */}
-        <div className="flex justify-between items-center mb-6">
-          <h2 className="text-[18px] font-semibold text-gray-900">
-            {comprador ? "Editar Comprador" : "Nuevo Comprador"}
-          </h2>
-          <button 
-            onClick={onClose} 
-            className="text-gray-400 hover:text-gray-600 transition-colors"
-          >
-            <HiOutlineXMark size={24} />
-          </button>
-        </div>
-
-        {/* Formulario */}
-        <form onSubmit={handleSubmit} className="space-y-6">
+    <FormularioPlantilla
+      isOpen={isOpen}
+      onClose={onClose}
+      titulo={comprador ? "Editar comprador" : "Nuevo comprador"}
+      subtitulo="Cuenta comprador"
+      titleId="comprador-form-title"
+      maxWidthClass="max-w-md"
+      footer={
+        <FormularioPlantillaAcciones
+          formId="comprador-form"
+          onCancel={onClose}
+          submitLabel={comprador ? "Actualizar" : "Crear comprador"}
+          loading={loading}
+        />
+      }
+    >
+      <form id="comprador-form" onSubmit={handleSubmit} className={`${FORMULARIO_CREACION_BODY} space-y-6`}>
           <div>
-            <label className="block text-[12px] font-medium text-gray-500 uppercase mb-2">
-              Nombre del Comprador
+            <label htmlFor="comprador-name" className={FORMULARIO_CREACION_LABEL}>
+              Nombre del comprador
             </label>
             <input
+              id="comprador-name"
               autoFocus
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="Ej. Juan Pérez o Distribuidora Central"
-              className="w-full px-4 py-3 border border-gray-200 rounded-[8px] focus:outline-none focus:border-[#A8D5BA] transition-all text-[14px]"
+              className={FORMULARIO_CREACION_INPUT}
               required
             />
           </div>
-
-          {/* Acciones */}
-          <div className="flex gap-3 pt-2">
-            <button
-              type="button"
-              onClick={onClose}
-              className="flex-1 px-4 py-2 border border-gray-200 rounded-[8px] text-[14px] font-medium text-gray-600 hover:bg-gray-50 transition-all"
-            >
-              Cancelar
-            </button>
-            <button
-              type="submit"
-              disabled={loading}
-              className="flex-1 px-4 py-2 bg-[#A8D5BA] text-[#2D5A3F] rounded-[8px] text-[14px] font-medium hover:bg-[#97c4a9] active:scale-95 transition-all disabled:opacity-50"
-            >
-              {loading ? "Guardando..." : comprador ? "Actualizar" : "Crear Comprador"}
-            </button>
-          </div>
         </form>
-      </div>
-    </div>
+    </FormularioPlantilla>
   );
 };

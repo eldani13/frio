@@ -1,7 +1,16 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
-import { HiOutlinePlus, HiOutlineTrash, HiOutlineXMark } from "react-icons/hi2";
+import { HiOutlinePlus, HiOutlineTrash } from "react-icons/hi2";
+import {
+  FORMULARIO_CREACION_BODY,
+  FORMULARIO_CREACION_GRID,
+  FORMULARIO_CREACION_INPUT,
+  FORMULARIO_CREACION_LABEL,
+  FORMULARIO_CREACION_SELECT,
+  FormularioPlantilla,
+  FormularioPlantillaAcciones,
+} from "@/app/components/ui/FormularioPlantilla";
 import type { Slot } from "@/app/interfaces/bodega";
 import type { Catalogo } from "@/app/types/catalogo";
 import type { Comprador } from "@/app/types/comprador";
@@ -200,8 +209,6 @@ export function VentaManualFormModal({
     );
   }, [isOpen, productosParaSelector]);
 
-  if (!isOpen) return null;
-
   const addLine = () => {
     setError(null);
     const p = productosParaSelector.find((x) => x.id === pickProductId);
@@ -273,59 +280,32 @@ export function VentaManualFormModal({
   };
 
   return (
-    <div
-      className="fixed inset-0 z-[60] flex items-center justify-center bg-black/20 p-4 backdrop-blur-sm"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="venta-manual-modal-title"
-      onClick={onClose}
+    <FormularioPlantilla
+      isOpen={isOpen}
+      onClose={onClose}
+      titulo="Nueva venta manual"
+      subtitulo="Venta · comprador"
+      titleId="venta-manual-modal-title"
+      maxWidthClass="max-w-lg"
+      zIndexClass="z-[60]"
+      footer={
+        <FormularioPlantillaAcciones
+          formId="venta-manual-form"
+          onCancel={onClose}
+          submitLabel="Guardar venta"
+          loading={saving}
+        />
+      }
     >
-      <div
-        className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-[12px] border border-gray-100 bg-white p-6 shadow-xl"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="mb-4 flex items-center justify-between">
-          <h2 id="venta-manual-modal-title" className="text-lg font-semibold text-gray-900">
-            Nueva venta manual
-          </h2>
-          <button
-            type="button"
-            onClick={onClose}
-            className="text-gray-400 hover:text-gray-600"
-            aria-label="Cerrar"
-          >
-            <HiOutlineXMark size={24} />
-          </button>
-        </div>
-
-        <p className="mb-4 text-xs text-[#6B7280]">
-          Elegí un <strong>comprador</strong> de los que dio de alta el administrador de la cuenta (sección{" "}
-          <strong>Compradores</strong> en Asignación y creación), luego <strong>productos del catálogo</strong> en{" "}
-          <strong>unidades</strong>, <strong>fecha</strong> y <strong>estado</strong>.{" "}
-          {soloStockMapaBodegasInternas ? (
-            <>
-              Elegí la <strong>bodega interna</strong> donde se realiza la venta; el listado muestra solo productos con
-              stock en el <strong>mapa de esa bodega</strong> (mismo criterio que el inventario interno en reportes),
-              primarios y secundarios que coincidan con posiciones del mapa.
-            </>
-          ) : (
-            <>
-              En el listado entran ítems con <strong>stock en mapa o inventario del catálogo</strong> (primarios y
-              secundarios); podés vender un primario aunque todavía no tenga secundario creado.
-            </>
-          )}
-        </p>
+      <form id="venta-manual-form" onSubmit={(e) => void handleSubmit(e)} className={`${FORMULARIO_CREACION_BODY} space-y-4`}>
+        <p className="text-base text-gray-500">Comprador + ítems.</p>
 
         {error ? (
-          <p className="mb-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>
+          <p className="rounded-lg bg-red-50 px-3 py-2 text-base text-red-700">{error}</p>
         ) : null}
 
-        <form onSubmit={(e) => void handleSubmit(e)} className="space-y-4">
           <div>
-            <label
-              htmlFor="venta-comprador"
-              className="mb-1 block text-[11px] font-bold uppercase text-gray-500"
-            >
+            <label htmlFor="venta-comprador" className={FORMULARIO_CREACION_LABEL}>
               Comprador
             </label>
             <select
@@ -334,10 +314,10 @@ export function VentaManualFormModal({
               onChange={(e) => setCompradorId(e.target.value)}
               required
               disabled={compradoresOrdenados.length === 0}
-              className="w-full rounded-[8px] border border-gray-200 px-4 py-2 text-sm focus:border-[#A8D5BA] focus:outline-none disabled:bg-slate-50 disabled:text-slate-500"
+              className={`${FORMULARIO_CREACION_SELECT} disabled:bg-slate-50 disabled:text-slate-500`}
             >
               {compradoresOrdenados.length === 0 ? (
-                <option value="">No hay compradores para esta cuenta</option>
+                <option value="">Sin compradores.</option>
               ) : (
                 compradoresOrdenados.map((c) => (
                   <option key={c.id} value={c.id}>
@@ -350,10 +330,7 @@ export function VentaManualFormModal({
 
           {bodegasInternasVenta && bodegasInternasVenta.length > 0 ? (
             <div>
-              <label
-                htmlFor="venta-bodega-origen"
-                className="mb-1 block text-[11px] font-bold uppercase text-gray-500"
-              >
+              <label htmlFor="venta-bodega-origen" className={FORMULARIO_CREACION_LABEL}>
                 Bodega (venta)
               </label>
               <select
@@ -368,7 +345,7 @@ export function VentaManualFormModal({
                 }}
                 required
                 disabled={cargandoStockMapa}
-                className="w-full rounded-[8px] border border-gray-200 bg-white px-4 py-2 text-sm focus:border-[#A8D5BA] focus:outline-none disabled:bg-slate-50 disabled:text-slate-500"
+                className={`${FORMULARIO_CREACION_SELECT} disabled:bg-slate-50 disabled:text-slate-500`}
               >
                 {bodegasInternasVenta.map((b) => (
                   <option key={b.id} value={b.id}>
@@ -376,18 +353,13 @@ export function VentaManualFormModal({
                   </option>
                 ))}
               </select>
-              <p className="mt-1 text-[11px] text-gray-500">
-                El stock disponible y las líneas se calculan según el mapa de la bodega elegida.
-              </p>
+              <p className="mt-1 text-base text-gray-500">Stock = mapa bodega.</p>
             </div>
           ) : null}
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className={`${FORMULARIO_CREACION_GRID} md:grid-cols-2`}>
             <div>
-              <label
-                htmlFor="venta-fecha"
-                className="mb-1 block text-[11px] font-bold uppercase text-gray-500"
-              >
+              <label htmlFor="venta-fecha" className={FORMULARIO_CREACION_LABEL}>
                 Fecha
               </label>
               <input
@@ -396,21 +368,18 @@ export function VentaManualFormModal({
                 value={fecha}
                 onChange={(e) => setFecha(e.target.value)}
                 required
-                className="w-full rounded-[8px] border border-gray-200 px-4 py-2 text-sm focus:border-[#A8D5BA] focus:outline-none"
+                className={FORMULARIO_CREACION_INPUT}
               />
             </div>
             <div>
-              <label
-                htmlFor="venta-estado"
-                className="mb-1 block text-[11px] font-bold uppercase text-gray-500"
-              >
+              <label htmlFor="venta-estado" className={FORMULARIO_CREACION_LABEL}>
                 Estado
               </label>
               <select
                 id="venta-estado"
                 value={estado}
                 onChange={(e) => setEstado(e.target.value)}
-                className="w-full rounded-[8px] border border-gray-200 px-4 py-2 text-sm focus:border-[#A8D5BA] focus:outline-none"
+                className={FORMULARIO_CREACION_SELECT}
               >
                 {ORDEN_COMPRA_ESTADOS.map((opt) => (
                   <option key={opt} value={opt}>
@@ -421,8 +390,8 @@ export function VentaManualFormModal({
             </div>
           </div>
 
-          <div className="rounded-lg border border-dashed border-emerald-200/80 bg-emerald-50/40 p-3">
-            <p className="mb-2 text-[11px] font-bold uppercase text-gray-500">Productos del catálogo</p>
+          <div className="rounded-lg border border-dashed border-[#A8D5BA]/60 bg-[#f8faf8] p-3">
+            <p className={`${FORMULARIO_CREACION_LABEL} mb-2`}>Líneas cat.</p>
             <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-end">
               <div className="min-w-0 flex-1 sm:min-w-[200px]">
                 <label className="sr-only" htmlFor="venta-catalogo">
@@ -433,18 +402,18 @@ export function VentaManualFormModal({
                   value={pickProductId}
                   onChange={(e) => setPickProductId(e.target.value)}
                   disabled={cargandoStockMapa || productosParaSelector.length === 0}
-                  className="w-full rounded-[8px] border border-gray-200 bg-white px-3 py-2 text-sm focus:border-[#A8D5BA] focus:outline-none disabled:bg-slate-50 disabled:text-slate-500"
+                  className={`${FORMULARIO_CREACION_SELECT} disabled:bg-slate-50 disabled:text-slate-500`}
                 >
                   <option value="">
                     {cargandoStockMapa
-                      ? "Cargando inventario de bodegas internas…"
+                      ? "Cargando…"
                       : productosParaSelector.length === 0
                         ? soloStockMapaBodegasInternas
                           ? usaStockPorBodega
-                            ? "No hay productos con stock en esta bodega"
-                            : "No hay productos con stock en bodegas internas"
-                          : "No hay productos con stock en mapa ni en inventario"
-                        : "Elegí producto del catálogo…"}
+                            ? "Sin stock bodega."
+                            : "Sin stock internas."
+                          : "Sin stock / inv."
+                        : "Elegí producto…"}
                   </option>
                   {productosParaSelector.map((c) => (
                     <option key={c.id} value={c.id}>
@@ -455,10 +424,7 @@ export function VentaManualFormModal({
                 </select>
               </div>
               <div className="w-full sm:w-28">
-                <label
-                  className="mb-0.5 block text-[10px] font-bold uppercase text-gray-500 sm:sr-only"
-                  htmlFor="venta-cantidad"
-                >
+                <label className={`${FORMULARIO_CREACION_LABEL} mb-0.5 sm:sr-only`} htmlFor="venta-cantidad">
                   Cantidad
                 </label>
                 <input
@@ -468,14 +434,14 @@ export function VentaManualFormModal({
                   value={pickCantidad}
                   onChange={(e) => setPickCantidad(e.target.value)}
                   placeholder="Ej. 12"
-                  className="w-full rounded-[8px] border border-gray-200 bg-white px-3 py-2 text-sm focus:border-[#A8D5BA] focus:outline-none"
+                  className={FORMULARIO_CREACION_INPUT}
                 />
               </div>
               <button
                 type="button"
                 onClick={addLine}
                 disabled={cargandoStockMapa}
-                className="inline-flex items-center justify-center gap-1 rounded-[8px] bg-[#0f172a] px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-50"
+                className="inline-flex items-center justify-center gap-1 rounded-[12px] bg-[#0f172a] px-4 py-3 text-base font-semibold text-white shadow-sm transition hover:bg-slate-800 disabled:opacity-50"
               >
                 <HiOutlinePlus className="h-4 w-4" />
                 Agregar
@@ -486,13 +452,13 @@ export function VentaManualFormModal({
               <p className="mt-2 text-center text-xs text-amber-800/90">
                 {soloStockMapaBodegasInternas
                   ? usaStockPorBodega
-                    ? "No hay primarios ni secundarios con stock en el mapa de la bodega seleccionada."
-                    : "No hay primarios ni secundarios que coincidan con posiciones con stock en las bodegas internas."
-                  : "No hay primarios ni secundarios con stock en el mapa de esta cuenta ni cantidad en inventario del catálogo."}
+                    ? "Sin stock en mapa."
+                    : "Sin stock bodegas."
+                  : "Sin stock ni inv."}
               </p>
             ) : null}
             {lines.length === 0 ? (
-              <p className="mt-3 text-center text-xs text-gray-500">Todavía no hay líneas en esta venta.</p>
+              <p className="mt-3 text-center text-xs text-gray-500">Sin líneas.</p>
             ) : (
               <ul className="mt-3 space-y-2">
                 {lines.map((ln, i) => (
@@ -518,24 +484,7 @@ export function VentaManualFormModal({
             )}
           </div>
 
-          <div className="flex justify-end gap-3 pt-2">
-            <button
-              type="button"
-              onClick={onClose}
-              className="rounded-[8px] px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-100"
-            >
-              Cancelar
-            </button>
-            <button
-              type="submit"
-              disabled={saving}
-              className="rounded-[8px] bg-[#A8D5BA] px-5 py-2 text-sm font-semibold text-[#2D5A3F] transition hover:bg-[#97c4a9] active:scale-[0.98] disabled:opacity-50"
-            >
-              {saving ? "Guardando…" : "Guardar venta"}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+      </form>
+    </FormularioPlantilla>
   );
 }

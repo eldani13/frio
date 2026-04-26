@@ -33,7 +33,7 @@ export default function SlotsGrid({
     <div className="flex w-full shrink-0 flex-col rounded-xl border border-slate-200 bg-white px-4 pb-4 pt-4 shadow-sm sm:px-6 sm:pb-5 sm:pt-5">
       <div className="mb-5 flex min-w-0 shrink-0 flex-col gap-4 sm:mb-6 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex min-w-0 flex-wrap items-center gap-2">
-          <h2 className="flex min-w-0 items-center gap-2.5 text-[17px] font-bold leading-tight tracking-tight text-slate-900 sm:text-lg">
+          <h2 className="app-title flex min-w-0 items-center gap-2.5">
             <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-violet-100 text-violet-600">
               <FiArchive className="h-[18px] w-[18px] sm:h-5 sm:w-5" aria-hidden />
             </span>

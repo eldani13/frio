@@ -10,7 +10,7 @@ export default function RemoveForm({
 }: RemoveFormProps) {
   return (
     <div className="rounded-2xl bg-white p-6 shadow-sm">
-      <h2 className="text-lg font-semibold text-slate-900">Retirar objeto</h2>
+      <h2 className="app-title">Retirar objeto</h2>
       <div className="mt-4 grid gap-3">
         <label className="text-sm font-medium text-slate-600">Posición</label>
         <select

@@ -27,7 +27,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="es">
-      <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
+      <body
+        className={`${geistSans.variable} ${geistMono.variable} ${geistSans.className} font-sans text-base antialiased text-slate-800`}
+      >
         {/* --- ENVUELVE TODO CON AUTHPROVIDER --- */}
         <AuthProvider>
           <BodegaHistoryProvider>

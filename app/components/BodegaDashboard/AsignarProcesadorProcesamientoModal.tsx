@@ -1,7 +1,8 @@
 "use client";
 
 import React from "react";
-import { FiCpu, FiSearch, FiX } from "react-icons/fi";
+import { FiCpu, FiSearch } from "react-icons/fi";
+import { ModalPlantilla } from "@/app/components/ui/ModalPlantilla";
 import type { Client, Slot } from "@/app/interfaces/bodega";
 import { SolicitudProcesamientoService } from "@/app/services/solicitudProcesamientoService";
 import type { SolicitudProcesamiento } from "@/app/types/solicitudProcesamiento";
@@ -117,46 +118,38 @@ export function AsignarProcesadorProcesamientoModal({
     });
   }, [terminadasPendientesMapa, busqueda]);
 
-  if (!isOpen) return null;
-
   const codeOk = Boolean(String(warehouseCodeCuenta ?? "").trim());
 
   return (
-    <div
-      className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-900/45 p-3 backdrop-blur-[2px] sm:p-4"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="asignar-proc-modal-title"
-      onClick={onClose}
-    >
-      <div
-        className="w-full max-w-lg overflow-hidden rounded-3xl border border-sky-100 bg-white shadow-2xl sm:max-w-xl"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="relative flex items-start gap-4 border-b border-slate-100 bg-linear-to-r from-sky-50 via-white to-white px-5 py-5 sm:px-6">
-          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-sky-100 text-sky-700 shadow-inner">
-            <FiCpu className="h-6 w-6" />
-          </div>
-          <div className="min-w-0 flex-1 pr-10">
-            <h2 id="asignar-proc-modal-title" className="text-lg font-bold tracking-tight text-slate-900 sm:text-xl">
-              Procesamiento finalizado
-            </h2>
-            <p className="mt-1.5 text-sm leading-relaxed text-slate-600">
-              Órdenes en <strong>Pendiente</strong> (procesador ya cerró) que todavía no tienen el resultado ubicado en
-              el <strong>almacenamiento</strong>. Si ya se trasladaron a una posición, dejan de aparecer acá.
-            </p>
-          </div>
+    <ModalPlantilla
+      open={isOpen}
+      onClose={onClose}
+      titulo="Procesamiento finalizado"
+      tituloId="asignar-proc-modal-title"
+      headerIcon={<FiCpu className="h-7 w-7 text-blue-600" strokeWidth={2} aria-hidden />}
+      zIndexClass="z-[70]"
+      maxWidthClass="max-w-xl"
+      cardMaxHeightClass="max-h-[min(90vh,720px)]"
+      subtitulo={
+        <span>
+          Órdenes en <strong className="font-semibold text-slate-700">Pendiente</strong> (procesador ya cerró) que
+          todavía no tienen el resultado ubicado en el <strong className="font-semibold text-slate-700">almacenamiento</strong>.
+          Si ya se trasladaron a una posición, dejan de aparecer acá.
+        </span>
+      }
+      footer={
+        <div className="flex justify-end">
           <button
             type="button"
             onClick={onClose}
-            className="absolute right-4 top-4 rounded-xl p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
-            aria-label="Cerrar"
+            className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-base font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50"
           >
-            <FiX className="h-5 w-5" />
+            Cerrar
           </button>
         </div>
-
-        <div className="max-h-[min(62vh,480px)] space-y-4 overflow-y-auto px-5 py-5 sm:px-6">
+      }
+    >
+        <div className="max-h-[min(62vh,480px)] space-y-4 overflow-y-auto">
           {terminadasPendientesMapa.length > 0 ? (
             <div className="relative">
               <FiSearch
@@ -217,7 +210,7 @@ export function AsignarProcesadorProcesamientoModal({
                     <div className="flex flex-wrap items-start justify-between gap-2">
                       <p className="font-mono text-sm font-bold text-slate-900">{row.numero}</p>
                       <span
-                        className={`rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide ${
+                        className={`rounded-full px-2.5 py-0.5 text-base font-bold uppercase tracking-wide ${
                           normalizeProcesamientoEstado(row.estado) === "Pendiente"
                             ? "bg-violet-100 text-violet-900"
                             : "bg-slate-200 text-slate-800"
@@ -226,9 +219,9 @@ export function AsignarProcesadorProcesamientoModal({
                         {normalizeProcesamientoEstado(row.estado)}
                       </span>
                     </div>
-                    <p className="mt-2 text-[10px] font-bold uppercase tracking-wide text-slate-500">Primario</p>
+                    <p className="mt-2 text-base font-bold uppercase tracking-wide text-slate-500">Primario</p>
                     <p className="mt-0.5 text-xs leading-snug text-slate-800">{row.productoPrimarioTitulo}</p>
-                    <p className="mt-2 text-[10px] font-bold uppercase tracking-wide text-slate-500">
+                    <p className="mt-2 text-base font-bold uppercase tracking-wide text-slate-500">
                       Secundario (objetivo)
                     </p>
                     <p className="mt-0.5 text-xs leading-snug text-slate-800">
@@ -255,17 +248,6 @@ export function AsignarProcesadorProcesamientoModal({
             </ul>
           )}
         </div>
-
-        <div className="border-t border-slate-100 bg-slate-50/90 px-5 py-4 sm:px-6">
-          <button
-            type="button"
-            onClick={onClose}
-            className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 sm:w-auto"
-          >
-            Cerrar
-          </button>
-        </div>
-      </div>
-    </div>
+    </ModalPlantilla>
   );
 }

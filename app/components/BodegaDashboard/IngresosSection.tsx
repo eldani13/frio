@@ -228,7 +228,7 @@ export default function IngresosSection(props: Props) {
                 <FiBox className="h-[18px] w-[18px] sm:h-5 sm:w-5" aria-hidden />
               </span>
               <div className="min-w-0">
-                <h2 className="text-[17px] font-bold leading-tight tracking-tight text-emerald-900 sm:text-lg">
+                <h2 className="app-title">
                   Zona de ingreso
                 </h2>
               </div>
@@ -281,10 +281,10 @@ export default function IngresosSection(props: Props) {
                 )}
               </ZonaCuatroSlotsRow>
               {inboundBoxes.length === 0 ? (
-                <p className="mt-2 text-center text-[11px] text-emerald-900/85">No hay cajas en ingresos.</p>
+                <p className="mt-2 text-center text-base text-emerald-900/85">No hay cajas en ingresos.</p>
               ) : null}
               {sortedInboundIng.length > ZONA_ENTRADA_SALIDA_SLOTS ? (
-                <p className="mt-2 text-center text-[10px] text-emerald-900/80">
+                <p className="mt-2 text-center text-base text-emerald-900/80">
                   Mostrando {ZONA_ENTRADA_SALIDA_SLOTS} de {sortedInboundIng.length} cajas.
                 </p>
               ) : null}
@@ -300,7 +300,7 @@ export default function IngresosSection(props: Props) {
                 <HiArrowRightOnRectangle className="h-[18px] w-[18px] sm:h-5 sm:w-5" aria-hidden />
               </span>
               <div className="min-w-0">
-                <h2 className="text-[17px] font-bold leading-tight tracking-tight text-pink-900 sm:text-lg">
+                <h2 className="app-title">
                   Zona de salida
                 </h2>
               </div>
@@ -353,10 +353,10 @@ export default function IngresosSection(props: Props) {
                 )}
               </ZonaCuatroSlotsRow>
               {outboundFiltered.length === 0 ? (
-                <p className="mt-2 text-center text-[11px] text-slate-500">No hay cajas en salida.</p>
+                <p className="mt-2 text-center text-base text-slate-500">No hay cajas en salida.</p>
               ) : null}
               {sortedOutboundIng.length > ZONA_ENTRADA_SALIDA_SLOTS ? (
-                <p className="mt-2 text-center text-[10px] text-pink-900/75">
+                <p className="mt-2 text-center text-base text-pink-900/75">
                   Mostrando {ZONA_ENTRADA_SALIDA_SLOTS} de {sortedOutboundIng.length} cajas.
                 </p>
               ) : null}
@@ -372,7 +372,7 @@ export default function IngresosSection(props: Props) {
                 <HiArrowRightOnRectangle className="h-[18px] w-[18px] sm:h-5 sm:w-5" aria-hidden />
               </span>
               <div className="min-w-0">
-                <h2 className="text-[17px] font-bold leading-tight tracking-tight text-pink-900 sm:text-lg">
+                <h2 className="app-title">
                   Orden de salida
                 </h2>
               </div>
@@ -415,7 +415,7 @@ export default function IngresosSection(props: Props) {
                   </p>
                 ) : (
                   <>
-                    <p className="mt-2 text-[11px] text-slate-600">
+                    <p className="mt-2 text-base text-slate-600">
                       Se enviarán <strong>{cajasPaqueteEnSalida.length}</strong> caja(s) en un solo paso; la venta pasa
                       a <strong>Transporte</strong> y el viaje queda para el rol transporte.
                     </p>
@@ -556,7 +556,7 @@ export default function IngresosSection(props: Props) {
 
             {!paqueteDespacho && outboundFiltered.length === 0 ? (
               isBodegaInterna ? (
-                <p className="text-center text-[11px] leading-relaxed text-pink-900/75">
+                <p className="text-center text-base leading-relaxed text-pink-900/75">
                   No hay cajas en salida para envío manual. Arriba podés elegir una venta, armar paquete o registrar por
                   línea cuando corresponda.
                 </p>
@@ -582,15 +582,14 @@ export default function IngresosSection(props: Props) {
         onClick={() => setReviewModal(null)}
       >
         <div
-          className="w-full max-w-lg sm:max-w-xl rounded-3xl border border-red-100 bg-white/95 shadow-2xl backdrop-blur-lg relative overflow-hidden animate-fade-in-up"
+          className="relative w-full max-w-lg animate-fade-in-up overflow-hidden rounded-3xl border border-red-100 bg-white/95 shadow-2xl backdrop-blur-lg sm:max-w-xl"
           onClick={(e) => e.stopPropagation()}
-          style={{ fontFamily: '"Space Grotesk", "Work Sans", sans-serif' }}
         >
           <div className="flex flex-col items-center justify-center pt-8 pb-4 px-8 border-b border-red-100 bg-linear-to-r from-red-50 to-white rounded-t-3xl relative">
             <span className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-red-100 shadow mb-2">
               <FiAlertCircle className="w-8 h-8 text-red-500" />
             </span>
-            <h2 className="text-2xl font-extrabold text-red-700 drop-shadow mb-1 tracking-tight">
+            <h2 className="app-title mb-1">
              ¿Confirmar envio de caja?
             </h2>
             <p className="text-sm text-slate-600 font-medium text-center">
@@ -711,15 +710,14 @@ export default function IngresosSection(props: Props) {
         onClick={() => setTempConfirmModal(null)}
       >
         <div
-          className="w-full max-w-sm rounded-2xl border border-emerald-100 bg-white/95 shadow-2xl relative overflow-hidden animate-fade-in-up"
+          className="relative w-full max-w-sm animate-fade-in-up overflow-hidden rounded-2xl border border-emerald-100 bg-white/95 shadow-2xl"
           onClick={(e) => e.stopPropagation()}
-          style={{ fontFamily: '"Space Grotesk", "Work Sans", sans-serif' }}
         >
           <div className="flex flex-col items-center justify-center pt-6 pb-3 px-5 border-b border-emerald-100 bg-linear-to-r from-emerald-50 to-white relative">
             <span className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-emerald-100 mb-2 shadow">
               <FiAlertCircle className="w-6 h-6 text-emerald-600" />
             </span>
-            <h3 className="text-xl font-extrabold text-emerald-700 tracking-tight">
+            <h3 className="app-title">
               Confirmar temperatura
             </h3>
             <p className="text-xs text-slate-600 text-center mt-1">

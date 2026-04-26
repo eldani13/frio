@@ -65,7 +65,7 @@ export default function BodegasExternasPage({ warehouseName, warehouseId, onTota
     <div className="p-6">
       <div className="flex justify-between items-center mb-6">
         <div>
-          <h1 className="text-2xl font-bold">Bodegas externas</h1>
+          <h1 className="app-title">Bodegas externas</h1>
           {warehouseName ? (
             <p className="mt-1 text-sm font-medium text-slate-500">{warehouseName}</p>
           ) : null}

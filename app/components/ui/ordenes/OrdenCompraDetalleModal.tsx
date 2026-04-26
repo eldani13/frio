@@ -1,7 +1,8 @@
 "use client";
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { HiOutlineXMark } from "react-icons/hi2";
+import { FiShoppingCart } from "react-icons/fi";
+import { ModalPlantilla } from "@/app/components/ui/ModalPlantilla";
 import {
   ORDEN_COMPRA_ESTADOS,
   ordenCompraEstadoBadgeClass,
@@ -233,35 +234,29 @@ export function OrdenCompraDetalleModal({
   const mostrarBloqueOperador = esOperadorCuentas && idCliente.trim() && codeCuenta.trim();
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/20 p-4 backdrop-blur-sm"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="orden-detalle-title"
-      onClick={onClose}
-    >
-      <div
-        className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-[12px] border border-gray-100 bg-white p-6 shadow-xl"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="mb-4 flex items-start justify-between gap-3">
-          <div>
-            <h2 id="orden-detalle-title" className="text-lg font-semibold text-gray-900">
-              Detalle de orden
-            </h2>
-            <p className="mt-1 font-mono text-sm font-bold text-slate-800">{orden.numero}</p>
-          </div>
+    <ModalPlantilla
+      open
+      onClose={onClose}
+      titulo="Detalle de orden"
+      tituloId="orden-detalle-title"
+      headerIcon={<FiShoppingCart className="h-7 w-7 text-blue-600" strokeWidth={2} aria-hidden />}
+      zIndexClass="z-50"
+      maxWidthClass="max-w-lg"
+      cardMaxHeightClass="max-h-[90vh]"
+      subtitulo={<span className="font-mono font-semibold text-slate-800">{orden.numero}</span>}
+      footer={
+        <div className="flex justify-end">
           <button
             type="button"
             onClick={onClose}
-            className="shrink-0 text-gray-400 hover:text-gray-600"
-            aria-label="Cerrar"
+            className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-base font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50"
           >
-            <HiOutlineXMark size={24} />
+            Cerrar
           </button>
         </div>
-
-        <dl className="mb-5 space-y-2 border-b border-slate-100 pb-4 text-sm">
+      }
+    >
+        <dl className="mb-5 space-y-2 border-b border-slate-100 pb-4 text-base">
           <div className="flex flex-wrap gap-x-2 gap-y-1">
             <dt className="font-semibold text-slate-500">Proveedor</dt>
             <dd className="text-slate-900">{orden.proveedorNombre || "—"}</dd>
@@ -330,7 +325,7 @@ export function OrdenCompraDetalleModal({
 
         {mostrarBloqueOperador ? (
           <div className="mb-5 space-y-3 border-b border-slate-100 pb-4">
-            <p className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Destino</p>
+            <p className="text-base font-bold uppercase tracking-wide text-slate-500">Destino</p>
             <p className="text-xs text-slate-500">
               Elegí si la mercadería va a una bodega interna o externa vinculada a tu cuenta (las mismas
               que asigna el administrador).
@@ -356,7 +351,7 @@ export function OrdenCompraDetalleModal({
                     onChange={(e) => setFechaLlegadaEstipulada(e.target.value)}
                     className="w-full max-w-xs rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900"
                   />
-                  <p className="mt-1 text-[11px] text-slate-500">
+                  <p className="mt-1 text-base text-slate-500">
                     Obligatoria antes de enviar. El custodio la verá al recibir en bodega.
                   </p>
                 </div>
@@ -449,7 +444,7 @@ export function OrdenCompraDetalleModal({
           </div>
         ) : null}
 
-        <p className="mb-2 text-[11px] font-bold uppercase tracking-wide text-slate-500">Productos</p>
+        <p className="mb-2 text-base font-bold uppercase tracking-wide text-slate-500">Productos</p>
         {lineItems.length === 0 ? (
           <p className="text-sm text-slate-500">Esta orden no tiene líneas registradas.</p>
         ) : (
@@ -485,16 +480,6 @@ export function OrdenCompraDetalleModal({
           </ul>
         )}
 
-        <div className="mt-6 flex justify-end">
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-[8px] bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-200"
-          >
-            Cerrar
-          </button>
-        </div>
-      </div>
-    </div>
+    </ModalPlantilla>
   );
 }

@@ -1,8 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import type { FormEvent } from "react";
 import { FirebaseError } from "firebase/app";
-import { FiX } from "react-icons/fi";
+import { FiEdit3 } from "react-icons/fi";
+import { ModalPlantilla } from "@/app/components/ui/ModalPlantilla";
 
 function mensajeErrorEnvioTarea(err: unknown): string {
   if (err instanceof FirebaseError) {
@@ -48,9 +50,7 @@ export default function CrearTareaCuentaModal({ open, onClose, onSubmit, cuentaL
     setSaving(false);
   }, [open]);
 
-  if (!open) return null;
-
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     const t = titulo.trim();
     if (!t) {
@@ -71,87 +71,69 @@ export default function CrearTareaCuentaModal({ open, onClose, onSubmit, cuentaL
   };
 
   return (
-    <div
-      className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/45 p-4"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="crear-tarea-titulo"
-      onClick={onClose}
-    >
-      <div
-        className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl"
-        onClick={(ev) => ev.stopPropagation()}
-      >
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Cuenta</p>
-            <h2 id="crear-tarea-titulo" className="mt-1 text-lg font-semibold text-slate-900">
-              Crear tarea para el configurador
-            </h2>
-            {cuentaLabel ? (
-              <p className="mt-1 text-sm text-slate-500">{cuentaLabel}</p>
-            ) : null}
-          </div>
+    <ModalPlantilla
+      open={open}
+      onClose={onClose}
+      titulo="Crear tarea para el configurador"
+      tituloId="crear-tarea-titulo"
+      headerIcon={<FiEdit3 className="h-7 w-7 text-blue-600" strokeWidth={2} aria-hidden />}
+      zIndexClass="z-[60]"
+      encabezadoSup="Cuenta"
+      subtitulo={cuentaLabel?.trim() ? cuentaLabel : undefined}
+      footer={
+        <div className="flex flex-wrap justify-end gap-2">
           <button
             type="button"
+            form="crear-tarea-form"
             onClick={onClose}
-            className="rounded-full p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
-            aria-label="Cerrar"
+            disabled={saving}
+            className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-base font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:opacity-50"
           >
-            <FiX className="h-5 w-5" />
+            Cancelar
+          </button>
+          <button
+            type="submit"
+            form="crear-tarea-form"
+            disabled={saving}
+            className="rounded-xl bg-slate-800 px-4 py-2.5 text-base font-semibold text-white shadow-sm transition hover:bg-slate-900 disabled:opacity-50"
+          >
+            {saving ? "Enviando…" : "Enviar tarea"}
           </button>
         </div>
-
-        <form className="mt-5 space-y-4" onSubmit={handleSubmit}>
-          <div>
-            <label htmlFor="tarea-titulo" className="block text-sm font-medium text-slate-700">
-              Título
-            </label>
-            <input
-              id="tarea-titulo"
-              value={titulo}
-              onChange={(ev) => setTitulo(ev.target.value)}
-              className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-900 outline-none ring-emerald-500/30 focus:border-emerald-400 focus:ring-2"
-              placeholder="Ej. Actualizar precios del catálogo"
-              maxLength={200}
-              disabled={saving}
-            />
-          </div>
-          <div>
-            <label htmlFor="tarea-detalle" className="block text-sm font-medium text-slate-700">
-              Detalle <span className="font-normal text-slate-400">(opcional)</span>
-            </label>
-            <textarea
-              id="tarea-detalle"
-              value={detalle}
-              onChange={(ev) => setDetalle(ev.target.value)}
-              rows={4}
-              className="mt-1 w-full resize-y rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-900 outline-none ring-emerald-500/30 focus:border-emerald-400 focus:ring-2"
-              placeholder="Contexto o pasos que el configurador deba tener en cuenta"
-              maxLength={2000}
-              disabled={saving}
-            />
-          </div>
-          {error ? <p className="text-sm text-red-600">{error}</p> : null}
-          <div className="flex justify-end gap-2 pt-1">
-            <button
-              type="button"
-              onClick={onClose}
-              disabled={saving}
-              className="rounded-xl px-4 py-2 text-sm font-medium text-slate-600 transition hover:bg-slate-100 disabled:opacity-50"
-            >
-              Cancelar
-            </button>
-            <button
-              type="submit"
-              disabled={saving}
-              className="rounded-xl bg-slate-800 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-900 disabled:opacity-50"
-            >
-              {saving ? "Enviando…" : "Enviar tarea"}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+      }
+    >
+      <form id="crear-tarea-form" className="space-y-4" onSubmit={handleSubmit}>
+        <div>
+          <label htmlFor="tarea-titulo" className="block text-base font-medium text-slate-700">
+            Título
+          </label>
+          <input
+            id="tarea-titulo"
+            value={titulo}
+            onChange={(ev) => setTitulo(ev.target.value)}
+            className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-base text-slate-900 outline-none ring-emerald-500/30 focus:border-emerald-400 focus:ring-2"
+            placeholder="Ej. Actualizar precios del catálogo"
+            maxLength={200}
+            disabled={saving}
+          />
+        </div>
+        <div>
+          <label htmlFor="tarea-detalle" className="block text-base font-medium text-slate-700">
+            Detalle <span className="font-normal text-slate-400">(opcional)</span>
+          </label>
+          <textarea
+            id="tarea-detalle"
+            value={detalle}
+            onChange={(ev) => setDetalle(ev.target.value)}
+            rows={4}
+            className="mt-1 w-full resize-y rounded-xl border border-slate-200 px-3 py-2 text-base text-slate-900 outline-none ring-emerald-500/30 focus:border-emerald-400 focus:ring-2"
+            placeholder="Contexto o pasos que el configurador deba tener en cuenta"
+            maxLength={2000}
+            disabled={saving}
+          />
+        </div>
+        {error ? <p className="text-base text-red-600">{error}</p> : null}
+      </form>
+    </ModalPlantilla>
   );
 }

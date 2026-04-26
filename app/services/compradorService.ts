@@ -44,7 +44,7 @@ async function repairCompradoresCodigo(idCliente: string, list: CompradorConId[]
   if (!list.length) return list;
   const cid = idCliente.trim();
 
-  let working = list.map((c) => ({ ...c }));
+  const working = list.map((c) => ({ ...c }));
   let maxN = 0;
   const refreshMaxFromWorking = () => {
     maxN = 0;

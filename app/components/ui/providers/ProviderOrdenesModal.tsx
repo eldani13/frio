@@ -47,7 +47,7 @@ export function ProviderOrdenesModal({
       >
         <div className="flex shrink-0 items-center justify-between border-b border-[#eef1f4] px-6 py-4">
           <div>
-            <h2 id="provider-ordenes-title" className="text-lg font-semibold text-gray-900">
+            <h2 id="provider-ordenes-title" className="app-title">
               Órdenes de compra
             </h2>
             <p className="mt-0.5 text-sm text-[#6B7280]">{provider.name}</p>
@@ -67,13 +67,13 @@ export function ProviderOrdenesModal({
             <table className="w-full min-w-[520px] border-collapse text-left text-sm">
               <thead className="sticky top-0 z-10 bg-slate-50 shadow-[0_1px_0_0_rgb(226_232_240)]">
                 <tr className="border-b border-slate-200 bg-slate-50">
-                  <th className="bg-slate-50 px-4 py-3 text-left text-[11px] font-bold uppercase tracking-wide text-slate-500">
+                  <th className="bg-slate-50 px-4 py-3 text-left text-base font-bold uppercase tracking-wide text-slate-500">
                     Orden de compra
                   </th>
-                  <th className="bg-slate-50 px-4 py-3 text-left text-[11px] font-bold uppercase tracking-wide text-slate-500">
+                  <th className="bg-slate-50 px-4 py-3 text-left text-base font-bold uppercase tracking-wide text-slate-500">
                     Estado
                   </th>
-                  <th className="bg-slate-50 px-4 py-3 text-left text-[11px] font-bold uppercase tracking-wide text-slate-500">
+                  <th className="bg-slate-50 px-4 py-3 text-left text-base font-bold uppercase tracking-wide text-slate-500">
                     Pedido vs ingreso (bodega)
                   </th>
                 </tr>
@@ -103,7 +103,7 @@ export function ProviderOrdenesModal({
                       key={row.id}
                       className="border-b border-slate-100 transition-colors hover:bg-violet-50/80"
                     >
-                      <td className="whitespace-nowrap px-4 py-3 align-top font-mono text-[13px] font-semibold text-slate-900">
+                      <td className="whitespace-nowrap px-4 py-3 align-top font-mono text-base font-semibold text-slate-900">
                         {row.ordenCompra}
                       </td>
                       <td className="whitespace-nowrap px-4 py-3 align-top">
@@ -113,7 +113,7 @@ export function ProviderOrdenesModal({
                           {row.estado}
                         </span>
                       </td>
-                      <td className="px-4 py-3 align-top text-[13px] text-slate-700">
+                      <td className="px-4 py-3 align-top text-base text-slate-700">
                         {!row.tieneRecepcion ? (
                           <span className="text-slate-400">Aún no hay recepción en bodega.</span>
                         ) : !row.lineasDiff?.length ? (
@@ -123,7 +123,7 @@ export function ProviderOrdenesModal({
                             {row.lineasDiff.map((ln, lnIdx) => (
                               <li
                                 key={`${row.id}-ln-${lnIdx}-${ln.catalogoProductId}`}
-                                className="flex items-start gap-2 text-[12px] leading-snug"
+                                className="flex items-start gap-2 text-base leading-snug"
                               >
                                 {ln.ok ? (
                                   <HiCheckCircle
@@ -148,7 +148,7 @@ export function ProviderOrdenesModal({
                             {(row.adicionales ?? []).map((txt, i) => (
                               <li
                                 key={`extra-${row.id}-${i}`}
-                                className="flex items-start gap-2 text-[12px] text-amber-900"
+                                className="flex items-start gap-2 text-base text-amber-900"
                               >
                                 <HiXCircle
                                   className="mt-0.5 h-4 w-4 shrink-0 text-amber-600"

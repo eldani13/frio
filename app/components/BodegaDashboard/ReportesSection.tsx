@@ -405,7 +405,7 @@ const ReportesSection: React.FC<ReportesSectionProps> = ({
               <span className={cuentaMenuIconWrap}>
                 <MdBusiness size={38} className="text-[#6A0DAD]" aria-hidden />
               </span>
-              <h3 className={`max-w-[13rem] text-lg font-bold leading-snug tracking-tight sm:text-xl ${cuentaMenuText}`}>
+              <h3 className={`app-title max-w-[13rem] leading-snug ${cuentaMenuText}`}>
                 Proveedor
               </h3>
             </button>
@@ -421,7 +421,7 @@ const ReportesSection: React.FC<ReportesSectionProps> = ({
               <span className={cuentaMenuIconWrap}>
                 <FiExternalLink size={36} className="text-[#6A0DAD]" aria-hidden />
               </span>
-              <h3 className={`max-w-[13rem] text-lg font-bold leading-snug tracking-tight sm:text-xl ${cuentaMenuText}`}>
+              <h3 className={`app-title max-w-[13rem] leading-snug ${cuentaMenuText}`}>
                 Bodega externa
               </h3>
             </button>
@@ -437,7 +437,7 @@ const ReportesSection: React.FC<ReportesSectionProps> = ({
               <span className={cuentaMenuIconWrap}>
                 <MdWarehouse size={38} className="text-sky-700" aria-hidden />
               </span>
-              <h3 className={`max-w-[13rem] text-lg font-bold leading-snug tracking-tight sm:text-xl ${cuentaMenuText}`}>
+              <h3 className={`app-title max-w-[13rem] leading-snug ${cuentaMenuText}`}>
                 Bodega interna
               </h3>
             </button>
@@ -453,7 +453,7 @@ const ReportesSection: React.FC<ReportesSectionProps> = ({
               <span className={cuentaMenuIconWrap}>
                 <MdShoppingCart size={38} className="text-[#047857]" aria-hidden />
               </span>
-              <h3 className={`max-w-[13rem] text-lg font-bold leading-snug tracking-tight sm:text-xl ${cuentaMenuText}`}>
+              <h3 className={`app-title max-w-[13rem] leading-snug ${cuentaMenuText}`}>
                 Ventas
               </h3>
             </button>
@@ -477,7 +477,7 @@ const ReportesSection: React.FC<ReportesSectionProps> = ({
             <span className={cuentaMenuIconWrap}>
               <BiUserCheck size={38} className="text-[#006D3E]" aria-hidden />
             </span>
-            <h3 className={`max-w-[13rem] text-lg font-bold leading-snug tracking-tight sm:text-xl ${cuentaMenuText}`}>
+            <h3 className={`app-title max-w-[13rem] leading-snug ${cuentaMenuText}`}>
               Asignación y creación
             </h3>
           </button>
@@ -494,7 +494,7 @@ const ReportesSection: React.FC<ReportesSectionProps> = ({
             <span className={cuentaMenuIconWrap}>
               <BiCollection size={38} className="text-[#855B11]" aria-hidden />
             </span>
-            <h3 className={`max-w-[13rem] text-lg font-bold leading-snug tracking-tight sm:text-xl ${cuentaMenuText}`}>
+            <h3 className={`app-title max-w-[13rem] leading-snug ${cuentaMenuText}`}>
               Catálogo
             </h3>
           </button>
@@ -511,7 +511,7 @@ const ReportesSection: React.FC<ReportesSectionProps> = ({
             <span className={cuentaMenuIconWrap}>
               <BiBarChartAlt2 size={38} className="text-[#0047AB]" aria-hidden />
             </span>
-            <h3 className={`max-w-[13rem] text-lg font-bold leading-snug tracking-tight sm:text-xl ${cuentaMenuText}`}>
+            <h3 className={`app-title max-w-[13rem] leading-snug ${cuentaMenuText}`}>
               Reportes
             </h3>
           </button>
@@ -535,7 +535,7 @@ const ReportesSection: React.FC<ReportesSectionProps> = ({
           </button>
 
           <div className="flex flex-col gap-3">
-            <h2 className="text-xs font-bold uppercase tracking-widest text-slate-500 pl-1">
+            <h2 className="app-title pl-1">
               Proveedor
             </h2>
             <p className="pl-1 text-sm text-slate-600">
@@ -551,7 +551,7 @@ const ReportesSection: React.FC<ReportesSectionProps> = ({
                   <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-white/70 text-cyan-800 shadow-sm">
                     <HiOutlinePlus strokeWidth={2.5} size={24} />
                   </span>
-                  <p className="text-lg font-bold text-slate-900">Realizar solicitud</p>
+                  <p className="app-title">Realizar solicitud</p>
                 </div>
                 <HiOutlineArrowRight size={18} className="text-slate-500 group-hover:translate-x-1 transition-transform" />
               </button>
@@ -565,7 +565,7 @@ const ReportesSection: React.FC<ReportesSectionProps> = ({
                   <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-white/50 text-violet-900 shadow-sm">
                     <MdAssignment size={24} />
                   </span>
-                  <p className="text-lg font-bold text-slate-900">Órdenes de compra</p>
+                  <p className="app-title">Órdenes de compra</p>
                 </div>
                 <HiOutlineArrowRight size={18} className="text-slate-500 group-hover:translate-x-1 transition-transform" />
               </button>
@@ -591,7 +591,7 @@ const ReportesSection: React.FC<ReportesSectionProps> = ({
           </button>
 
           <div className="flex flex-col gap-3">
-            <h2 className="pl-1 text-xs font-bold uppercase tracking-widest text-slate-500">Ventas</h2>
+            <h2 className="app-title pl-1">Ventas</h2>
             <p className="pl-1 text-sm text-slate-600">
               Seguimiento de pedidos de venta: productos en unidades y mismos estados operativos que en órdenes de
               compra.
@@ -607,7 +607,7 @@ const ReportesSection: React.FC<ReportesSectionProps> = ({
                     <MdShoppingCart size={24} />
                   </span>
                   <div className="text-left">
-                    <p className="text-lg font-bold text-slate-900">Ordenes de ventas</p>
+                    <p className="app-title">Ordenes de ventas</p>
                     <p className="text-xs text-slate-600">
                       Comprador, productos en unidades, estado y fecha (mismos estados que órdenes de compra).
                     </p>
@@ -651,7 +651,7 @@ const ReportesSection: React.FC<ReportesSectionProps> = ({
           </button>
 
           <div className="flex flex-col gap-3">
-            <h2 className="pl-1 text-xs font-bold uppercase tracking-widest text-slate-500">Bodega interna</h2>
+            <h2 className="app-title pl-1">Bodega interna</h2>
             
             <div className="flex flex-col gap-3">
               <button
@@ -664,7 +664,7 @@ const ReportesSection: React.FC<ReportesSectionProps> = ({
                     <FiCpu size={24} strokeWidth={2} />
                   </span>
                   <div className="text-left">
-                    <p className="text-lg font-bold text-slate-900">Procesamiento</p>
+                    <p className="app-title">Procesamiento</p>
                     <p className="text-xs text-slate-600">
                       Primario y secundario según catálogo; cantidad hasta inventario; estimado del secundario por
                       regla de conversión.
@@ -716,7 +716,7 @@ const ReportesSection: React.FC<ReportesSectionProps> = ({
           </button>
 
           <div className="flex flex-col gap-3">
-            <h2 className="text-xs font-bold uppercase tracking-widest text-slate-500 pl-1">
+            <h2 className="app-title pl-1">
               Bodega externa
             </h2>
             <p className="pl-1 text-sm text-slate-600">
@@ -732,7 +732,7 @@ const ReportesSection: React.FC<ReportesSectionProps> = ({
                   <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-white/70 text-violet-900 shadow-sm">
                     <MdAssignment size={24} />
                   </span>
-                  <p className="text-lg font-bold text-slate-900">Integración</p>
+                  <p className="app-title">Integración</p>
                 </div>
                 <HiOutlineArrowRight size={18} className="text-slate-500 group-hover:translate-x-1 transition-transform" />
               </button>
@@ -832,7 +832,7 @@ const ReportesSection: React.FC<ReportesSectionProps> = ({
                 <MdAssignment size={28} />
               </div>
               <div>
-                <h1 className="text-2xl font-extrabold tracking-tight text-slate-900">Integración</h1>
+                <h1 className="app-title">Integración</h1>
                 <p className="text-sm text-slate-500">
                   <strong>Activo</strong> al enviar la solicitud; <strong>Finalizado</strong> cuando el configurador
                   ejecuta la tarea en su panel (se actualiza solo en esta tabla).
@@ -868,16 +868,16 @@ const ReportesSection: React.FC<ReportesSectionProps> = ({
               <table className="w-full min-w-[640px] border-collapse text-left text-sm">
                 <thead>
                   <tr className="border-b border-slate-200 bg-slate-50">
-                    <th className="px-4 py-3 font-bold uppercase tracking-wide text-[11px] text-slate-500">
+                    <th className="px-4 py-3 font-bold uppercase tracking-wide text-base text-slate-500">
                       Bodega externa
                     </th>
-                    <th className="px-4 py-3 font-bold uppercase tracking-wide text-[11px] text-slate-500">
+                    <th className="px-4 py-3 font-bold uppercase tracking-wide text-base text-slate-500">
                       Tipo de integración
                     </th>
-                    <th className="whitespace-nowrap px-4 py-3 font-bold uppercase tracking-wide text-[11px] text-slate-500">
+                    <th className="whitespace-nowrap px-4 py-3 font-bold uppercase tracking-wide text-base text-slate-500">
                       Fecha
                     </th>
-                    <th className="whitespace-nowrap px-4 py-3 font-bold uppercase tracking-wide text-[11px] text-slate-500">
+                    <th className="whitespace-nowrap px-4 py-3 font-bold uppercase tracking-wide text-base text-slate-500">
                       Estado
                     </th>
                   </tr>
@@ -934,7 +934,7 @@ const ReportesSection: React.FC<ReportesSectionProps> = ({
               onClick={(ev) => ev.stopPropagation()}
             >
               <div className="flex items-start justify-between gap-3">
-                <h2 id="modal-integracion-titulo" className="text-lg font-semibold text-slate-900">
+                <h2 id="modal-integracion-titulo" className="app-title">
                   Solicitar integración
                 </h2>
                 <button
@@ -1054,7 +1054,7 @@ const ReportesSection: React.FC<ReportesSectionProps> = ({
 
           <div className="flex flex-col gap-10">
             <div className="flex flex-col gap-3">
-              <h2 className="text-xs font-bold uppercase tracking-widest text-slate-500 pl-1">
+              <h2 className="app-title pl-1">
                 Creación
               </h2>
               <div className="flex flex-col gap-3">
@@ -1067,7 +1067,7 @@ const ReportesSection: React.FC<ReportesSectionProps> = ({
                     <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-white/50 text-slate-800 shadow-sm">
                       <MdBusiness size={24} />
                     </span>
-                    <p className="text-lg font-bold text-slate-900">Proveedores</p>
+                    <p className="app-title">Proveedores</p>
                   </div>
                   <HiOutlineArrowRight size={18} className="text-slate-500 group-hover:translate-x-1 transition-transform" />
                 </button>
@@ -1081,7 +1081,7 @@ const ReportesSection: React.FC<ReportesSectionProps> = ({
                     <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-white/40 text-slate-800 shadow-sm">
                       <MdShoppingCart size={24} />
                     </span>
-                    <p className="text-lg font-bold text-slate-900">Compradores</p>
+                    <p className="app-title">Compradores</p>
                   </div>
                   <HiOutlineArrowRight size={20} className="text-slate-500 group-hover:translate-x-1 transition-transform" />
                 </button>
@@ -1095,7 +1095,7 @@ const ReportesSection: React.FC<ReportesSectionProps> = ({
                     <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-white/40 text-slate-800 shadow-sm">
                       <HiOutlineTruck size={24} />
                     </span>
-                    <p className="text-lg font-bold text-slate-900">Camiones</p>
+                    <p className="app-title">Camiones</p>
                   </div>
                   <HiOutlineArrowRight size={20} className="text-slate-500 group-hover:translate-x-1 transition-transform" />
                 </button>
@@ -1106,7 +1106,7 @@ const ReportesSection: React.FC<ReportesSectionProps> = ({
             </div>
 
             <div className="flex flex-col gap-3 border-t border-slate-200 pt-10">
-              <h2 className="text-xs font-bold uppercase tracking-widest text-slate-500 pl-1">
+              <h2 className="app-title pl-1">
                 Asignaciones
               </h2>
               <div className="flex flex-col gap-3">
@@ -1119,7 +1119,7 @@ const ReportesSection: React.FC<ReportesSectionProps> = ({
                     <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-white/70 text-cyan-800 shadow-sm">
                       <HiOutlineUsers size={24} />
                     </span>
-                    <p className="text-lg font-bold text-slate-900">Usuarios</p>
+                    <p className="app-title">Usuarios</p>
                   </div>
                   <HiOutlineArrowRight size={18} className="text-slate-500 group-hover:translate-x-1 transition-transform" />
                 </button>
@@ -1133,7 +1133,7 @@ const ReportesSection: React.FC<ReportesSectionProps> = ({
                     <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-white/50 text-slate-800 shadow-sm">
                       <BiUserCheck size={24} />
                     </span>
-                    <p className="text-lg font-bold text-slate-900">Bodega interna</p>
+                    <p className="app-title">Bodega interna</p>
                   </div>
                   <HiOutlineArrowRight size={18} className="text-slate-500 group-hover:translate-x-1 transition-transform" />
                 </button>
@@ -1147,7 +1147,7 @@ const ReportesSection: React.FC<ReportesSectionProps> = ({
                     <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-white/50 text-slate-800 shadow-sm">
                       <BiUserCheck size={24} />
                     </span>
-                    <p className="text-lg font-bold text-slate-900">Bodega externa</p>
+                    <p className="app-title">Bodega externa</p>
                   </div>
                   <HiOutlineArrowRight size={18} className="text-slate-500 group-hover:translate-x-1 transition-transform" />
                 </button>
@@ -1183,7 +1183,7 @@ const ReportesSection: React.FC<ReportesSectionProps> = ({
                 <HiOutlinePlus strokeWidth={2.5} className="h-7 w-7" />
               </div>
               <div>
-                <h1 className="text-2xl font-extrabold tracking-tight text-slate-900">
+                <h1 className="app-title">
                   Realizar solicitud
                 </h1>
                 <p className="text-sm text-slate-500">
@@ -1218,13 +1218,13 @@ const ReportesSection: React.FC<ReportesSectionProps> = ({
                 <table className="w-full min-w-[520px] border-collapse text-left text-sm">
                   <thead>
                     <tr className="border-b border-slate-200 bg-slate-50">
-                      <th className="whitespace-nowrap px-4 py-3 font-bold uppercase tracking-wide text-[11px] text-slate-500">
+                      <th className="whitespace-nowrap px-4 py-3 font-bold uppercase tracking-wide text-base text-slate-500">
                         Solicitud
                       </th>
-                      <th className="px-4 py-3 font-bold uppercase tracking-wide text-[11px] text-slate-500">
+                      <th className="px-4 py-3 font-bold uppercase tracking-wide text-base text-slate-500">
                         Productos
                       </th>
-                      <th className="whitespace-nowrap px-4 py-3 font-bold uppercase tracking-wide text-[11px] text-slate-500">
+                      <th className="whitespace-nowrap px-4 py-3 font-bold uppercase tracking-wide text-base text-slate-500">
                         Peso
                       </th>
                     </tr>
@@ -1258,19 +1258,19 @@ const ReportesSection: React.FC<ReportesSectionProps> = ({
                           className="cursor-pointer border-b border-slate-100 transition-colors hover:bg-violet-50/80 focus-visible:bg-violet-50/80 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-violet-400"
                           aria-label={`Ver detalle de solicitud ${sol.numero}`}
                         >
-                          <td className="whitespace-nowrap px-4 py-3 font-mono text-[13px] font-semibold text-slate-900">
+                          <td className="whitespace-nowrap px-4 py-3 font-mono text-base font-semibold text-slate-900">
                             {sol.numero}
                           </td>
                           <td
                             className="max-w-md px-4 py-3 text-slate-800"
                             title={nombresProductosSolicitud(sol)}
                           >
-                            <span className="line-clamp-2 text-[13px] font-medium">
+                            <span className="line-clamp-2 text-base font-medium">
                               {nombresProductosSolicitud(sol)}
                             </span>
                           </td>
                           <td
-                            className="whitespace-nowrap px-4 py-3 tabular-nums text-[13px] text-slate-600"
+                            className="whitespace-nowrap px-4 py-3 tabular-nums text-base text-slate-600"
                             title={pesosProductosSolicitud(sol)}
                           >
                             {pesosProductosSolicitud(sol)}
@@ -1360,7 +1360,7 @@ const ReportesSection: React.FC<ReportesSectionProps> = ({
                 <MdAssignment size={28} />
               </div>
               <div>
-                <h1 className="text-2xl font-extrabold tracking-tight text-slate-900">
+                <h1 className="app-title">
                   Órdenes de Compras
                 </h1>
                 <p className="text-sm text-slate-500">
@@ -1406,19 +1406,19 @@ const ReportesSection: React.FC<ReportesSectionProps> = ({
               <table className="w-full min-w-[600px] border-collapse text-left text-sm">
                 <thead>
                   <tr className="border-b border-slate-200 bg-slate-50">
-                    <th className="whitespace-nowrap px-4 py-3 font-bold uppercase tracking-wide text-[11px] text-slate-500">
+                    <th className="whitespace-nowrap px-4 py-3 font-bold uppercase tracking-wide text-base text-slate-500">
                       Orden
                     </th>
-                    <th className="min-w-[120px] px-4 py-3 font-bold uppercase tracking-wide text-[11px] text-slate-500">
+                    <th className="min-w-[120px] px-4 py-3 font-bold uppercase tracking-wide text-base text-slate-500">
                       Proveedor
                     </th>
-                    <th className="px-4 py-3 font-bold uppercase tracking-wide text-[11px] text-slate-500">
+                    <th className="px-4 py-3 font-bold uppercase tracking-wide text-base text-slate-500">
                       Productos
                     </th>
-                    <th className="px-4 py-3 font-bold uppercase tracking-wide text-[11px] text-slate-500">
+                    <th className="px-4 py-3 font-bold uppercase tracking-wide text-base text-slate-500">
                       Estado
                     </th>
-                    <th className="whitespace-nowrap px-4 py-3 font-bold uppercase tracking-wide text-[11px] text-slate-500">
+                    <th className="whitespace-nowrap px-4 py-3 font-bold uppercase tracking-wide text-base text-slate-500">
                       Fecha
                     </th>
                   </tr>
@@ -1453,11 +1453,11 @@ const ReportesSection: React.FC<ReportesSectionProps> = ({
                         className="cursor-pointer border-b border-slate-100 transition-colors hover:bg-violet-50/80 focus-visible:bg-violet-50/80 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-violet-400"
                         aria-label={`Ver detalle de orden ${oc.numero}`}
                       >
-                        <td className="whitespace-nowrap px-4 py-3 font-mono text-[13px] font-semibold text-slate-900">
+                        <td className="whitespace-nowrap px-4 py-3 font-mono text-base font-semibold text-slate-900">
                           {oc.numero}
                         </td>
                         <td className="max-w-[160px] px-4 py-3 text-slate-800">
-                          <span className="line-clamp-2 text-[13px]" title={oc.proveedorNombre}>
+                          <span className="line-clamp-2 text-base" title={oc.proveedorNombre}>
                             {oc.proveedorNombre || "—"}
                           </span>
                         </td>
@@ -1465,7 +1465,7 @@ const ReportesSection: React.FC<ReportesSectionProps> = ({
                           className="max-w-md px-4 py-3 text-slate-800"
                           title={nombresProductosOrden(oc)}
                         >
-                          <span className="line-clamp-2 text-[13px] font-medium">{nombresProductosOrden(oc)}</span>
+                          <span className="line-clamp-2 text-base font-medium">{nombresProductosOrden(oc)}</span>
                         </td>
                         <td
                           className="px-4 py-3"

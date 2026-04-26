@@ -358,7 +358,7 @@ export function TransporteViajesPanel({ uid, displayName }: Props) {
             <HiOutlineTruck size={28} />
           </span>
           <div>
-            <h1 className="text-xl font-bold text-slate-900">Viajes de entrega (ventas)</h1>
+            <h1 className="app-title">Viajes de entrega (ventas)</h1>
             <p className="mt-1 text-xs text-slate-500">La lista se actualiza sola cuando hay cambios.</p>
           </div>
         </div>
@@ -375,12 +375,12 @@ export function TransporteViajesPanel({ uid, displayName }: Props) {
           <table className="w-full min-w-[800px] border-collapse text-left text-sm">
             <thead>
               <tr className="border-b border-slate-200 bg-slate-50">
-                <th className="px-3 py-2 text-[10px] font-bold uppercase text-slate-500">Viaje</th>
-                <th className="px-3 py-2 text-[10px] font-bold uppercase text-slate-500">Venta</th>
-                <th className="px-3 py-2 text-[10px] font-bold uppercase text-slate-500">Cliente</th>
-                <th className="px-3 py-2 text-[10px] font-bold uppercase text-slate-500">Kg (venta)</th>
-                <th className="px-3 py-2 text-[10px] font-bold uppercase text-slate-500">Estado</th>
-                <th className="px-3 py-2 text-[10px] font-bold uppercase text-slate-500">Acción</th>
+                <th className="px-3 py-2 text-base font-bold uppercase text-slate-500">Viaje</th>
+                <th className="px-3 py-2 text-base font-bold uppercase text-slate-500">Venta</th>
+                <th className="px-3 py-2 text-base font-bold uppercase text-slate-500">Cliente</th>
+                <th className="px-3 py-2 text-base font-bold uppercase text-slate-500">Kg (venta)</th>
+                <th className="px-3 py-2 text-base font-bold uppercase text-slate-500">Estado</th>
+                <th className="px-3 py-2 text-base font-bold uppercase text-slate-500">Acción</th>
               </tr>
             </thead>
             <tbody>
@@ -406,10 +406,10 @@ export function TransporteViajesPanel({ uid, displayName }: Props) {
                         {v.ventaCompradorNombre}
                       </div>
                       {v.ventaCodeCuenta ? (
-                        <div className="truncate text-[11px] text-slate-500">Cuenta · {v.ventaCodeCuenta}</div>
+                        <div className="truncate text-base text-slate-500">Cuenta · {v.ventaCodeCuenta}</div>
                       ) : null}
                       {v.ventaDestinoNombre ? (
-                        <div className="truncate text-[11px] text-slate-500">→ {v.ventaDestinoNombre}</div>
+                        <div className="truncate text-base text-slate-500">→ {v.ventaDestinoNombre}</div>
                       ) : null}
                     </td>
                     <td
@@ -419,7 +419,7 @@ export function TransporteViajesPanel({ uid, displayName }: Props) {
                       {formatKgEs(v.kgTotalEstimado ?? 0)} kg
                     </td>
                     <td className="px-3 py-2">
-                      <span className="inline-flex rounded-full bg-amber-100 px-2.5 py-0.5 text-[10px] font-semibold text-amber-900">
+                      <span className="inline-flex rounded-full bg-amber-100 px-2.5 py-0.5 text-base font-semibold text-amber-900">
                         {v.estado}
                       </span>
                     </td>
@@ -466,7 +466,7 @@ export function TransporteViajesPanel({ uid, displayName }: Props) {
                   <HiOutlineTruck className="h-7 w-7" aria-hidden />
                 </span>
                 <div className="min-w-0 pt-0.5">
-                  <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-amber-800/90">
+                  <p className="text-base font-bold uppercase tracking-[0.14em] text-amber-800/90">
                     Realizar entrega
                   </p>
                   <h2
@@ -483,7 +483,7 @@ export function TransporteViajesPanel({ uid, displayName }: Props) {
               </div>
 
               <div className="mt-4 rounded-2xl border border-slate-100 bg-white/90 px-4 py-3 shadow-sm">
-                <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Destinatario</p>
+                <p className="text-base font-bold uppercase tracking-wide text-slate-400">Destinatario</p>
                 <p className="mt-1 text-base font-semibold leading-snug text-slate-900">{sel.ventaCompradorNombre}</p>
                 <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-slate-600">
                   {sel.ventaCodeCuenta ? (
@@ -499,7 +499,7 @@ export function TransporteViajesPanel({ uid, displayName }: Props) {
                 </div>
               </div>
 
-              <p className="mt-4 text-center text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+              <p className="mt-4 text-center text-base font-semibold uppercase tracking-wide text-slate-500">
                 Paso {pasoEntrega + 1} de {PASOS_ENTREGA}
               </p>
             </div>
@@ -573,7 +573,7 @@ export function TransporteViajesPanel({ uid, displayName }: Props) {
                       onChange={onFotoChange}
                       className="text-xs file:mr-3 file:rounded-lg file:border-0 file:bg-amber-100 file:px-3 file:py-1.5 file:text-sm file:font-semibold file:text-amber-900 hover:file:bg-amber-200"
                     />
-                    <p className="mt-2 text-center text-[11px] text-slate-500">
+                    <p className="mt-2 text-center text-base text-slate-500">
                       Obligatorio: fotografiá la entrega, el remito o la caja. Hasta 10 MB.
                     </p>
                   </div>
@@ -671,7 +671,7 @@ export function TransporteViajesPanel({ uid, displayName }: Props) {
                       />
                     </label>
                   ) : null}
-                  <p className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-2 text-[11px] leading-relaxed text-slate-600">
+                  <p className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-2 text-base leading-relaxed text-slate-600">
                     El estado final de la venta (<strong className="text-emerald-800">Cerrado (ok)</strong> o{" "}
                     <strong className="text-rose-800">Cerrado (no ok)</strong>) combina estas respuestas con si las
                     cantidades entregadas coinciden exactamente con las pedidas.

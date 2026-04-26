@@ -111,19 +111,19 @@ export default function ProvidersPage() {
   };
 
   return (
-    <main className="max-w-6xl mx-auto p-8 font-['Inter']">
+    <main className="max-w-6xl mx-auto p-8">
       <header className="mb-10 flex justify-between items-center">
         <div className="flex items-center gap-4">
           <div className="p-3 bg-[#f8edb1] rounded-2xl text-[#2D5A3F]">
             <HiOutlineSquares2X2 size={28} />
           </div>
           <div>
-            <h1 className="text-[28px] font-extrabold text-gray-900 tracking-tight">Proveedores</h1>           
+            <h1 className="app-title">Proveedores</h1>
           </div>
         </div>
         <button 
           onClick={() => { setSelectedProvider(null); setIsModalOpen(true); }}
-          className="bg-[#A8D5BA] text-[#2D5A3F] px-6 py-2.5 rounded-[10px] font-semibold text-[14px] flex items-center gap-2 hover:bg-[#97c4a9] transition-all active:scale-95"
+          className="bg-[#A8D5BA] text-[#2D5A3F] px-6 py-2.5 rounded-[10px] font-semibold text-base flex items-center gap-2 hover:bg-[#97c4a9] transition-all active:scale-95"
         >
           <HiOutlinePlus strokeWidth={2.5} /> Nuevo Proveedor
         </button>

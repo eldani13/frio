@@ -1,7 +1,12 @@
 "use client";
 import { useState, useEffect } from "react";
-import { HiOutlineXMark } from "react-icons/hi2";
 import { WarehouseMeta } from "@/app/interfaces/bodega";
+import {
+  FORMULARIO_CREACION_BODY,
+  FORMULARIO_CREACION_LABEL,
+  FormularioPlantilla,
+  FormularioPlantillaAcciones,
+} from "@/app/components/ui/FormularioPlantilla";
 import { AsignarBodegaService } from "@/app/services/asignarbodegaService";
 import { useAuth } from "@/app/context/AuthContext";
 
@@ -68,38 +73,40 @@ export const BodegaAsignarModal = ({
     }
   };
 
-  if (!isOpen) return null;
-
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm p-4">
-      <div className="bg-white w-full max-w-md rounded-[12px] shadow-2xl p-6 animate-in fade-in zoom-in duration-200">
-        <div className="flex justify-between items-center mb-6">
+    <FormularioPlantilla
+      isOpen={isOpen}
+      onClose={onClose}
+      titulo={`Vincular bodega ${estado}`}
+      subtitulo="Vincular cuenta"
+      titleId="bodega-asignar-title"
+      maxWidthClass="max-w-md"
+      footer={
+        <FormularioPlantillaAcciones
+          formId="bodega-asignar-form"
+          onCancel={onClose}
+          submitLabel="Vincular ahora"
+          loading={loading}
+          loadingLabel="Vinculando…"
+          submitDisabled={!selectedId || !suggestedCode}
+        />
+      }
+    >
+      <form id="bodega-asignar-form" onSubmit={handleSubmit} className={`${FORMULARIO_CREACION_BODY} space-y-5`}>
+          <p className="text-base text-gray-600">
+            Cuenta:{" "}
+            <span className="font-mono font-bold text-[#2D5A3F]">{suggestedCode || "—"}</span>
+          </p>
           <div>
-            <h2 className="text-[18px] font-bold text-gray-800 capitalize">
-              Vincular Bodega {estado}
-            </h2>
-            <p className="text-[12px] text-gray-500">
-              Asignando a cuenta: <span className="font-mono text-green-600 font-bold">{suggestedCode || "---"}</span>
-            </p>
-          </div>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 transition-colors">
-            <HiOutlineXMark size={24} />
-          </button>
-        </div>
-
-        <form onSubmit={handleSubmit} className="space-y-5">
-          <div>
-            <label className="block text-[11px] font-bold text-gray-400 uppercase mb-2">
-              Bodegas {estado}s disponibles
-            </label>
-            <div className="max-h-48 overflow-y-auto border border-gray-100 rounded-lg divide-y">
+            <span className={FORMULARIO_CREACION_LABEL}>Listado</span>
+            <div className="max-h-48 divide-y overflow-y-auto rounded-[12px] border border-gray-200 bg-white shadow-sm">
               {bodegas.length > 0 ? (
                 bodegas.map((b) => (
                   <button
                     key={b.id}
                     type="button"
                     onClick={() => setSelectedId(b.id)}
-                    className={`w-full text-left px-4 py-3 text-[14px] transition-all ${
+                    className={`w-full text-left px-4 py-3 text-base transition-all ${
                       selectedId === b.id 
                         ? "bg-green-50 text-green-700 font-bold border-l-4 border-green-500" 
                         : "hover:bg-gray-50"
@@ -111,30 +118,12 @@ export const BodegaAsignarModal = ({
                 ))
               ) : (
                 <div className="p-10 text-center">
-                  <p className="text-[12px] text-gray-400">No se encontraron registros</p>
+                  <p className="text-base text-gray-400">Sin registros.</p>
                 </div>
               )}
             </div>
           </div>
-
-          <div className="flex gap-3 pt-2">
-            <button 
-              type="button" 
-              onClick={onClose} 
-              className="flex-1 py-2 text-gray-400 text-[14px] hover:text-gray-600 transition-colors"
-            >
-              Cancelar
-            </button>
-            <button
-              type="submit"
-              disabled={loading || !selectedId || !suggestedCode}
-              className="flex-1 py-2 bg-[#A8D5BA] text-[#2D5A3F] rounded-lg text-[14px] font-bold active:scale-95 transition-all disabled:opacity-40"
-            >
-              {loading ? "Vinculando..." : "Vincular Ahora"}
-            </button>
-          </div>
         </form>
-      </div>
-    </div>
+    </FormularioPlantilla>
   );
 };
