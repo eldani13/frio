@@ -167,9 +167,11 @@ export default function EstadoBodegaSection(props: Props) {
             <VentasEnCursoMapButton
               clients={clients}
               warehouseCodeCuenta={warehouseCodeCuenta}
+              sessionRole={role}
               operariosBodega={operariosBodega}
               tareasProcesamientoOperario={tareasProcesamientoOperario}
               onPushTareaProcesamientoOperario={onPushTareaProcesamientoOperario}
+              productosCatalogo={productosCatalogo}
             />
           }
           headerActions={renderStatusButtons("bodega")}
@@ -184,6 +186,7 @@ export default function EstadoBodegaSection(props: Props) {
             warehouseId={warehouseId}
             slots={slots}
             layout="slots4"
+            pendientesContexto="procesamiento"
             sessionUid={sessionUid}
             sessionRole={sessionRole}
             operariosBodega={operariosBodega}

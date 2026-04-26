@@ -1,7 +1,14 @@
 import type { Slot } from "../app/interfaces/bodega";
 import type { Catalogo } from "../app/types/catalogo";
 import { slotLooksLikeProcesamiento } from "../app/lib/bodegaDisplay";
-import { unidadVisualizacionDe } from "./catalogoProcesamiento";
+import {
+  esCatalogoSecundario,
+  estimadoSecundarioAplicarPerdidaPct,
+  mermaPctDesdeCatalogoSecundario,
+  reglaConversionDesdeCatalogoSecundario,
+  unidadVisualizacionDe,
+  unidadesSecundarioPorRegla,
+} from "./catalogoProcesamiento";
 import { coercePiezasFromUnknown, kgFromFirestoreSlotRecord } from "./coerceBodegaKg";
 
 function norm(s: string): string {
@@ -112,4 +119,59 @@ export function stockPrimarioDesdeSlotsBodega(
   }
   if (tienePiezas) return { total: sumPiezas, cajasCoincidentes: list.length };
   return { total: list.length, cajasCoincidentes: list.length };
+}
+
+/**
+ * Teórico de unidades de secundario disponibles en mapa: cajas que ya llevan el nombre del secundario, o
+ * derivación desde el stock del primario vinculado (`includedPrimarioCatalogoId`) y la regla del catálogo.
+ */
+export function stockTeoricoUnidadesSecundarioDesdeSlots(
+  slots: Slot[],
+  clientId: string,
+  secundario: Catalogo,
+  primarioVinculado: Catalogo | undefined,
+): number {
+  const cid = String(clientId ?? "").trim();
+  if (!cid || !esCatalogoSecundario(secundario)) return 0;
+
+  const porNombre = stockPrimarioDesdeSlotsPreferirKgCuandoExisten(slots, cid, secundario);
+  if (Number.isFinite(porNombre.total) && porNombre.total > 0) {
+    return porNombre.total;
+  }
+
+  const prim = primarioVinculado;
+  if (!prim?.id) return 0;
+
+  const regla = reglaConversionDesdeCatalogoSecundario(secundario);
+  if (!regla) return 0;
+
+  const stockPrim = stockPrimarioDesdeSlotsPreferirKgCuandoExisten(slots, cid, prim);
+  const merma = mermaPctDesdeCatalogoSecundario(secundario) ?? 0;
+
+  if (stockPrim.unidadUsada === "peso" && Number.isFinite(stockPrim.total) && stockPrim.total > 0) {
+    const teor = unidadesSecundarioPorRegla(
+      stockPrim.total,
+      regla.cantidadPrimario,
+      regla.unidadesSecundario,
+    );
+    const adj = estimadoSecundarioAplicarPerdidaPct(teor, merma);
+    if (adj !== null && Number.isFinite(adj) && adj > 0) return adj;
+  }
+
+  const porPesoPrim = stockPrimarioDesdeSlotsBodega(slots, cid, prim, "peso");
+  if (porPesoPrim.total > 0) {
+    const teor = unidadesSecundarioPorRegla(
+      porPesoPrim.total,
+      regla.cantidadPrimario,
+      regla.unidadesSecundario,
+    );
+    const adj = estimadoSecundarioAplicarPerdidaPct(teor, merma);
+    if (adj !== null && Number.isFinite(adj) && adj > 0) return adj;
+  }
+
+  const q = stockPrim.total;
+  if (!Number.isFinite(q) || q <= 0) return 0;
+  const teor = unidadesSecundarioPorRegla(q, regla.cantidadPrimario, regla.unidadesSecundario);
+  const adj = estimadoSecundarioAplicarPerdidaPct(teor, merma);
+  return adj !== null && Number.isFinite(adj) && adj > 0 ? adj : 0;
 }

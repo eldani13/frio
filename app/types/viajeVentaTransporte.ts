@@ -44,4 +44,8 @@ export type ViajeVentaTransporteConContext = ViajeVentaTransporte & {
   ventaCodeCuenta?: string;
   /** Bodega destino de la venta, si aplica. */
   ventaDestinoNombre?: string;
+  /** Fecha de la orden de venta (reportes / listados). */
+  ventaFecha?: string;
+  /** Estado de la venta en Firestore (p. ej. «Transporte»). */
+  ventaEstado?: string;
 };

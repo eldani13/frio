@@ -2,6 +2,7 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { FiArchive } from "react-icons/fi";
+import { HiChevronRight } from "react-icons/hi2";
 import type { Box } from "@/app/interfaces/bodega";
 import { OrdenVentaService } from "@/app/services/ordenVentaService";
 import type { VentaPendienteCartonaje } from "@/app/types/ventaCuenta";
@@ -397,13 +398,23 @@ export function OcOrdenVentaIngresoPanel({
             </div>
           ) : null}
 
-          <details className="rounded-xl border border-slate-200 bg-slate-50/80">
-            <summary className="cursor-pointer px-3 py-2 text-xs font-semibold text-slate-700">
-              {sal
-                ? "Registro alternativo: cierre por línea en bodega (sin paquete único)"
-                : "Registro alternativo: ingreso por línea (cerrar venta en bodega)"}
+          <details
+            className={`group overflow-hidden rounded-2xl border shadow-sm transition-shadow hover:shadow-md ${sal ? "border-pink-200/90 bg-linear-to-br from-pink-50/90 to-white" : "border-emerald-200/90 bg-linear-to-br from-emerald-50/90 to-white"}`}
+          >
+            <summary
+              className={`flex cursor-pointer list-none items-center gap-3 px-4 py-3.5 text-sm font-semibold outline-none marker:hidden [&::-webkit-details-marker]:hidden ${sal ? "text-pink-950 hover:bg-pink-100/35" : "text-emerald-950 hover:bg-emerald-100/35"}`}
+            >
+              <span
+                className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${sal ? "bg-pink-200/55 text-pink-900" : "bg-emerald-200/55 text-emerald-900"}`}
+                aria-hidden
+              >
+                <HiChevronRight className="h-5 w-5 transition-transform duration-200 ease-out group-open:rotate-90" />
+              </span>
+              <span className="min-w-0 leading-snug">{sal ? "Línea a línea · salida" : "Línea a línea · ingreso"}</span>
             </summary>
-            <div className="border-t border-slate-200 px-2 pb-2 pt-1">
+            <div
+              className={`border-t px-2 pb-2 pt-1 ${sal ? "border-pink-100/90 bg-white/75" : "border-emerald-100/90 bg-white/75"}`}
+            >
           <ul className="max-h-[min(24rem,50vh)] space-y-3 overflow-y-auto pr-1">
             {lineItems.map((li, idx) => {
               const rowKey = lineRowKey(idx);

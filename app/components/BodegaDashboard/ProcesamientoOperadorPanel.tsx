@@ -24,6 +24,7 @@ import {
   cantidadPrimarioProcesamientoTexto,
   estimadoUnidadesSecundarioTexto,
   primarioCatalogoPorId,
+  textoPrecioSecundarioCatalogo,
 } from "@/app/lib/procesamientoDisplay";
 import {
   desperdicioKgSugeridoDesdeMerma,
@@ -570,6 +571,12 @@ export function ProcesamientoOperadorPanel({
             </p>
             <p className="mt-3 text-xs font-bold uppercase tracking-wide text-slate-500">Producto secundario</p>
             <p className="mt-1 text-sm font-medium text-slate-900">{detalle.productoSecundarioTitulo}</p>
+            <p className="mt-1 text-sm text-slate-700">
+              <span className="text-slate-500">Precio (catálogo):</span>{" "}
+              <span className="font-semibold tabular-nums">
+                {textoPrecioSecundarioCatalogo(productos, detalle.productoSecundarioId)}
+              </span>
+            </p>
             {detalle.estimadoUnidadesSecundario !== undefined &&
             detalle.estimadoUnidadesSecundario !== null &&
             Number.isFinite(detalle.estimadoUnidadesSecundario) ? (

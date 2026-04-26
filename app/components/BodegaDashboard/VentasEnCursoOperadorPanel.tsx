@@ -14,7 +14,8 @@ import type { Comprador } from "@/app/types/comprador";
 import { VentaManualFormModal } from "@/app/components/ui/ventas/VentaManualFormModal";
 import { OrdenVentaService } from "@/app/services/ordenVentaService";
 import { AsignarBodegaService } from "@/app/services/asignarbodegaService";
-import type { WarehouseMeta } from "@/app/interfaces/bodega";
+import type { Slot, WarehouseMeta } from "@/app/interfaces/bodega";
+import { fetchWarehouseStateOnce } from "@/lib/bodegaCloudState";
 
 function productosResumen(v: VentaEnCurso): string {
   const items = v.lineItems ?? [];
@@ -104,6 +105,55 @@ export function VentasEnCursoOperadorPanel({
   const [whTransporteId, setWhTransporteId] = React.useState("");
   const [transporteSaving, setTransporteSaving] = React.useState(false);
   const [iniciarVentaSaving, setIniciarVentaSaving] = React.useState(false);
+  const [slotsPorBodegaInterna, setSlotsPorBodegaInterna] = React.useState<Record<string, Slot[]>>({});
+  const [bodegasInternasVentaList, setBodegasInternasVentaList] = React.useState<{ id: string; name: string }[]>([]);
+  const [slotsInternasLoading, setSlotsInternasLoading] = React.useState(false);
+
+  const loadSlotsMapaInternas = React.useCallback(async () => {
+    const cid = idCliente.trim();
+    const cc = codeCuenta.trim();
+    if (!cid || !cc) {
+      setSlotsPorBodegaInterna({});
+      setBodegasInternasVentaList([]);
+      return;
+    }
+    setSlotsInternasLoading(true);
+    try {
+      const byCode = await AsignarBodegaService.getWarehousesByCode(cc);
+      const mergedList = mergeWarehousesForClient(byCode, warehousesFallback, cid, cc).filter(isInterna);
+      setBodegasInternasVentaList(
+        mergedList.map((w) => ({
+          id: w.id,
+          name: (w.name ?? w.id).trim() || w.id,
+        })),
+      );
+      if (mergedList.length === 0) {
+        setSlotsPorBodegaInterna({});
+        return;
+      }
+      setSlotsPorBodegaInterna({});
+      const states = await Promise.all(mergedList.map((w) => fetchWarehouseStateOnce(w.id)));
+      const byWh: Record<string, Slot[]> = {};
+      mergedList.forEach((w, i) => {
+        byWh[w.id] = states[i]?.slots ?? [];
+      });
+      setSlotsPorBodegaInterna(byWh);
+    } catch {
+      setSlotsPorBodegaInterna({});
+      setBodegasInternasVentaList([]);
+    } finally {
+      setSlotsInternasLoading(false);
+    }
+  }, [idCliente, codeCuenta, warehousesFallback]);
+
+  React.useEffect(() => {
+    void loadSlotsMapaInternas();
+  }, [loadSlotsMapaInternas]);
+
+  React.useEffect(() => {
+    if (!ventaModalOpen) return;
+    void loadSlotsMapaInternas();
+  }, [ventaModalOpen, loadSlotsMapaInternas]);
 
   React.useEffect(() => {
     const cid = idCliente.trim();
@@ -259,7 +309,8 @@ export function VentasEnCursoOperadorPanel({
               </h1>
               <p className="text-sm text-slate-500">
                 El <strong>comprador</strong> se elige entre los registrados por el administrador (Compradores).
-                Productos del catálogo en unidades, estado y fecha (mismos estados que órdenes de compra).
+                Los productos de venta manual son solo los que tienen stock en el <strong>mapa de bodegas internas</strong>
+                , en unidades, con estado y fecha (mismos estados que órdenes de compra).
               </p>
             </div>
           </div>
@@ -434,6 +485,12 @@ export function VentasEnCursoOperadorPanel({
         onClose={() => setVentaModalOpen(false)}
         productos={productos}
         compradores={compradores}
+        clientIdFirestore={idCliente.trim()}
+        slots={[]}
+        bodegasInternasVenta={bodegasInternasVentaList}
+        slotsPorBodegaInterna={slotsPorBodegaInterna}
+        soloStockMapaBodegasInternas
+        cargandoStockMapa={slotsInternasLoading}
         onCreate={async (draft) => {
           await OrdenVentaService.create(idCliente.trim(), codeCuenta.trim(), draft);
           setPage(1);
@@ -485,9 +542,16 @@ export function VentasEnCursoOperadorPanel({
                 </p>
               </div>
 
+              {detalle.origenWarehouseNombre ? (
+                <p className="mt-4 text-xs text-slate-600">
+                  Bodega de la venta:{" "}
+                  <span className="font-semibold text-slate-800">{detalle.origenWarehouseNombre}</span>
+                </p>
+              ) : null}
+
               {detalle.destinoWarehouseNombre ? (
                 <p className="mt-4 text-xs text-slate-600">
-                  Bodega destino:{" "}
+                  Bodega destino (transporte):{" "}
                   <span className="font-semibold text-slate-800">{detalle.destinoWarehouseNombre}</span>
                 </p>
               ) : null}

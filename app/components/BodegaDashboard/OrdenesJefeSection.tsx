@@ -9,6 +9,7 @@ import {
   FiRepeat,
   FiSearch,
   FiAlertTriangle,
+  FiClipboard,
   FiX,
 } from "react-icons/fi";
 import { HiArrowRightOnRectangle } from "react-icons/hi2";
@@ -39,6 +40,7 @@ import {
   ZonaCuatroSlotsRow,
 } from "../bodega/ZonaCuatroSlotsRow";
 import VentasEnCursoMapButton from "../bodega/VentasEnCursoMapButton";
+import { BodegaZonaEstadoModalShell } from "../bodega/BodegaZonaEstadoModalShell";
 import { RiUserReceivedLine } from "react-icons/ri";
 import { temperatureStringFromAnalyzeResponse } from "@/app/lib/imageAnalyzeApi";
 
@@ -1143,128 +1145,52 @@ export default function OrdenesJefeSection(props: {
               </div>
               {/* Modal de alertas de temperatura alta - estilo personalizado */}
               {statusModal ? (
-                <div
-                  className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-2 sm:p-4"
-                  role="dialog"
-                  aria-modal="true"
-                  onClick={() => setStatusModal(null)}
+                <BodegaZonaEstadoModalShell
+                  titleId="jefe-zona-status-modal-title"
+                  label={statusModal.kind === "alertas" ? "Alertas" : "Tareas pendientes"}
+                  title={zoneLabels[statusModal.zone]}
+                  subtitle={
+                    statusModal.kind === "alertas"
+                      ? "Detalles de alertas activas en esta zona."
+                      : "Tareas pendientes relacionadas con esta zona."
+                  }
+                  icon={
+                    statusModal.kind === "alertas" ? (
+                      <FiAlertTriangle className="h-6 w-6 shrink-0" aria-hidden />
+                    ) : (
+                      <FiClipboard className="h-6 w-6 shrink-0" aria-hidden />
+                    )
+                  }
+                  onClose={() => setStatusModal(null)}
+                  zClass="z-50"
                 >
-                  <div
-                    className="w-full max-w-lg sm:max-w-2xl rounded-3xl bg-white p-0 shadow-2xl border border-blue-100 relative overflow-hidden"
-                    onClick={(event) => event.stopPropagation()}
-                  >
-                    {/* Header sticky con icono */}
-                    <div className="sticky top-0 z-10 flex items-center justify-between gap-3 bg-blue-50/80 px-6 py-4 border-b border-blue-100">
-                      <div className="flex items-center gap-3">
-                        <span
-                          className={`inline-flex items-center justify-center w-10 h-10 rounded-full ${statusModal.kind === "alertas" ? "bg-red-100" : "bg-amber-100"}`}
-                        >
-                          {statusModal.kind === "alertas" ? (
-                            <svg
-                              className="w-6 h-6 text-red-500"
-                              fill="none"
-                              viewBox="0 0 24 24"
-                              stroke="currentColor"
-                            >
-                              <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                strokeWidth={2}
-                                d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                              />
-                            </svg>
-                          ) : (
-                            <svg
-                              className="w-6 h-6 text-amber-500"
-                              fill="none"
-                              viewBox="0 0 24 24"
-                              stroke="currentColor"
-                            >
-                              <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                strokeWidth={2}
-                                d="M9 17v-2a4 4 0 118 0v2M12 9v2m0 4h.01"
-                              />
-                            </svg>
-                          )}
-                        </span>
-                        <div>
-                          <p className="text-xs font-semibold uppercase tracking-[0.25em] text-slate-400">
-                            {statusModal.kind === "alertas"
-                              ? "Alertas"
-                              : "Lista de tareas"}
-                          </p>
-                          <h3 className="mt-1 text-xl sm:text-2xl font-bold text-slate-900">
-                            {zoneLabels[statusModal.zone]}
-                          </h3>
-                          <p className="mt-1 text-xs sm:text-sm text-slate-600">
-                            {statusModal.kind === "alertas"
-                              ? "Detalles de alertas activas en esta zona."
-                              : "Tareas pendientes relacionadas con esta zona."}
-                          </p>
-                        </div>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => setStatusModal(null)}
-                        className="rounded-full border border-slate-200 px-3 py-1 text-sm font-semibold text-slate-600 transition hover:bg-slate-100 hover:text-blue-700"
-                      >
-                        Cerrar
-                      </button>
-                    </div>
-                    {/* Lista de items */}
-                    <div className="p-6 grid gap-4 max-h-[60vh] overflow-y-auto bg-white">
+                  {(statusModal.kind === "alertas"
+                    ? zoneAlertItems[statusModal.zone]
+                    : zoneTaskItems[statusModal.zone]
+                  ).length === 0 ? (
+                    <p className="text-sm leading-relaxed text-slate-600">
+                      No hay <strong className="text-slate-800">elementos</strong> para mostrar en esta zona.
+                    </p>
+                  ) : (
+                    <ul className="grid gap-3">
                       {(statusModal.kind === "alertas"
                         ? zoneAlertItems[statusModal.zone]
                         : zoneTaskItems[statusModal.zone]
-                      ).length === 0 ? (
-                        <div className="text-center text-slate-400 py-8">
-                          <svg
-                            className="mx-auto w-12 h-12 text-slate-200"
-                            fill="none"
-                            viewBox="0 0 24 24"
-                            stroke="currentColor"
-                          >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth={2}
-                              d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                            />
-                          </svg>
-                          <p className="mt-2 text-base font-semibold">
-                            No hay elementos para mostrar.
-                          </p>
-                        </div>
-                      ) : (
-                        (statusModal.kind === "alertas"
-                          ? zoneAlertItems[statusModal.zone]
-                          : zoneTaskItems[statusModal.zone]
-                        ).map((item) => (
-                          <div
-                            key={item.id}
-                            className="rounded-xl border border-slate-200 bg-slate-50 p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 shadow-sm hover:shadow-md transition"
-                          >
-                            <div className="flex-1 min-w-0">
-                              <p className="text-base font-semibold text-slate-900 truncate">
-                                {item.title}
-                              </p>
-                              <p className="mt-1 text-sm text-slate-600 truncate">
-                                {item.description}
-                              </p>
-                              {item.meta ? (
-                                <p className="mt-2 text-xs font-semibold text-slate-500">
-                                  {item.meta}
-                                </p>
-                              ) : null}
-                            </div>
-                          </div>
-                        ))
-                      )}
-                    </div>
-                  </div>
-                </div>
+                      ).map((item) => (
+                        <li
+                          key={item.id}
+                          className="rounded-2xl border border-sky-100 bg-linear-to-br from-white to-sky-50/40 p-4 shadow-sm"
+                        >
+                          <p className="font-semibold leading-snug text-slate-900">{item.title}</p>
+                          <p className="mt-1 text-sm leading-relaxed text-slate-600">{item.description}</p>
+                          {item.meta ? (
+                            <p className="mt-2 text-xs font-semibold text-slate-500">{item.meta}</p>
+                          ) : null}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </BodegaZonaEstadoModalShell>
               ) : null}
               <div className="flex min-h-0 w-full flex-1 flex-col justify-between gap-3">
                 <div className="flex flex-col gap-2 sm:gap-4">
@@ -1367,110 +1293,105 @@ export default function OrdenesJefeSection(props: {
                   <VentasEnCursoMapButton
                     clients={clients}
                     warehouseCodeCuenta={warehouseCodeCuenta}
+                    sessionRole={sessionRole}
                     operariosBodega={operariosBodega}
                     tareasProcesamientoOperario={tareasProcesamientoOperario}
                     onPushTareaProcesamientoOperario={onPushTareaProcesamientoOperario}
+                    productosCatalogo={productosCatalogo}
                   />
                 </div>
               </div>
-              {showLlamadosModal && (
-                        <div
-                          className="fixed inset-0 z-50 flex items-center justify-center backdrop-blur-sm bg-black/10 animate-fade-in p-2 sm:p-4"
-                          role="dialog"
-                          aria-modal="true"
-                          onClick={() => setShowLlamadosModal(false)}
+              {showLlamadosModal ? (
+                <BodegaZonaEstadoModalShell
+                  titleId="jefe-llamados-modal-title"
+                  label="Llamado al jefe"
+                  title="Llamados al jefe"
+                  subtitle="Solicitudes de atención desde el piso. Revisá y marcá como resueltas cuando corresponda."
+                  icon={<RiUserReceivedLine className="h-6 w-6 shrink-0" aria-hidden />}
+                  onClose={() => setShowLlamadosModal(false)}
+                  zClass="z-50"
+                >
+                  {llamadasJefe.length === 0 ? (
+                    <p className="text-sm leading-relaxed text-slate-600">
+                      No hay <strong className="text-slate-800">llamados activos</strong>. Cuando un operario llame, aparecerá en esta lista.
+                    </p>
+                  ) : (
+                    <ul className="grid gap-3">
+                      {llamadasJefe.map((llamado, idx) => (
+                        <li
+                          key={idx}
+                          className="rounded-2xl border border-sky-100 bg-linear-to-br from-white to-sky-50/40 p-4 shadow-sm"
                         >
-                          <div
-                            className="w-full max-w-lg sm:max-w-xl rounded-3xl border border-yellow-100 bg-white/90 shadow-2xl backdrop-blur-lg relative overflow-hidden animate-fade-in-up"
-                            onClick={e => e.stopPropagation()}
-                            style={{ fontFamily: '"Space Grotesk", "Work Sans", sans-serif' }}
-                          >
-                            {/* Header con gradiente y botón cerrar flotante */}
-                            <div className="flex flex-col items-center justify-center pt-8 pb-4 px-8 border-b border-yellow-100 bg-linear-to-r from-yellow-50 to-white rounded-t-3xl relative">
-                              <span className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-yellow-100 shadow mb-2 animate-pulse">
-                                <RiUserReceivedLine className="w-8 h-8 text-yellow-500" />
-                              </span>
-                              <h2 className="text-2xl font-extrabold text-yellow-700 drop-shadow mb-1 tracking-tight">Llamados para el jefe</h2>
-                              <p className="text-sm text-slate-500 font-medium text-center">Estos son los llamados activos para el jefe.</p>
-                              <button
-                                className="absolute top-4 right-4 text-slate-400 hover:text-yellow-500 text-2xl font-bold focus:outline-none transition-colors"
-                                onClick={() => setShowLlamadosModal(false)}
-                                aria-label="Cerrar"
-                              >
-                                <svg width="28" height="28" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 6 6 18" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 6l12 12" /></svg>
-                              </button>
-                            </div>
-                            {/* Lista de llamados */}
-                            <div className="px-8 py-6 min-h-30 flex flex-col items-center max-h-[60vh] overflow-y-auto bg-white/80">
-                              {llamadasJefe.length === 0 ? (
-                                <div className="flex flex-col items-center justify-center py-8">
-                                  <span className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-yellow-100 mb-2">
-                                    <RiUserReceivedLine className="w-8 h-8 text-yellow-400" />
+                          <div className="flex items-start gap-3">
+                            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-sky-100 text-sky-700">
+                              <RiUserReceivedLine className="h-5 w-5" aria-hidden />
+                            </span>
+                            <div className="min-w-0 flex-1">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <span className="font-semibold text-slate-900">
+                                  {(llamado as any).message || (llamado as any).titulo || "Llamado"}
+                                </span>
+                                {(llamado as any).from ? (
+                                  <span className="rounded-md border border-sky-200 bg-sky-50 px-2 py-0.5 text-[11px] font-semibold text-sky-900">
+                                    {(llamado as any).from}
                                   </span>
-                                  <div className="text-center text-slate-400 text-lg font-semibold">No hay llamados activos</div>
-                                  <div className="text-slate-400 text-sm text-center mt-1">Cuando haya un llamado, aparecerá aquí.</div>
-                                </div>
-                              ) : (
-                                <ul className="mt-2 w-full space-y-3">
-                                  {llamadasJefe.map((llamado, idx) => (
-                                    <li
-                                      key={idx}
-                                      className="bg-linear-to-r from-yellow-50 to-white border border-yellow-200 rounded-xl px-5 py-4 text-yellow-800 flex items-center gap-4 shadow-sm hover:shadow-md transition-all"
-                                    >
-                                      <span className="inline-flex items-center justify-center w-10 h-10 rounded-full bg-yellow-100">
-                                        <RiUserReceivedLine className="w-6 h-6 text-yellow-500" />
-                                      </span>
-                                      <div className="flex-1 min-w-0">
-                                        <div className="flex items-center gap-2 mb-1">
-                                          <span className="font-bold text-base text-yellow-700 truncate">{(llamado as any).message || (llamado as any).titulo || "Llamado"}</span>
-                                          {(llamado as any).from && (
-                                            <span className="ml-2 text-xs text-yellow-700 bg-yellow-50 rounded px-2 py-0.5 border border-yellow-200">{(llamado as any).from}</span>
-                                          )}
-                                        </div>
-                                        {(llamado as any).descripcion && (
-                                          <div className="text-xs text-yellow-800 whitespace-pre-line mb-1">{(llamado as any).descripcion}</div>
-                                        )}
-                                        {(llamado as any).timestamp && (
-                                          <div className="text-xs text-yellow-700 flex items-center gap-1 mt-1">
-                                            <svg className="w-4 h-4 inline-block text-yellow-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                                            {new Date((llamado as any).timestamp as number).toLocaleDateString("es-CL", { day: "2-digit", month: "2-digit", year: "numeric" })}, {new Date((llamado as any).timestamp as number).toLocaleTimeString("es-CL", { hour: "2-digit", minute: "2-digit" })}
-                                          </div>
-                                        )}
-                                        <div className="flex flex-row items-center gap-2 mt-2">
-                                          <button
-                                            type="button"
-                                            className="rounded-lg bg-green-500 hover:bg-green-600 text-white text-xs font-semibold px-4 py-1.5 shadow transition focus:outline-none focus:ring-2 focus:ring-green-400"
-                                            onClick={() => {
-                                              const remaining = llamadasJefe.filter((_, i) => i !== idx);
-                                              onUpdateLlamadasJefe(remaining);
-                                              if (remaining.length === 0) {
-                                                setShowLlamadosModal(false);
-                                              }
-                                            }}
-                                          >
-                                            Resolver
-                                          </button>
-                                          <button
-                                            type="button"
-                                            className="rounded-lg bg-white border border-yellow-200 hover:bg-yellow-50 text-yellow-800 text-xs font-semibold px-4 py-1.5 shadow-sm transition focus:outline-none focus:ring-2 focus:ring-yellow-200"
-                                            onClick={() => {
-                                              navigator.clipboard.writeText(
-                                                `${(llamado as any).message || (llamado as any).titulo || "Llamado"} - ${(llamado as any).descripcion || ""}`,
-                                              );
-                                            }}
-                                          >
-                                            Copiar
-                                          </button>
-                                        </div>
-                                      </div>
-                                    </li>
-                                  ))}
-                                </ul>
-                              )}
+                                ) : null}
+                              </div>
+                              {(llamado as any).descripcion ? (
+                                <p className="mt-1 whitespace-pre-line text-sm leading-relaxed text-slate-600">
+                                  {(llamado as any).descripcion}
+                                </p>
+                              ) : null}
+                              {(llamado as any).timestamp ? (
+                                <p className="mt-2 flex items-center gap-1 text-xs font-medium text-slate-500">
+                                  <span className="tabular-nums">
+                                    {new Date((llamado as any).timestamp as number).toLocaleDateString("es-CL", {
+                                      day: "2-digit",
+                                      month: "2-digit",
+                                      year: "numeric",
+                                    })}
+                                    ,{" "}
+                                    {new Date((llamado as any).timestamp as number).toLocaleTimeString("es-CL", {
+                                      hour: "2-digit",
+                                      minute: "2-digit",
+                                    })}
+                                  </span>
+                                </p>
+                              ) : null}
+                              <div className="mt-3 flex flex-wrap gap-2">
+                                <button
+                                  type="button"
+                                  className="rounded-xl bg-emerald-600 px-4 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-emerald-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400"
+                                  onClick={() => {
+                                    const remaining = llamadasJefe.filter((_, i) => i !== idx);
+                                    onUpdateLlamadasJefe(remaining);
+                                    if (remaining.length === 0) {
+                                      setShowLlamadosModal(false);
+                                    }
+                                  }}
+                                >
+                                  Resolver
+                                </button>
+                                <button
+                                  type="button"
+                                  className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-200"
+                                  onClick={() => {
+                                    void navigator.clipboard.writeText(
+                                      `${(llamado as any).message || (llamado as any).titulo || "Llamado"} - ${(llamado as any).descripcion || ""}`,
+                                    );
+                                  }}
+                                >
+                                  Copiar
+                                </button>
+                              </div>
                             </div>
                           </div>
-                        </div>
-                      )}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </BodegaZonaEstadoModalShell>
+              ) : null}
               {showAlertModal && (
                 <div
                   className="fixed inset-0 z-50 flex items-center justify-center backdrop-blur-sm bg-black/10 animate-fade-in p-2 sm:p-4"
@@ -1683,6 +1604,7 @@ export default function OrdenesJefeSection(props: {
                 warehouseId={warehouseId}
                 slots={slots as Slot[]}
                 layout="slots4"
+                pendientesContexto="procesamiento"
                 sessionUid={sessionUid}
                 sessionRole={sessionRole}
                 operariosBodega={operariosBodega}

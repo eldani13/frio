@@ -1,6 +1,7 @@
 import type { Catalogo } from "@/app/types/catalogo";
 import type { SolicitudProcesamiento } from "@/app/types/solicitudProcesamiento";
 import { formatEstimadoUnidadesSecundario, unidadVisualizacionDe } from "@/lib/catalogoProcesamiento";
+import { formatoPrecioCatalogo } from "@/lib/catalogoPrecio";
 import { etiquetaUnidadVisualizacion } from "@/lib/unidadVisualizacionCatalogo";
 
 export function primarioCatalogoPorId(
@@ -10,6 +11,16 @@ export function primarioCatalogoPorId(
   const id = String(productId ?? "").trim();
   if (!id || !productos?.length) return undefined;
   return productos.find((x) => String(x.id ?? "").trim() === id);
+}
+
+/** Precio de referencia del secundario según catálogo (`price`), o «—» si no hay id o ítem. */
+export function textoPrecioSecundarioCatalogo(
+  productos: Catalogo[] | undefined,
+  productoSecundarioId: string | undefined,
+): string {
+  const sec = primarioCatalogoPorId(productos, productoSecundarioId);
+  if (!sec) return "—";
+  return formatoPrecioCatalogo(sec);
 }
 
 function formatQtyPrimario(n: number): string {

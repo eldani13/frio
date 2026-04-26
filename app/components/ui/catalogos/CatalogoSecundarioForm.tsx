@@ -31,6 +31,8 @@ export function CatalogoSecundarioForm({
   /** Gramos netos que representa cada unidad de visualización del secundario (p. ej. bolsa 200 g → 200). */
   const [gramosPorUnidadSecundario, setGramosPorUnidadSecundario] = useState("");
   const [mermaPct, setMermaPct] = useState("0");
+  /** Precio de referencia del secundario (mismo campo `price` que en el resto del catálogo). */
+  const [price, setPrice] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -58,6 +60,7 @@ export function CatalogoSecundarioForm({
     setIncludedPrimarioCatalogoId("");
     setGramosPorUnidadSecundario("");
     setMermaPct("0");
+    setPrice("");
     setError(null);
   }, [isOpen]);
 
@@ -96,6 +99,16 @@ export function CatalogoSecundarioForm({
       setError("El % de merma debe estar entre 0 y 100.");
       return;
     }
+    const precioRaw = String(price).replace(",", ".").trim();
+    if (precioRaw === "") {
+      setError("Indicá el precio del producto secundario.");
+      return;
+    }
+    const precioNum = Number(precioRaw);
+    if (!Number.isFinite(precioNum) || precioNum < 0) {
+      setError("El precio debe ser un número mayor o igual a 0.");
+      return;
+    }
 
     setLoading(true);
     try {
@@ -111,9 +124,10 @@ export function CatalogoSecundarioForm({
         conversionCantidadPrimario: a,
         conversionUnidadesSecundario: b,
         mermaPct: mp,
+        price: precioNum,
         provider: "—",
         category: "Secundario",
-        status: "draft",
+        status: "BUEN ESTADO",
         publishedOnline: false,
         requiresShipping: false,
         chargeTax: false,
@@ -196,6 +210,22 @@ export function CatalogoSecundarioForm({
                 </option>
               ))}
             </select>
+          </div>
+
+          <div>
+            <label className="mb-1 ml-1 block text-[10px] font-bold uppercase tracking-widest text-gray-400">
+              Precio <span className="text-red-400">*</span>
+            </label>
+            <input
+              type="text"
+              inputMode="decimal"
+              value={price}
+              onChange={(e) => setPrice(e.target.value)}
+              className="w-full rounded-xl border border-gray-200 px-4 py-3 text-sm shadow-sm focus:border-[#A8D5BA] focus:outline-none focus:ring-1 focus:ring-[#A8D5BA]"
+              placeholder="0"
+              required
+            />
+            <p className="mt-1 text-[11px] text-gray-500">Precio de referencia del secundario (se guarda como en el catálogo).</p>
           </div>
 
           <div className="rounded-lg border border-gray-200 bg-gray-50/50 p-4">

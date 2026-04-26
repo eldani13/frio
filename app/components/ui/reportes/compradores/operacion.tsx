@@ -12,7 +12,7 @@ export default function Operacion() {
       <div className="bg-slate-50/50">
         <div>
           <div className="p-5 text-sm font-bold text-slate-900 text-right uppercase tracking-wider">
-            Total Inventario COMP
+            Total inventario venta
           </div>
           <div className="p-5 text-[18px] font-bold text-slate-950 text-right border-l border-slate-100 bg-white tabular-nums">
             {totalKg} Kg

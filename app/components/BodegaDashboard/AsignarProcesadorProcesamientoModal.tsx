@@ -8,6 +8,7 @@ import type { SolicitudProcesamiento } from "@/app/types/solicitudProcesamiento"
 import { normalizeProcesamientoEstado } from "@/app/types/solicitudProcesamiento";
 import { cantidadPrimarioProcesamientoTexto } from "@/app/lib/procesamientoDisplay";
 import { formatEstimadoUnidadesSecundario } from "@/lib/catalogoProcesamiento";
+import { PrecioSecundarioCatalogoLive } from "@/app/components/ui/procesamiento/PrecioSecundarioCatalogoLive";
 
 function clientIdsParaBodega(clients: Client[], warehouseCodeCuenta: string): string[] {
   const code = String(warehouseCodeCuenta ?? "").trim();
@@ -232,6 +233,14 @@ export function AsignarProcesadorProcesamientoModal({
                     </p>
                     <p className="mt-0.5 text-xs leading-snug text-slate-800">
                       → {row.productoSecundarioTitulo}
+                    </p>
+                    <p className="mt-1 text-xs text-slate-600">
+                      Precio (catálogo):{" "}
+                      <PrecioSecundarioCatalogoLive
+                        clientId={row.clientId}
+                        productoSecundarioId={row.productoSecundarioId}
+                        className="font-semibold tabular-nums text-slate-800"
+                      />
                     </p>
                     <p className="mt-2 text-xs font-semibold text-slate-700">
                       Insumo: {cantidadPrimarioProcesamientoTexto(row)}

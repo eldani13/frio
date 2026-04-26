@@ -27,6 +27,7 @@ import {
   unidadPrimarioNormalizada,
 } from "@/app/lib/desperdicioKgSugerido";
 import { estimadoUnidadesSecundarioTexto } from "@/app/lib/procesamientoDisplay";
+import { PrecioSecundarioCatalogoLive } from "@/app/components/ui/procesamiento/PrecioSecundarioCatalogoLive";
 
 const TYPE_LABELS: Record<OrderType, string> = {
   a_bodega: "A bodega",
@@ -126,20 +127,6 @@ function etiquetaUnidadProcesamientoCola(t: Record<string, unknown>): string {
 
 function esTareaVentaSalida(t: Record<string, unknown>): boolean {
   return String(t.tipo ?? "").trim() === "venta_salida";
-}
-
-function lineItemsVentaSalidaResumen(t: Record<string, unknown>): string {
-  const raw = t.lineItems;
-  if (!Array.isArray(raw) || raw.length === 0) return "—";
-  return raw
-    .map((row) => {
-      const r = row as Record<string, unknown>;
-      const title = String(r.titleSnapshot ?? "").trim() || "Producto";
-      const c = Number(r.cantidad);
-      const q = Number.isFinite(c) && c > 0 ? `${Math.round(c)} u.` : "—";
-      return `${title} (${q})`;
-    })
-    .join(" · ");
 }
 
 function busyKeyTareaCola(t: Record<string, unknown>): string {
@@ -864,7 +851,7 @@ export default function RequestsQueue(props: RequestsQueueProps) {
                     <span className="text-slate-500 font-semibold text-lg mb-4">
                       {primerItem.kind === "procesamiento"
                         ? esTareaVentaSalida(primerItem.tarea)
-                          ? "Preparar salida:"
+                          ? "Transferencia de:"
                           : "Movimiento:"
                         : "Transferencia de:"}
                     </span>
@@ -942,9 +929,6 @@ export default function RequestsQueue(props: RequestsQueueProps) {
                               >
                                 Bodega
                               </span>
-                              <span className="mt-2 block text-center text-[11px] font-medium leading-snug text-slate-600">
-                                Stock en el mapa (mismas cantidades que la venta)
-                              </span>
                             </div>
                             <FiArrowRight className="w-8 h-8 sm:w-10 sm:h-10 text-slate-300" />
                             <div
@@ -957,48 +941,34 @@ export default function RequestsQueue(props: RequestsQueueProps) {
                               >
                                 Salida
                               </span>
-                              <span className="mt-2 block text-center text-[11px] font-medium leading-snug text-slate-600">
-                                Zona de despacho
-                              </span>
                             </div>
-                          </div>
-                          <div className="mt-6 w-full max-w-lg rounded-2xl border border-emerald-100 bg-emerald-50/60 px-4 py-4 text-left">
-                            <p className="font-mono text-lg font-bold text-slate-900">
-                              {String(primerItem.tarea.numero ?? "").trim() || "—"}
-                            </p>
-                            <p className="mt-1 text-sm font-semibold text-slate-800">
-                              Comprador:{" "}
-                              {String(primerItem.tarea.compradorNombre ?? "").trim() || "—"}
-                            </p>
-                            <p className="mt-2 text-xs font-bold uppercase tracking-wide text-slate-500">
-                              Pedido
-                            </p>
-                            <p className="mt-1 text-sm leading-relaxed text-slate-800">
-                              {lineItemsVentaSalidaResumen(primerItem.tarea)}
-                            </p>
                           </div>
                           <hr className="my-8 border-slate-200 w-full" />
                           <div className="flex flex-wrap justify-center gap-4 sm:gap-8 w-full mb-6">
                             <div className="flex items-center gap-1 sm:gap-2 text-center sm:text-left">
                               <FiUser className="w-5 h-5 text-slate-400" />
-                              <span className="text-xs text-slate-500">Cuenta</span>
+                              <span className="text-xs text-slate-500">Solicitado por</span>
                               <span className="font-semibold text-slate-700">
-                                {String(primerItem.tarea.clientName ?? primerItem.tarea.clientId ?? "").trim() ||
-                                  "—"}
+                                {String(primerItem.tarea.compradorNombre ?? "").trim() || "—"}
                               </span>
                             </div>
                             <div className="flex items-center gap-1 sm:gap-2 text-center sm:text-left">
                               <FiCalendar className="w-5 h-5 text-slate-400" />
-                              <span className="text-xs text-slate-500">Fecha venta</span>
+                              <span className="text-xs text-slate-500">Fecha y hora</span>
                               <span className="font-semibold text-slate-700">
                                 {String(primerItem.tarea.fecha ?? "").trim() || "—"}
                               </span>
                             </div>
                             <div className="flex items-center gap-1 sm:gap-2 text-center sm:text-left">
                               <FiPackage className="w-5 h-5 text-slate-400" />
-                              <span className="text-xs text-slate-500">Operario</span>
+                              <span className="text-xs text-slate-500">ID de solicitud</span>
                               <span className="font-semibold text-slate-700">
-                                {String(primerItem.tarea.operarioNombre ?? "").trim() || "—"}
+                                {String(
+                                  primerItem.tarea.numero ??
+                                    primerItem.tarea.ventaId ??
+                                    primerItem.tarea.ordenVentaId ??
+                                    "",
+                                ).trim() || "—"}
                               </span>
                             </div>
                           </div>
@@ -1036,6 +1006,14 @@ export default function RequestsQueue(props: RequestsQueueProps) {
                               >
                                 {String(primerItem.tarea.productoSecundarioTitulo ?? "").trim() || "—"}
                               </span>
+                              <p className={`mt-2 text-center text-xs ${destinationStyle.text} opacity-90`}>
+                                Precio (catálogo):{" "}
+                                <PrecioSecundarioCatalogoLive
+                                  clientId={String(primerItem.tarea.clientId ?? "")}
+                                  productoSecundarioId={String(primerItem.tarea.productoSecundarioId ?? "")}
+                                  className="font-semibold tabular-nums"
+                                />
+                              </p>
                             </div>
                           </div>
                           <hr className="my-8 border-slate-200 w-full" />
@@ -1182,6 +1160,14 @@ export default function RequestsQueue(props: RequestsQueueProps) {
                       >
                         {String(nextProcTarea.productoSecundarioTitulo ?? "").trim() || "—"}
                       </span>
+                      <p className={`mt-2 text-center text-xs ${STATUS_STYLES.bodega.text}`}>
+                        Precio (catálogo):{" "}
+                        <PrecioSecundarioCatalogoLive
+                          clientId={String(nextProcTarea.clientId ?? "")}
+                          productoSecundarioId={String(nextProcTarea.productoSecundarioId ?? "")}
+                          className="font-semibold tabular-nums"
+                        />
+                      </p>
                     </div>
                   </div>
                   <hr className="my-8 w-full border-slate-200" />

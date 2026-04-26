@@ -42,6 +42,7 @@ import {
   FiAlertTriangle,
   FiClipboard,
 } from "react-icons/fi";
+import { BodegaZonaEstadoModalShell } from "./bodega/BodegaZonaEstadoModalShell";
 import {
   addDoc,
   collection,
@@ -187,6 +188,53 @@ const ALERT_REASONS: Array<{ value: AlertReason; label: string }> = [
 const ALERT_DELAY_MS = 2 * 60 * 1000;
 const ALERT_ORDER_PREFIX = "alerta-orden-";
 const ALERT_REPORT_PREFIX = "alerta-fallo-";
+
+function orderSourceToZoneKey(source: OrderSource): ZoneKey {
+  if (source === "ingresos") return "entrada";
+  if (source === "salida") return "salida";
+  return "bodega";
+}
+
+function orderIsOverdue(order: BodegaOrder, alertClock: number): boolean {
+  return alertClock - order.createdAtMs >= ALERT_DELAY_MS;
+}
+
+/** Zona del tablero asociada a una alerta persistida (temp, demora u orden reportada). */
+function zoneKeyForAlertItem(alert: AlertItem, orders: BodegaOrder[]): ZoneKey | null {
+  const id = alert.id;
+  const tempM = id.match(/^alerta-temp-(entrada|bodega|salida)-/);
+  if (tempM) {
+    const z = tempM[1];
+    if (z === "entrada") return "entrada";
+    if (z === "salida") return "salida";
+    return "bodega";
+  }
+  if (id.startsWith(ALERT_ORDER_PREFIX)) {
+    const oid = id.slice(ALERT_ORDER_PREFIX.length);
+    const o = orders.find((x) => x.id === oid);
+    return o ? orderSourceToZoneKey(o.sourceZone) : null;
+  }
+  if (id.startsWith(ALERT_REPORT_PREFIX)) {
+    const sid = alert.sourceOrderId;
+    if (!sid) return null;
+    const o = orders.find((x) => x.id === sid);
+    return o ? orderSourceToZoneKey(o.sourceZone) : null;
+  }
+  return null;
+}
+
+/** Casillero con caja registrada (nombre o autoId). */
+function boxCasilleroConCaja(box: Box): boolean {
+  return Boolean(String(box.autoId ?? "").trim() || String(box.name ?? "").trim());
+}
+
+function boxTemperaturaAltaIngresoSalida(box: Box): boolean {
+  return (
+    typeof box.temperature === "number" &&
+    Number.isFinite(box.temperature) &&
+    box.temperature > HIGH_TEMP_ALERT_THRESHOLD
+  );
+}
 
 const normalizeCapacity = (value?: number) => {
   if (typeof value !== "number") return DEFAULT_TOTAL_SLOTS;
@@ -2216,6 +2264,35 @@ export default function BodegaDashboard() {
       });
     });
 
+    /**
+     * Producto ya en casillero (asignado a entrada/salida) pendiente de traslado o despacho → alerta.
+     * No duplicamos si ya hay alerta por temperatura alta en esa caja.
+     */
+    inboundBoxes.forEach((box) => {
+      if (!boxCasilleroConCaja(box)) return;
+      if (boxTemperaturaAltaIngresoSalida(box)) return;
+      items.entrada.push({
+        id: `alerta-entrada-pendiente-${box.position}-${String(box.autoId ?? "").trim() || "sin-id"}`,
+        title: `Entrada pendiente · casillero ${box.position}`,
+        description: `Caja ${String(box.name ?? "").trim() || "—"} · ${String(box.autoId ?? "").trim() || "—"} · producto en ingreso pendiente de traslado o gestión.`,
+        meta: String(box.client ?? "").trim()
+          ? `Cliente · ${String(box.client).trim()}`
+          : undefined,
+      });
+    });
+    outboundBoxes.forEach((box) => {
+      if (!boxCasilleroConCaja(box)) return;
+      if (boxTemperaturaAltaIngresoSalida(box)) return;
+      items.salida.push({
+        id: `alerta-salida-pendiente-${box.position}-${String(box.autoId ?? "").trim() || "sin-id"}`,
+        title: `Salida pendiente · casillero ${box.position}`,
+        description: `Caja ${String(box.name ?? "").trim() || "—"} · ${String(box.autoId ?? "").trim() || "—"} · producto en salida pendiente de despacho o gestión.`,
+        meta: String(box.client ?? "").trim()
+          ? `Cliente · ${String(box.client).trim()}`
+          : undefined,
+      });
+    });
+
     overdueOrders.forEach((order) => {
       const zone: ZoneKey =
         order.sourceZone === "ingresos"
@@ -2231,8 +2308,35 @@ export default function BodegaDashboard() {
       });
     });
 
+    /** Jefe: reportes ya delegados al operario siguen como «alerta» hasta que se cierren. */
+    if (session?.role === "jefe") {
+      for (const alert of alerts) {
+        if (!alert.id.startsWith(ALERT_REPORT_PREFIX)) continue;
+        if (!assignedAlertIds.has(alert.id)) continue;
+        const zk = zoneKeyForAlertItem(alert, orders);
+        if (!zk) continue;
+        items[zk].push({
+          id: `jefe-alerta-asignada-${alert.id}`,
+          title: alert.title || "Reporte de fallo",
+          description: alert.description,
+          meta: alert.meta ?? "Asignada al operario · pendiente de gestión",
+        });
+      }
+    }
+
     return items;
-  }, [bodegaHighSlots, inboundHighBoxes, outboundHighBoxes, overdueOrders]);
+  }, [
+    assignedAlertIds,
+    alerts,
+    bodegaHighSlots,
+    inboundBoxes,
+    inboundHighBoxes,
+    outboundBoxes,
+    outboundHighBoxes,
+    overdueOrders,
+    orders,
+    session?.role,
+  ]);
 
   const zoneTaskItems = useMemo(() => {
     const byZone: Record<ZoneKey, DetailItem[]> = {
@@ -2241,14 +2345,41 @@ export default function BodegaDashboard() {
       salida: [],
     };
 
-    orders.forEach((order) => {
-      const zone: ZoneKey =
-        order.sourceZone === "ingresos"
-          ? "entrada"
-          : order.sourceZone === "salida"
-            ? "salida"
-            : "bodega";
+    const zoneForOrder = (order: BodegaOrder): ZoneKey =>
+      order.sourceZone === "ingresos"
+        ? "entrada"
+        : order.sourceZone === "salida"
+          ? "salida"
+          : "bodega";
 
+    if (session?.role === "jefe") {
+      orders.forEach((order) => {
+        if (orderIsOverdue(order, alertClock)) return;
+        const zone = zoneForOrder(order);
+        byZone[zone].push({
+          id: `tarea-${zone}-${order.id}`,
+          title: "Tarea pendiente",
+          description: formatOrderDetails(order),
+          meta: `Solicitado por ${order.createdBy} · ${order.createdAt}`,
+        });
+      });
+      for (const alert of alerts) {
+        if (!alert.id.startsWith(ALERT_REPORT_PREFIX)) continue;
+        if (assignedAlertIds.has(alert.id)) continue;
+        const zk = zoneKeyForAlertItem(alert, orders);
+        if (!zk) continue;
+        byZone[zk].push({
+          id: `jefe-tarea-report-${alert.id}`,
+          title: alert.title || "Reporte de fallo",
+          description: alert.description,
+          meta: alert.meta ?? "Pendiente: asignar al operario",
+        });
+      }
+      return byZone;
+    }
+
+    orders.forEach((order) => {
+      const zone = zoneForOrder(order);
       byZone[zone].push({
         id: `tarea-${zone}-${order.id}`,
         title: "Tarea pendiente",
@@ -2258,11 +2389,12 @@ export default function BodegaDashboard() {
     });
 
     return byZone;
-  }, [orders]);
+  }, [alertClock, alerts, assignedAlertIds, orders, session?.role]);
 
   const renderStatusButtons = (zone: ZoneKey) => {
     const alertCount = zoneAlertItems[zone].length;
     const taskCount = zoneTaskItems[zone].length;
+    const jefeStatusCopy = session?.role === "jefe";
     /** Misma barra de estado en las tres zonas del tablero (0 si no hay → estilo atenuado). */
     const alwaysShowBoth = zone === "bodega" || zone === "entrada" || zone === "salida";
 
@@ -2279,7 +2411,16 @@ export default function BodegaDashboard() {
           type="button"
           onClick={() => setStatusModal({ zone, kind: "alertas" })}
           className={alertInactive ? BODEGA_ZONE_STATUS_PILL_INACTIVE_CLASS : BODEGA_ZONE_STATUS_PILL_ACTIVE_CLASS}
-          aria-label={`Ver alertas en ${zoneLabels[zone]}`}
+          title={
+            jefeStatusCopy
+              ? "Demoras, temperatura alta y reportes ya asignados al operario (seguimiento)."
+              : undefined
+          }
+          aria-label={
+            jefeStatusCopy
+              ? `Alertas y seguimiento en ${zoneLabels[zone]}: demoras, temperatura, reportes delegados`
+              : `Ver alertas en ${zoneLabels[zone]}`
+          }
         >
           <FiAlertTriangle
             className={alertInactive ? BODEGA_ZONE_STATUS_ICON_INACTIVE_CLASS : BODEGA_ZONE_STATUS_ICON_ACTIVE_CLASS}
@@ -2293,7 +2434,16 @@ export default function BodegaDashboard() {
           type="button"
           onClick={() => setStatusModal({ zone, kind: "tareas" })}
           className={taskInactive ? BODEGA_ZONE_STATUS_PILL_INACTIVE_CLASS : BODEGA_ZONE_STATUS_PILL_ACTIVE_CLASS}
-          aria-label={`Ver tareas en ${zoneLabels[zone]}`}
+          title={
+            jefeStatusCopy
+              ? "Órdenes en curso (sin demora) y reportes pendientes de asignar al operario."
+              : undefined
+          }
+          aria-label={
+            jefeStatusCopy
+              ? `Tareas pendientes en ${zoneLabels[zone]}: órdenes activas y reportes sin asignar`
+              : `Ver tareas en ${zoneLabels[zone]}`
+          }
         >
           <FiClipboard
             className={taskInactive ? BODEGA_ZONE_STATUS_ICON_INACTIVE_CLASS : BODEGA_ZONE_STATUS_ICON_ACTIVE_CLASS}
@@ -5317,78 +5467,54 @@ export default function BodegaDashboard() {
         ) : null}
 
         {statusModal ? (
-          <div
-            className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-2 sm:p-4"
-            role="dialog"
-            aria-modal="true"
-            onClick={() => setStatusModal(null)}
+          <BodegaZonaEstadoModalShell
+            titleId="bodega-zona-status-modal-title"
+            label={statusModal.kind === "alertas" ? "Alertas" : "Tareas pendientes"}
+            title={zoneLabels[statusModal.zone]}
+            subtitle={
+              session?.role === "jefe"
+                ? statusModal.kind === "alertas"
+                  ? "Temperatura alta, órdenes demoradas y reportes ya delegados al operario (pendientes de cierre)."
+                  : "Órdenes en curso sin demora y reportes de fallo que aún no asignaste al operario."
+                : statusModal.kind === "alertas"
+                  ? "Detalles de alertas activas en esta zona."
+                  : "Tareas pendientes relacionadas con esta zona."
+            }
+            icon={
+              statusModal.kind === "alertas" ? (
+                <FiAlertTriangle className="h-6 w-6 shrink-0" aria-hidden />
+              ) : (
+                <FiClipboard className="h-6 w-6 shrink-0" aria-hidden />
+              )
+            }
+            onClose={() => setStatusModal(null)}
+            zClass="z-50"
           >
-            <div
-              className="w-full max-w-lg sm:max-w-2xl rounded-3xl bg-white p-0 shadow-2xl border border-blue-100 relative overflow-hidden"
-              onClick={(event) => event.stopPropagation()}
-            >
-              <div className="sticky top-0 z-10 flex items-center justify-between gap-3 bg-blue-50/80 px-6 py-4 border-b border-blue-100">
-                <div className="flex items-center gap-3">
-                  <span className={`inline-flex items-center justify-center w-10 h-10 rounded-full ${statusModal.kind === "alertas" ? "bg-red-100" : "bg-amber-100"}`}>
-                    {statusModal.kind === "alertas" ? (
-                      <svg className="w-6 h-6 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                    ) : (
-                      <svg className="w-6 h-6 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17v-2a4 4 0 118 0v2M12 9v2m0 4h.01" /></svg>
-                    )}
-                  </span>
-                  <div>
-                    <p className="text-xs font-semibold uppercase tracking-[0.25em] text-slate-400">
-                      {statusModal.kind === "alertas" ? "Alertas" : "Lista de tareas"}
-                    </p>
-                    <h3 className="mt-1 text-xl sm:text-2xl font-bold text-slate-900">
-                      {zoneLabels[statusModal.zone]}
-                    </h3>
-                    <p className="mt-1 text-xs sm:text-sm text-slate-600">
-                      {statusModal.kind === "alertas"
-                        ? "Detalles de alertas activas en esta zona."
-                        : "Tareas pendientes relacionadas con esta zona."}
-                    </p>
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setStatusModal(null)}
-                  className="rounded-full border border-slate-200 px-3 py-1 text-sm font-semibold text-slate-600 transition hover:bg-slate-100 hover:text-blue-700"
-                >
-                  Cerrar
-                </button>
-              </div>
-              <div className="p-6 grid gap-4 max-h-[60vh] overflow-y-auto bg-white">
+            {(statusModal.kind === "alertas"
+              ? zoneAlertItems[statusModal.zone]
+              : zoneTaskItems[statusModal.zone]
+            ).length === 0 ? (
+              <p className="text-sm leading-relaxed text-slate-600">
+                No hay <strong className="text-slate-800">elementos</strong> para mostrar en esta zona.
+              </p>
+            ) : (
+              <ul className="grid gap-3">
                 {(statusModal.kind === "alertas"
                   ? zoneAlertItems[statusModal.zone]
                   : zoneTaskItems[statusModal.zone]
-                ).length === 0 ? (
-                  <div className="text-center text-slate-400 py-8">
-                    <svg className="mx-auto w-12 h-12 text-slate-200" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                    <p className="mt-2 text-base font-semibold">No hay elementos para mostrar.</p>
-                  </div>
-                ) : (
-                  (statusModal.kind === "alertas"
-                    ? zoneAlertItems[statusModal.zone]
-                    : zoneTaskItems[statusModal.zone]
-                  ).map((item) => (
-                    <div
-                      key={item.id}
-                      className="rounded-xl border border-slate-200 bg-slate-50 p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 shadow-sm hover:shadow-md transition"
-                    >
-                      <div className="flex-1 min-w-0">
-                        <p className="text-base font-semibold text-slate-900 truncate">{item.title}</p>
-                        <p className="mt-1 text-sm text-slate-600 truncate">{item.description}</p>
-                        {item.meta ? (
-                          <p className="mt-2 text-xs font-semibold text-slate-500">{item.meta}</p>
-                        ) : null}
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
-          </div>
+                ).map((item) => (
+                  <li
+                    key={item.id}
+                    className="rounded-2xl border border-sky-100 bg-linear-to-br from-white to-sky-50/40 p-4 shadow-sm"
+                  >
+                    <p className="font-semibold leading-snug text-slate-900">{item.title}</p>
+                    <p className="mt-1 text-sm leading-relaxed text-slate-600">{item.description}</p>
+                    {item.meta ? <p className="mt-2 text-xs font-semibold text-slate-500">{item.meta}</p> : null}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </BodegaZonaEstadoModalShell>
         ) : null}
 
         {resolveModalAlert ? (

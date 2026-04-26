@@ -1,5 +1,4 @@
-import { FirebaseError } from "firebase/app";
-import { db, storage } from "@/lib/firebaseClient";
+import { db } from "@/lib/firebaseClient";
 import { CatalogoService } from "@/app/services/catalogoService";
 import type { Catalogo } from "@/app/types/catalogo";
 import type { VentaEnCursoLineItem } from "@/app/types/ventaCuenta";
@@ -24,10 +23,11 @@ import {
   runTransaction,
   serverTimestamp,
   setDoc,
+  where,
   writeBatch,
+  type DocumentData,
+  type QueryDocumentSnapshot,
 } from "firebase/firestore";
-import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
-
 const PARENT = "clientes";
 const VENTAS = "ordenesVenta";
 const VIAJES = "viajesTransporte";
@@ -93,6 +93,11 @@ function kgEsperadoLinea(li: VentaEnCursoLineItem, cat: Catalogo | undefined): n
 
 function kgTotalDesdeLineas(lines: VentaEnCursoLineItem[], catalogos: Catalogo[]): number {
   return lines.reduce((sum, li) => sum + kgEsperadoLinea(li, catalogoPorLinea(catalogos, li)), 0);
+}
+
+/** Kg estimados por línea de venta/viaje (misma regla que al crear el viaje). Para reportes y tablas. */
+export function kgEsperadoLineaVentaEnViaje(li: VentaEnCursoLineItem, catalogos: Catalogo[]): number {
+  return kgEsperadoLinea(li, catalogoPorLinea(catalogos, li));
 }
 
 /** Misma convención que custodio/bodega: todo según pedido y marcado conforme → Cerrado(ok). */
@@ -249,6 +254,8 @@ export const ViajeVentaTransporteService = {
             const kgTotalEstimado = kgTotalDesdeLineas(row.lineItemsEsperados ?? [], cats);
             const compradorNombre = String(vData.compradorNombre ?? "").trim();
             const destinoNombre = String(vData.destinoWarehouseNombre ?? "").trim();
+            const ventaFecha = String(vData.fecha ?? "").trim();
+            const ventaEstado = String(vData.estado ?? "").trim();
             out.push({
               ...row,
               idClienteDueno: idCliente,
@@ -258,8 +265,223 @@ export const ViajeVentaTransporteService = {
               ventaCompradorNombre: compradorNombre || "Sin nombre de comprador",
               ventaCodeCuenta: codeCuenta || undefined,
               ventaDestinoNombre: destinoNombre || undefined,
+              ventaFecha: ventaFecha || undefined,
+              ventaEstado: ventaEstado || undefined,
             });
           }
+        }
+      }
+    }
+    out.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+    return out;
+  },
+
+  /**
+   * Viajes «En curso» en todos los clientes, en vivo (mismas rutas que `listEnCursoGlobal`).
+   * No usa `collectionGroup` + `where` (evita fallos hasta crear índices COLLECTION_GROUP en Firebase).
+   */
+  subscribeEnCursoGlobal(
+    onNext: (items: ViajeVentaTransporteConContext[]) => void,
+    onError?: (e: Error) => void,
+  ): () => void {
+    const catalogCache = new Map<string, Catalogo[]>();
+    const ventaKey = (clientId: string, ventaId: string) => JSON.stringify([clientId, ventaId]);
+    const parseVentaKey = (key: string): [string, string] => JSON.parse(key) as [string, string];
+
+    const catalogosFor = async (idCliente: string, codeCuenta: string): Promise<Catalogo[]> => {
+      const key = `${idCliente}::${codeCuenta}`;
+      if (catalogCache.has(key)) return catalogCache.get(key)!;
+      const list = codeCuenta.trim() ? await CatalogoService.getAll(idCliente, codeCuenta) : [];
+      catalogCache.set(key, list);
+      return list;
+    };
+
+    const ventasData = new Map<string, Record<string, unknown>>();
+    const viajesDocsByVenta = new Map<string, QueryDocumentSnapshot<DocumentData>[]>();
+    const ventasColUnsubs = new Map<string, () => void>();
+    const viajeUnsubs = new Map<string, () => void>();
+    let lastClientIds = new Set<string>();
+    let emitGen = 0;
+
+    const buildAndEmit = async () => {
+      const g = ++emitGen;
+      const out: ViajeVentaTransporteConContext[] = [];
+      try {
+        for (const [vKey, docList] of viajesDocsByVenta.entries()) {
+          const [clientId, ventaId] = parseVentaKey(vKey);
+          const vData = ventasData.get(vKey);
+          if (!vData) continue;
+          for (const jd of docList) {
+            const row = mapViaje(jd.id, jd.data() as Record<string, unknown>);
+            if (row.estado !== "En curso") continue;
+            const ventaNumero =
+              String(vData.numero ?? "").trim() ||
+              `V-${String(Number(vData.numericId) || 0).padStart(4, "0")}`;
+            const codeCuenta = String(vData.codeCuenta ?? "").trim();
+            const cats = await catalogosFor(clientId, codeCuenta);
+            const kgTotalEstimado = kgTotalDesdeLineas(row.lineItemsEsperados ?? [], cats);
+            const compradorNombre = String(vData.compradorNombre ?? "").trim();
+            const destinoNombre = String(vData.destinoWarehouseNombre ?? "").trim();
+            const ventaFecha = String(vData.fecha ?? "").trim();
+            const ventaEstado = String(vData.estado ?? "").trim();
+            out.push({
+              ...row,
+              idClienteDueno: clientId,
+              ventaId,
+              ventaNumero,
+              kgTotalEstimado,
+              ventaCompradorNombre: compradorNombre || "Sin nombre de comprador",
+              ventaCodeCuenta: codeCuenta || undefined,
+              ventaDestinoNombre: destinoNombre || undefined,
+              ventaFecha: ventaFecha || undefined,
+              ventaEstado: ventaEstado || undefined,
+            });
+          }
+        }
+        out.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+        if (g === emitGen) onNext(out);
+      } catch (e) {
+        if (g === emitGen) onError?.(e as Error);
+      }
+    };
+
+    const ensureViajeListener = (cid: string, vid: string) => {
+      const k = ventaKey(cid, vid);
+      if (viajeUnsubs.has(k)) return;
+      const q = query(colViajes(cid, vid), where("estado", "==", "En curso" satisfies ViajeTransporteEstado));
+      const unsub = onSnapshot(
+        q,
+        (snap) => {
+          viajesDocsByVenta.set(k, snap.docs);
+          void buildAndEmit();
+        },
+        (e) => onError?.(e as Error),
+      );
+      viajeUnsubs.set(k, unsub);
+    };
+
+    const cleanupClient = (cid: string) => {
+      ventasColUnsubs.get(cid)?.();
+      ventasColUnsubs.delete(cid);
+      for (const key of [...viajeUnsubs.keys()]) {
+        const [c] = parseVentaKey(key);
+        if (c === cid) {
+          viajeUnsubs.get(key)?.();
+          viajeUnsubs.delete(key);
+          viajesDocsByVenta.delete(key);
+          ventasData.delete(key);
+        }
+      }
+    };
+
+    const attachVentasListener = (cid: string) => {
+      if (ventasColUnsubs.has(cid)) return;
+      const unsub = onSnapshot(
+        collection(db, PARENT, cid, VENTAS),
+        (ventasSnap) => {
+          const currVids = new Set(ventasSnap.docs.map((d) => d.id));
+          const prevVids = new Set<string>();
+          for (const key of ventasData.keys()) {
+            const [c, v] = parseVentaKey(key);
+            if (c === cid) prevVids.add(v);
+          }
+          for (const vid of prevVids) {
+            if (!currVids.has(vid)) {
+              const k = ventaKey(cid, vid);
+              viajeUnsubs.get(k)?.();
+              viajeUnsubs.delete(k);
+              viajesDocsByVenta.delete(k);
+              ventasData.delete(k);
+            }
+          }
+          for (const vd of ventasSnap.docs) {
+            const vid = vd.id;
+            const k = ventaKey(cid, vid);
+            ventasData.set(k, vd.data() as Record<string, unknown>);
+            ensureViajeListener(cid, vid);
+          }
+          void buildAndEmit();
+        },
+        (e) => onError?.(e as Error),
+      );
+      ventasColUnsubs.set(cid, unsub);
+    };
+
+    const unsubClientes = onSnapshot(
+      collection(db, PARENT),
+      (clientsSnap) => {
+        const curr = new Set(clientsSnap.docs.map((d) => d.id));
+        for (const cid of lastClientIds) {
+          if (!curr.has(cid)) cleanupClient(cid);
+        }
+        for (const cid of curr) {
+          if (!lastClientIds.has(cid)) attachVentasListener(cid);
+        }
+        lastClientIds = curr;
+      },
+      (e) => onError?.(e as Error),
+    );
+
+    return () => {
+      unsubClientes();
+      lastClientIds.clear();
+      for (const cid of [...ventasColUnsubs.keys()]) {
+        cleanupClient(cid);
+      }
+    };
+  },
+
+  /**
+   * Viajes **En curso** solo del cliente y (si se indica) ventas de esa `codeCuenta`.
+   * Más liviano que `listEnCursoGlobal` para reportes de cuenta.
+   * @param catalogosPrecargados Si viene cargado (p. ej. el mismo `getAll` que la UI), evita un segundo fetch.
+   */
+  async listEnCursoParaCuenta(
+    idCliente: string,
+    codeCuenta: string,
+    catalogosPrecargados?: Catalogo[],
+  ): Promise<ViajeVentaTransporteConContext[]> {
+    const cid = String(idCliente ?? "").trim();
+    const cc = String(codeCuenta ?? "").trim();
+    if (!cid) return [];
+
+    const catalogos =
+      catalogosPrecargados !== undefined
+        ? catalogosPrecargados
+        : await CatalogoService.getAll(cid, cc);
+    const out: ViajeVentaTransporteConContext[] = [];
+
+    const ventasSnap = await getDocs(collection(db, PARENT, cid, VENTAS));
+    for (const vd of ventasSnap.docs) {
+      const ventaId = vd.id;
+      const vData = vd.data() as Record<string, unknown>;
+      const ventaCode = String(vData.codeCuenta ?? "").trim();
+      if (cc && ventaCode && ventaCode !== cc) continue;
+
+      const ventaNumero =
+        String(vData.numero ?? "").trim() || `V-${String(Number(vData.numericId) || 0).padStart(4, "0")}`;
+      const compradorNombre = String(vData.compradorNombre ?? "").trim();
+      const destinoNombre = String(vData.destinoWarehouseNombre ?? "").trim();
+      const ventaFecha = String(vData.fecha ?? "").trim();
+      const ventaEstado = String(vData.estado ?? "").trim();
+
+      const viajesSnap = await getDocs(colViajes(cid, ventaId));
+      for (const jd of viajesSnap.docs) {
+        const row = mapViaje(jd.id, jd.data() as Record<string, unknown>);
+        if (row.estado === "En curso") {
+          const kgTotalEstimado = kgTotalDesdeLineas(row.lineItemsEsperados ?? [], catalogos);
+          out.push({
+            ...row,
+            idClienteDueno: cid,
+            ventaId,
+            ventaNumero,
+            kgTotalEstimado,
+            ventaCompradorNombre: compradorNombre || "Sin nombre de comprador",
+            ventaCodeCuenta: ventaCode || undefined,
+            ventaDestinoNombre: destinoNombre || undefined,
+            ventaFecha: ventaFecha || undefined,
+            ventaEstado: ventaEstado || undefined,
+          });
         }
       }
     }
@@ -270,6 +492,10 @@ export const ViajeVentaTransporteService = {
   /** Máximo 10 MB (alineado con reglas de Storage y validación en UI). */
   MAX_EVIDENCIA_BYTES: 10 * 1024 * 1024,
 
+  /**
+   * Sube la evidencia a Cloudinary (ruta API del servidor) y devuelve la URL HTTPS.
+   * Esa URL es la que se persiste en Firestore en `registrarEntrega` (`evidenciaFotoUrl`).
+   */
   async subirEvidenciaFoto(clientId: string, ventaId: string, viajeId: string, file: File): Promise<string> {
     const cid = String(clientId ?? "").trim();
     const vid = String(ventaId ?? "").trim();
@@ -279,39 +505,28 @@ export const ViajeVentaTransporteService = {
       throw new Error("La foto supera 10 MB. Elegí una imagen más liviana o comprimila.");
     }
 
-    const ext =
-      file.type === "image/png"
-        ? "png"
-        : file.type === "image/webp"
-          ? "webp"
-          : "jpg";
-    const path = `ventaViajes/${cid}/${vid}/${jid}/evidencia-${Date.now()}.${ext}`;
-    const r = ref(storage, path);
-    const contentType = file.type?.trim() || "image/jpeg";
+    const form = new FormData();
+    form.append("file", file, file.name || "evidencia.jpg");
 
-    /**
-     * Usamos `uploadBytes` (subida en un solo paso), no `uploadBytesResumable`.
-     * Con subidas resumibles, las reglas de Storage a veces reciben `request.resource` sin `size`;
-     * la condición `request.resource.size < 10MB` falla y la subida queda «permission denied»
-     * sin que se llegue a guardar la entrega en Firestore.
-     */
+    let res: Response;
     try {
-      await uploadBytes(r, file, { contentType });
-      return await getDownloadURL(r);
-    } catch (e: unknown) {
-      if (e instanceof FirebaseError) {
-        if (e.code === "storage/unauthorized") {
-          throw new Error(
-            "No se pudo subir la foto (permisos de Storage). Revisá que las reglas de Storage estén desplegadas y que estés con sesión iniciada.",
-          );
-        }
-        if (e.code === "storage/canceled") {
-          throw new Error("La subida de la foto se canceló.");
-        }
-        throw new Error(`No se pudo subir la foto: ${e.message ?? e.code}`);
-      }
-      throw e;
+      res = await fetch("/api/evidencia-transporte", {
+        method: "POST",
+        body: form,
+      });
+    } catch {
+      throw new Error("No se pudo contactar al servidor para subir la imagen. Revisá tu conexión.");
     }
+
+    const data = (await res.json().catch(() => ({}))) as { url?: string; error?: string };
+    if (!res.ok) {
+      throw new Error(data.error?.trim() || `No se pudo subir la imagen (${res.status}).`);
+    }
+    const url = String(data.url ?? "").trim();
+    if (!url) {
+      throw new Error("El servidor no devolvió la URL de la imagen.");
+    }
+    return url;
   },
 
   async registrarEntrega(params: {

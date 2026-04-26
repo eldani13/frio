@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { HiOutlineXMark } from "react-icons/hi2";
+import { HiArrowRight, HiOutlineXMark } from "react-icons/hi2";
 import type { Catalogo } from "@/app/types/catalogo";
 import type { Slot, WarehouseMeta } from "@/app/interfaces/bodega";
 import { PROCESAMIENTO_ESTADOS } from "@/app/types/solicitudProcesamiento";
@@ -9,12 +9,12 @@ import {
   catalogosPrimarios,
   catalogosSecundariosDePrimario,
   estimadoSecundarioAplicarPerdidaPct,
-  formatEstimadoUnidadesSecundario,
   mermaPctDesdeCatalogoSecundario,
   reglaConversionDesdeCatalogoSecundario,
   unidadesSecundarioPorRegla,
 } from "@/lib/catalogoProcesamiento";
 import { etiquetaUnidadVisualizacion } from "@/lib/unidadVisualizacionCatalogo";
+import { formatoPrecioCatalogo } from "@/lib/catalogoPrecio";
 import { subscribeWarehouseState } from "@/lib/bodegaCloudState";
 import { stockPrimarioDesdeSlotsPreferirKgCuandoExisten } from "@/lib/stockPrimarioBodega";
 
@@ -276,6 +276,33 @@ export function OrdenProcesamientoFormModal({
   const estimado = useMemo(() => {
     return estimadoSecundarioAplicarPerdidaPct(estimadoTeorico, perdidaPctDelCatalogo);
   }, [estimadoTeorico, perdidaPctDelCatalogo]);
+
+  /** Unidades enteras, sobrante en kg (fracción de u. → primario) y merma en u./kg para el bloque Estimado. */
+  const desgloseEstimado = useMemo(() => {
+    if (estimado === null || estimado === undefined || !Number.isFinite(estimado) || estimado < 0) return null;
+    const uInt = Math.max(0, Math.floor(estimado + 1e-9));
+    const frac = Math.max(0, estimado - uInt);
+    const kgPorU = estimado > 1e-12 ? cantidadElegida / estimado : 0;
+    const sobranteKg = frac * kgPorU;
+
+    let mermaUnidades: number | null = null;
+    let mermaKg: number | null = null;
+    if (
+      estimadoTeorico !== null &&
+      estimadoTeorico !== undefined &&
+      Number.isFinite(estimadoTeorico) &&
+      estimadoTeorico >= 0
+    ) {
+      mermaUnidades = Math.max(0, estimadoTeorico - estimado);
+      if (estimadoTeorico > 1e-12) {
+        mermaKg = mermaUnidades * (cantidadElegida / estimadoTeorico);
+      } else {
+        mermaKg = 0;
+      }
+    }
+
+    return { uInt, sobranteKg, mermaUnidades, mermaKg };
+  }, [estimado, estimadoTeorico, cantidadElegida]);
 
   const codeCuentaDestino = useMemo(() => {
     const w = bodegasConCodigo.find((x) => x.id === bodegaWarehouseId);
@@ -544,6 +571,14 @@ export function OrdenProcesamientoFormModal({
                 ))}
               </select>
             )}
+            {secundario ? (
+              <p className="mt-2 text-xs text-gray-600">
+                Precio (catálogo):{" "}
+                <span className="font-semibold tabular-nums text-gray-900">
+                  {formatoPrecioCatalogo(secundario)}
+                </span>
+              </p>
+            ) : null}
           </div>
 
           <div className="rounded-lg border border-gray-200 bg-gray-50/50 px-4 py-3">
@@ -617,19 +652,60 @@ export function OrdenProcesamientoFormModal({
             )}
           </div>
 
-          <div className="rounded-lg border border-gray-200 bg-white px-4 py-3">
-            <p className="text-xs font-bold uppercase tracking-wide text-gray-600">Estimado</p>
-            {estimado !== null && estimado !== undefined && Number.isFinite(estimado) ? (
-              <div className="mt-2 flex flex-wrap items-end gap-x-3 gap-y-1">
-                <p className="text-2xl font-bold tabular-nums text-gray-900">
-                  {formatEstimadoUnidadesSecundario(estimado)}
-                </p>
-                {perdidaPctDelCatalogo > 0 ? (
-                  <span className="text-xs text-gray-500">
-                    Merma {Math.round(perdidaPctDelCatalogo).toLocaleString("es-CO")}%
-                  </span>
-                ) : null}
-              </div>
+          <div className="rounded-lg border border-sky-100 bg-sky-50/40 px-4 py-3">
+            <p className="text-xs font-bold uppercase tracking-wide text-sky-900/90">Estimado</p>
+            {desgloseEstimado ? (
+              <ul className="mt-3 space-y-2.5 text-sm text-gray-800">
+                <li className="flex items-start gap-2.5">
+                  <HiArrowRight className="mt-0.5 h-4 w-4 shrink-0 text-sky-600" aria-hidden />
+                  <div>
+                    <span className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                      Unidades (entero)
+                    </span>
+                    <p className="text-lg font-bold tabular-nums text-gray-900">
+                      {desgloseEstimado.uInt.toLocaleString("es-CO")}{" "}
+                      <span className="text-sm font-semibold text-gray-600">
+                        ({etiquetaUnidadVisualizacion(secundario?.unidadVisualizacion)})
+                      </span>
+                    </p>
+                  </div>
+                </li>
+                <li className="flex items-start gap-2.5">
+                  <HiArrowRight className="mt-0.5 h-4 w-4 shrink-0 text-sky-600" aria-hidden />
+                  <div>
+                    <span className="text-xs font-semibold uppercase tracking-wide text-gray-500">Sobrante</span>
+                    <p className="font-bold tabular-nums text-gray-900">
+                      {desgloseEstimado.sobranteKg.toLocaleString("es-CO", { maximumFractionDigits: 3 })} kg
+                    </p>
+                    <p className="text-[11px] leading-snug text-gray-500">
+                      Insumo no usado en unidades completas (fracción de resultado).
+                    </p>
+                  </div>
+                </li>
+                <li className="flex items-start gap-2.5">
+                  <HiArrowRight className="mt-0.5 h-4 w-4 shrink-0 text-sky-600" aria-hidden />
+                  <div>
+                    <span className="text-xs font-semibold uppercase tracking-wide text-gray-500">Merma</span>
+                    {desgloseEstimado.mermaUnidades !== null && desgloseEstimado.mermaKg !== null ? (
+                      <p className="font-semibold tabular-nums text-gray-900">
+                        ≈{" "}
+                        {desgloseEstimado.mermaUnidades.toLocaleString("es-CO", {
+                          maximumFractionDigits: 4,
+                        })}{" "}
+                        u. · ≈{" "}
+                        {desgloseEstimado.mermaKg.toLocaleString("es-CO", { maximumFractionDigits: 3 })} kg
+                        {perdidaPctDelCatalogo > 0 ? (
+                          <span className="ml-1 text-xs font-normal text-gray-500">
+                            ({Math.round(perdidaPctDelCatalogo).toLocaleString("es-CO")}% catálogo)
+                          </span>
+                        ) : null}
+                      </p>
+                    ) : (
+                      <p className="text-sm text-gray-600">—</p>
+                    )}
+                  </div>
+                </li>
+              </ul>
             ) : (
               <p className="mt-2 text-sm text-amber-900">
                 Indicá la conversión ({unidadPrim === "peso" ? "por kg" : "por ud."}).
