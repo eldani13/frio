@@ -14,7 +14,8 @@ import type { Comprador } from "@/app/types/comprador";
 import { VentaManualFormModal } from "@/app/components/ui/ventas/VentaManualFormModal";
 import { OrdenVentaService } from "@/app/services/ordenVentaService";
 import { AsignarBodegaService } from "@/app/services/asignarbodegaService";
-import type { WarehouseMeta } from "@/app/interfaces/bodega";
+import type { Slot, WarehouseMeta } from "@/app/interfaces/bodega";
+import { fetchWarehouseStateOnce } from "@/lib/bodegaCloudState";
 
 function productosResumen(v: VentaEnCurso): string {
   const items = v.lineItems ?? [];
@@ -104,6 +105,55 @@ export function VentasEnCursoOperadorPanel({
   const [whTransporteId, setWhTransporteId] = React.useState("");
   const [transporteSaving, setTransporteSaving] = React.useState(false);
   const [iniciarVentaSaving, setIniciarVentaSaving] = React.useState(false);
+  const [slotsPorBodegaInterna, setSlotsPorBodegaInterna] = React.useState<Record<string, Slot[]>>({});
+  const [bodegasInternasVentaList, setBodegasInternasVentaList] = React.useState<{ id: string; name: string }[]>([]);
+  const [slotsInternasLoading, setSlotsInternasLoading] = React.useState(false);
+
+  const loadSlotsMapaInternas = React.useCallback(async () => {
+    const cid = idCliente.trim();
+    const cc = codeCuenta.trim();
+    if (!cid || !cc) {
+      setSlotsPorBodegaInterna({});
+      setBodegasInternasVentaList([]);
+      return;
+    }
+    setSlotsInternasLoading(true);
+    try {
+      const byCode = await AsignarBodegaService.getWarehousesByCode(cc);
+      const mergedList = mergeWarehousesForClient(byCode, warehousesFallback, cid, cc).filter(isInterna);
+      setBodegasInternasVentaList(
+        mergedList.map((w) => ({
+          id: w.id,
+          name: (w.name ?? w.id).trim() || w.id,
+        })),
+      );
+      if (mergedList.length === 0) {
+        setSlotsPorBodegaInterna({});
+        return;
+      }
+      setSlotsPorBodegaInterna({});
+      const states = await Promise.all(mergedList.map((w) => fetchWarehouseStateOnce(w.id)));
+      const byWh: Record<string, Slot[]> = {};
+      mergedList.forEach((w, i) => {
+        byWh[w.id] = states[i]?.slots ?? [];
+      });
+      setSlotsPorBodegaInterna(byWh);
+    } catch {
+      setSlotsPorBodegaInterna({});
+      setBodegasInternasVentaList([]);
+    } finally {
+      setSlotsInternasLoading(false);
+    }
+  }, [idCliente, codeCuenta, warehousesFallback]);
+
+  React.useEffect(() => {
+    void loadSlotsMapaInternas();
+  }, [loadSlotsMapaInternas]);
+
+  React.useEffect(() => {
+    if (!ventaModalOpen) return;
+    void loadSlotsMapaInternas();
+  }, [ventaModalOpen, loadSlotsMapaInternas]);
 
   React.useEffect(() => {
     const cid = idCliente.trim();
@@ -254,12 +304,13 @@ export function VentasEnCursoOperadorPanel({
               <MdShoppingCart size={28} />
             </div>
             <div>
-              <h1 className="text-2xl font-extrabold tracking-tight text-slate-900">
+              <h1 className="app-title">
                 Ordenes de ventas
               </h1>
               <p className="text-sm text-slate-500">
                 El <strong>comprador</strong> se elige entre los registrados por el administrador (Compradores).
-                Productos del catálogo en unidades, estado y fecha (mismos estados que órdenes de compra).
+                Los productos de venta manual son solo los que tienen stock en el <strong>mapa de bodegas internas</strong>
+                , en unidades, con estado y fecha (mismos estados que órdenes de compra).
               </p>
             </div>
           </div>
@@ -298,19 +349,19 @@ export function VentasEnCursoOperadorPanel({
             <table className="w-full min-w-[720px] border-collapse text-left text-sm">
               <thead>
                 <tr className="border-b border-slate-200 bg-slate-50">
-                  <th className="whitespace-nowrap px-4 py-3 text-[11px] font-bold uppercase tracking-wide text-slate-500">
+                  <th className="whitespace-nowrap px-4 py-3 text-base font-bold uppercase tracking-wide text-slate-500">
                     Venta
                   </th>
-                  <th className="min-w-[120px] px-4 py-3 text-[11px] font-bold uppercase tracking-wide text-slate-500">
+                  <th className="min-w-[120px] px-4 py-3 text-base font-bold uppercase tracking-wide text-slate-500">
                     Comprador
                   </th>
-                  <th className="px-4 py-3 text-[11px] font-bold uppercase tracking-wide text-slate-500">
+                  <th className="px-4 py-3 text-base font-bold uppercase tracking-wide text-slate-500">
                     Productos
                   </th>
-                  <th className="px-4 py-3 text-[11px] font-bold uppercase tracking-wide text-slate-500">
+                  <th className="px-4 py-3 text-base font-bold uppercase tracking-wide text-slate-500">
                     Estado
                   </th>
-                  <th className="whitespace-nowrap px-4 py-3 text-[11px] font-bold uppercase tracking-wide text-slate-500">
+                  <th className="whitespace-nowrap px-4 py-3 text-base font-bold uppercase tracking-wide text-slate-500">
                     Fecha
                   </th>
                 </tr>
@@ -346,11 +397,11 @@ export function VentasEnCursoOperadorPanel({
                       className="cursor-pointer border-b border-slate-100 transition-colors hover:bg-emerald-50/70 focus-visible:bg-emerald-50/70 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-emerald-400"
                       aria-label={`Ver detalle de venta ${numeroVentaMostrado(v)}`}
                     >
-                      <td className="whitespace-nowrap px-4 py-3 font-mono text-[13px] font-semibold text-slate-900">
+                      <td className="whitespace-nowrap px-4 py-3 font-mono text-base font-semibold text-slate-900">
                         {numeroVentaMostrado(v)}
                       </td>
                       <td className="max-w-[160px] px-4 py-3 text-slate-800">
-                        <span className="line-clamp-2 text-[13px]" title={v.compradorNombre}>
+                        <span className="line-clamp-2 text-base" title={v.compradorNombre}>
                           {v.compradorNombre || "—"}
                         </span>
                       </td>
@@ -358,7 +409,7 @@ export function VentasEnCursoOperadorPanel({
                         className="max-w-md px-4 py-3 text-slate-800"
                         title={productosResumen(v)}
                       >
-                        <span className="line-clamp-2 text-[13px] font-medium">
+                        <span className="line-clamp-2 text-base font-medium">
                           {productosResumen(v)}
                         </span>
                       </td>
@@ -434,6 +485,12 @@ export function VentasEnCursoOperadorPanel({
         onClose={() => setVentaModalOpen(false)}
         productos={productos}
         compradores={compradores}
+        clientIdFirestore={idCliente.trim()}
+        slots={[]}
+        bodegasInternasVenta={bodegasInternasVentaList}
+        slotsPorBodegaInterna={slotsPorBodegaInterna}
+        soloStockMapaBodegasInternas
+        cargandoStockMapa={slotsInternasLoading}
         onCreate={async (draft) => {
           await OrdenVentaService.create(idCliente.trim(), codeCuenta.trim(), draft);
           setPage(1);
@@ -456,7 +513,7 @@ export function VentasEnCursoOperadorPanel({
           <div className="relative z-10 w-full max-w-md overflow-hidden rounded-3xl border border-slate-200/90 bg-white shadow-2xl sm:max-w-lg">
             {/* Cabecera tipo documento */}
             <div className="border-b border-slate-200 bg-linear-to-br from-slate-50 via-white to-emerald-50/30 px-6 pb-5 pt-6">
-              <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-slate-500">Orden de venta</p>
+              <p className="text-base font-bold uppercase tracking-[0.2em] text-slate-500">Orden de venta</p>
               <h2
                 id="venta-detalle-titulo"
                 className="mt-1 font-mono text-2xl font-bold tracking-tight text-slate-900"
@@ -479,30 +536,37 @@ export function VentasEnCursoOperadorPanel({
             <div className="max-h-[min(55vh,420px)] space-y-0 overflow-y-auto px-6 py-5">
               {/* Comprador */}
               <div className="rounded-2xl border border-slate-100 bg-slate-50/80 px-4 py-4">
-                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Comprador</p>
+                <p className="text-base font-bold uppercase tracking-wider text-slate-500">Comprador</p>
                 <p className="mt-1.5 text-base font-semibold leading-snug text-slate-900">
                   {detalle.compradorNombre || "—"}
                 </p>
               </div>
 
+              {detalle.origenWarehouseNombre ? (
+                <p className="mt-4 text-xs text-slate-600">
+                  Bodega de la venta:{" "}
+                  <span className="font-semibold text-slate-800">{detalle.origenWarehouseNombre}</span>
+                </p>
+              ) : null}
+
               {detalle.destinoWarehouseNombre ? (
                 <p className="mt-4 text-xs text-slate-600">
-                  Bodega destino:{" "}
+                  Bodega destino (transporte):{" "}
                   <span className="font-semibold text-slate-800">{detalle.destinoWarehouseNombre}</span>
                 </p>
               ) : null}
 
               {/* Tabla de productos */}
               <div className="mt-5">
-                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Productos</p>
+                <p className="text-base font-bold uppercase tracking-wider text-slate-500">Productos</p>
                 <div className="mt-2 overflow-hidden rounded-2xl border border-slate-200">
                   <table className="w-full text-left text-sm">
                     <thead>
                       <tr className="border-b border-slate-200 bg-slate-50/90">
-                        <th className="px-4 py-2.5 text-[10px] font-bold uppercase tracking-wide text-slate-500">
+                        <th className="px-4 py-2.5 text-base font-bold uppercase tracking-wide text-slate-500">
                           Descripción
                         </th>
-                        <th className="w-20 px-4 py-2.5 text-right text-[10px] font-bold uppercase tracking-wide text-slate-500">
+                        <th className="w-20 px-4 py-2.5 text-right text-base font-bold uppercase tracking-wide text-slate-500">
                           Cant.
                         </th>
                       </tr>
@@ -520,10 +584,10 @@ export function VentasEnCursoOperadorPanel({
                             key={`${detalle.id}-${i}`}
                             className={i % 2 === 0 ? "bg-white" : "bg-slate-50/50"}
                           >
-                            <td className="px-4 py-3 text-[13px] font-medium leading-snug text-slate-800">
+                            <td className="px-4 py-3 text-base font-medium leading-snug text-slate-800">
                               {li.titleSnapshot}
                             </td>
-                            <td className="px-4 py-3 text-right font-mono text-[13px] tabular-nums text-slate-700">
+                            <td className="px-4 py-3 text-right font-mono text-base tabular-nums text-slate-700">
                               × {li.cantidad}
                             </td>
                           </tr>
@@ -565,7 +629,7 @@ export function VentasEnCursoOperadorPanel({
           aria-modal="true"
         >
           <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-xl">
-            <h3 className="text-lg font-bold text-slate-900">Enviar a bodega interna</h3>
+            <h3 className="app-title">Enviar a bodega interna</h3>
             <p className="mt-2 text-sm text-slate-600">
               Venta <span className="font-mono font-semibold">{numeroVentaMostrado(pendienteTransporte)}</span>: se
               pondrá en <strong>Transporte</strong> hacia la bodega elegida (el custodio registrará las cajas en

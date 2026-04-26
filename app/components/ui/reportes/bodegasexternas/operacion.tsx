@@ -1,7 +1,6 @@
 "use client";
 
 import React, { useMemo } from "react";
-import { Inter } from "next/font/google";
 import {
   MdShoppingBag,
   MdInventory2,
@@ -23,7 +22,7 @@ import {
 } from "recharts";
 import type { FridemInventoryRow } from "@/lib/fridemInventory";
 
-const inter = Inter({ subsets: ["latin"], weight: ["400", "600", "700"] });
+const GEIST_STACK = "var(--font-geist-sans),ui-sans-serif,system-ui,sans-serif";
 
 export type OperacionExternasProps = {
   items: FridemInventoryRow[];
@@ -167,7 +166,7 @@ function KpiCard({
             {label}
           </p>
           <p
-            className="mt-1 text-[28px] font-bold leading-none tracking-tight"
+            className="mt-1 text-base font-bold leading-none tracking-tight"
             style={{ color: COLORS.text }}
           >
             {value}
@@ -209,8 +208,8 @@ function PieLabel(props: {
       fill={fill}
       textAnchor={anchor}
       dominantBaseline="central"
-      className="text-[11px] font-medium"
-      style={{ fontFamily: inter.style.fontFamily }}
+      className="text-base font-medium"
+      style={{ fontFamily: GEIST_STACK }}
     >
       {name}
     </text>
@@ -342,7 +341,7 @@ const Operacion: React.FC<OperacionExternasProps> = ({
   if (loading) {
     return (
       <div
-        className={`${inter.className} w-full animate-pulse bg-white px-6 py-8`}
+        className="w-full animate-pulse bg-white px-6 py-8 font-sans"
         style={{ color: COLORS.text }}
       >
         <div className="mb-8 h-7 w-64 rounded bg-slate-200" />
@@ -361,7 +360,7 @@ const Operacion: React.FC<OperacionExternasProps> = ({
 
   if (error) {
     return (
-      <div className={`${inter.className} rounded-xl border border-red-100 bg-red-50/80 px-6 py-8 text-sm text-red-800`}>
+      <div className="rounded-xl border border-red-100 bg-red-50/80 px-6 py-8 font-sans text-sm text-red-800">
         {error}
       </div>
     );
@@ -370,7 +369,7 @@ const Operacion: React.FC<OperacionExternasProps> = ({
   if (items.length === 0) {
     return (
       <div
-        className={`${inter.className} rounded-xl border border-dashed border-slate-200 bg-slate-50/80 px-6 py-12 text-center text-sm text-slate-600`}
+        className="rounded-xl border border-dashed border-slate-200 bg-slate-50/80 px-6 py-12 text-center font-sans text-sm text-slate-600"
       >
         No hay registros de inventario externo para esta bodega. Revisá la vista Listado o recargá los
         datos.
@@ -380,12 +379,12 @@ const Operacion: React.FC<OperacionExternasProps> = ({
 
   return (
     <div
-      className={`${inter.className} w-full bg-white px-6 py-8`}
+      className="w-full bg-white px-6 py-8 font-sans"
       style={{ color: COLORS.text }}
     >
       <section className="mb-10">
         <h2
-          className="mb-6 text-lg font-bold tracking-tight"
+          className="app-title mb-6"
           style={{ color: COLORS.text }}
         >
           Inventario actual ({year})
@@ -422,7 +421,7 @@ const Operacion: React.FC<OperacionExternasProps> = ({
         <div className="grid gap-6 lg:grid-cols-2">
           <div className="rounded-[12px] border border-[#E5E7EB] bg-white px-5 py-5">
             <h3
-              className="mb-4 text-base font-bold tracking-tight"
+              className="app-title mb-4"
               style={{ color: COLORS.text }}
             >
               Top 5 productos por kg
@@ -487,7 +486,7 @@ const Operacion: React.FC<OperacionExternasProps> = ({
 
           <div className="rounded-[12px] border border-[#E5E7EB] bg-white px-5 py-5">
             <h3
-              className="mb-2 text-base font-bold tracking-tight"
+              className="app-title mb-2"
               style={{ color: COLORS.text }}
             >
               Distribución por marca
@@ -531,7 +530,7 @@ const Operacion: React.FC<OperacionExternasProps> = ({
       <section>
         <div className="rounded-[12px] border border-[#E5E7EB] bg-white px-5 py-5">
           <h3
-            className="mb-1 text-base font-bold tracking-tight"
+            className="app-title mb-1"
             style={{ color: COLORS.text }}
           >
             Kg por mes (fecha de ingreso)

@@ -16,7 +16,7 @@ export default function UpsertForm({
 }: UpsertFormProps) {
   return (
     <div className="rounded-2xl bg-white p-6 shadow-sm">
-      <h2 className="text-lg font-semibold text-slate-900">
+      <h2 className="app-title">
         Registrar o actualizar posición
       </h2>
       {helperText ? (

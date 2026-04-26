@@ -3,6 +3,7 @@ import {
   doc,
   getDoc,
   onSnapshot,
+  runTransaction,
   serverTimestamp,
   setDoc,
 } from "firebase/firestore";
@@ -83,7 +84,65 @@ export const defaultHistoryState: HistoryState = {
   movimientosBodega: [],
   alertas: [],
   despachadosHistorial: [],
+  mermaProcesamientoKgTotal: 0,
 };
+
+/** Normaliza lecturas de Firestore (arrays nulos / ausentes) para no vaciar historial por accidente. */
+function coerceHistoryState(raw: Partial<HistoryState> | undefined | null): HistoryState {
+  const d = raw ?? {};
+  return {
+    ingresos: Array.isArray(d.ingresos) ? d.ingresos : [],
+    salidas: Array.isArray(d.salidas) ? d.salidas : [],
+    movimientosBodega: Array.isArray(d.movimientosBodega) ? d.movimientosBodega : [],
+    alertas: Array.isArray(d.alertas) ? d.alertas : [],
+    despachadosHistorial: Array.isArray(d.despachadosHistorial) ? d.despachadosHistorial : [],
+    mermaProcesamientoKgTotal: Number(d.mermaProcesamientoKgTotal) || 0,
+  };
+}
+
+/**
+ * Aplica un cambio al historial leyendo siempre el documento actual dentro de una transacción,
+ * para que dos pestañas o guardados seguidos no pisen listas enteras (merge + arrays = último gana y se perdían datos).
+ * No escribe `mermaProcesamientoKgTotal` aquí: ese campo lo actualiza solo `recordMermaProcesamientoKg` (merge atómico).
+ */
+export async function mergeHistoryState(
+  warehouseId: string,
+  updater: (current: HistoryState) => HistoryState,
+): Promise<HistoryState> {
+  const wid = String(warehouseId ?? "").trim() || DEFAULT_WAREHOUSE_ID;
+  const ref = historyDocRef(wid);
+  return runTransaction(db, async (transaction) => {
+    const snap = await transaction.get(ref);
+    const current = snap.exists()
+      ? coerceHistoryState({ ...defaultHistoryState, ...(snap.data() as Partial<HistoryState>) })
+      : defaultHistoryState;
+    const next = updater(current);
+    const { mermaProcesamientoKgTotal: _m, ...rest } = next;
+    const cleaned = stripUndefinedDeep(rest) as Record<string, unknown>;
+    transaction.set(
+      ref,
+      { ...cleaned, updatedAt: serverTimestamp() } as Record<string, unknown>,
+      { merge: true },
+    );
+    return next;
+  });
+}
+
+/** Suma kg de merma al historial de la bodega (reporte admin); idempotente por sesión de red. */
+export async function recordMermaProcesamientoKg(warehouseId: string | undefined, kg: number) {
+  const wid = String(warehouseId ?? "").trim();
+  const n = Number(kg);
+  if (!wid || !Number.isFinite(n) || n <= 0) return;
+  const ref = historyDocRef(wid);
+  const snap = await getDoc(ref);
+  const data = snap.exists() ? (snap.data() as Partial<HistoryState>) : {};
+  const prev = Number(data.mermaProcesamientoKgTotal) || 0;
+  await setDoc(
+    ref,
+    { mermaProcesamientoKgTotal: prev + n, updatedAt: serverTimestamp() } as Record<string, unknown>,
+    { merge: true },
+  );
+}
 
 export async function ensureWarehouseState(warehouseId: string) {
   const ref = stateDocRef(warehouseId);
@@ -107,8 +166,7 @@ export async function fetchWarehouseStateOnce(
 export async function fetchHistoryStateOnce(warehouseId: string): Promise<HistoryState> {
   const snap = await getDoc(historyDocRef(warehouseId));
   if (!snap.exists()) return defaultHistoryState;
-  const data = snap.data() as Partial<HistoryState>;
-  return { ...defaultHistoryState, ...data };
+  return coerceHistoryState({ ...defaultHistoryState, ...(snap.data() as Partial<HistoryState>) });
 }
 
 export function subscribeWarehouseState(
@@ -158,19 +216,20 @@ export function subscribeHistoryState(
       handler(defaultHistoryState);
       return;
     }
-    const data = snap.data() as Partial<HistoryState>;
-    handler({ ...defaultHistoryState, ...data });
+    handler(coerceHistoryState({ ...defaultHistoryState, ...(snap.data() as Partial<HistoryState>) }));
   });
 }
 
+/**
+ * @deprecated Preferir `mergeHistoryState` para evitar condiciones de carrera.
+ * No escribe `mermaProcesamientoKgTotal` para no pisar sumas hechas con `recordMermaProcesamientoKg`.
+ */
 export async function saveHistoryState(
   warehouseId: string,
   state: Partial<HistoryState>,
 ) {
   const cleaned = stripUndefinedDeep(state) as Partial<HistoryState>;
-  await setDoc(
-    historyDocRef(warehouseId),
-    { ...cleaned, updatedAt: serverTimestamp() },
-    { merge: true },
-  );
+  const rest = { ...(cleaned as Record<string, unknown>) };
+  delete rest.mermaProcesamientoKgTotal;
+  await setDoc(historyDocRef(warehouseId), { ...rest, updatedAt: serverTimestamp() }, { merge: true });
 }

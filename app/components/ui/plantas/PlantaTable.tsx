@@ -14,46 +14,46 @@ export const PlantaTable = ({ plantas, onEdit, onDelete }: Props) => {
         <table className="w-full text-left border-collapse">
           <thead className="bg-[#A8D5BA]/10">
             <tr>
-              <th className="p-4 text-[12px] font-medium text-gray-500 uppercase">Código</th>
-              <th className="p-4 text-[12px] font-medium text-gray-500 uppercase">Nombre / Planta</th>
-              <th className="p-4 text-[12px] font-medium text-gray-500 uppercase">Ubicación</th>
-              <th className="p-4 text-[12px] font-medium text-gray-500 uppercase text-center">Capacidad</th>
-              <th className="p-4 text-[12px] font-medium text-gray-500 uppercase text-center">Estado</th>
-              <th className="p-4 text-[12px] font-medium text-gray-500 uppercase text-right">Acciones</th>
+              <th className="p-4 text-base font-medium text-gray-500 uppercase">Código</th>
+              <th className="p-4 text-base font-medium text-gray-500 uppercase">Nombre / Planta</th>
+              <th className="p-4 text-base font-medium text-gray-500 uppercase">Ubicación</th>
+              <th className="p-4 text-base font-medium text-gray-500 uppercase text-center">Capacidad</th>
+              <th className="p-4 text-base font-medium text-gray-500 uppercase text-center">Estado</th>
+              <th className="p-4 text-base font-medium text-gray-500 uppercase text-right">Acciones</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-50">
             {plantas.map((p) => (
               <tr key={p.id} className="hover:bg-gray-50 transition-colors">
                 {/* Código Base36 */}
-                <td className="p-4 text-[14px] font-mono font-bold text-[#2D5A3F]">
+                <td className="p-4 text-base font-mono font-bold text-[#2D5A3F]">
                   {p.code}
                 </td>
                 
                 {/* Nombre y Razón Social */}
                 <td className="p-4">
                   <div className="flex flex-col">
-                    <span className="text-[14px] text-gray-900 font-medium">{p.plantName}</span>
-                    <span className="text-[11px] text-gray-400">{p.name}</span>
+                    <span className="text-base text-gray-900 font-medium">{p.plantName}</span>
+                    <span className="text-base text-gray-400">{p.name}</span>
                   </div>
                 </td>
 
                 {/* Ubicación y Rango Térmico */}
                 <td className="p-4">
                   <div className="flex flex-col">
-                    <span className="text-[13px] text-gray-700">{p.location}</span>
-                    <span className="text-[11px] text-gray-400">{p.tempRange}</span>
+                    <span className="text-base text-gray-700">{p.location}</span>
+                    <span className="text-base text-gray-400">{p.tempRange}</span>
                   </div>
                 </td>
 
                 {/* Capacidad */}
-                <td className="p-4 text-[14px] text-gray-700 text-center">
-                  {p.maxPallets.toLocaleString()} <span className="text-[10px] text-gray-400">PLTS</span>
+                <td className="p-4 text-base text-gray-700 text-center">
+                  {p.maxPallets.toLocaleString()} <span className="text-base text-gray-400">PLTS</span>
                 </td>
 
                 {/* Estado Operacional */}
                 <td className="p-4 text-center">
-                  <span className={`px-2 py-1 rounded-full text-[10px] font-bold uppercase ${
+                  <span className={`px-2 py-1 rounded-full text-base font-bold uppercase ${
                     p.isOperational 
                       ? "bg-green-100 text-green-700" 
                       : "bg-red-100 text-red-700"
@@ -89,7 +89,7 @@ export const PlantaTable = ({ plantas, onEdit, onDelete }: Props) => {
       </div>
 
       {plantas.length === 0 && (
-        <div className="p-8 text-center text-gray-400 text-[14px]">
+        <div className="p-8 text-center text-gray-400 text-base">
           No hay plantas registradas.
         </div>
       )}

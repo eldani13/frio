@@ -72,7 +72,7 @@ export default function Header({
             >
               
               <HiOutlineSquares2X2 size={24} />
-              <span className="text-[14px] font-medium">Menú</span>
+              <span className="text-base font-medium">Menú</span>
             </button>
 
           
@@ -93,7 +93,7 @@ export default function Header({
                 <span className="flex h-8 w-8 items-center justify-center rounded-full border border-dashed border-slate-400 text-slate-600 transition group-hover:border-[#2D5A3F] group-hover:bg-[#f0fdf4] group-hover:text-[#1B4332]">
                   <FiPlus className="h-4 w-4" strokeWidth={2.5} aria-hidden />
                 </span>
-                <span className="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500 group-hover:text-[#1B4332]">
+                <span className="text-base font-bold uppercase tracking-[0.12em] text-slate-500 group-hover:text-[#1B4332]">
                   Crear tarea
                 </span>
               </button>
@@ -104,16 +104,16 @@ export default function Header({
             {/* PERFIL DE USUARIO */}
             <div className="flex items-center gap-3">
               {userDisplayName && (
-                <div className="w-10 h-10 rounded-full bg-[#A8D5BA] flex items-center justify-center text-[#1B3B29] font-bold text-[16px]">
+                <div className="w-10 h-10 rounded-full bg-[#A8D5BA] flex items-center justify-center text-[#1B3B29] font-bold text-base">
                   {userDisplayName.charAt(0).toUpperCase()}
                 </div>
               )}
               
               <div className="flex flex-col">
-                <h3 className="text-[16px] font-semibold text-gray-800 leading-tight">
+                <h3 className="app-title leading-tight">
                 {userDisplayName}
                 </h3>
-                <span className="text-[12px] text-gray-400 font-normal">
+                <span className="text-base text-gray-400 font-normal">
                 {roleLabel}
                 </span>
               </div>

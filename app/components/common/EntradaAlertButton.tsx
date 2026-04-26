@@ -30,7 +30,7 @@ export default function EntradaAlertButton({ boxes, threshold = 5, className }: 
         onClick={() => setShowModal(true)}
       >
         <FiAlertTriangle className="w-4 h-4 mr-1" />
-        <span className="text-[11px] font-semibold leading-none">{alerts.length}</span>
+        <span className="text-base font-semibold leading-none">{alerts.length}</span>
       </button>
       {showModal && (
         <div
@@ -40,16 +40,15 @@ export default function EntradaAlertButton({ boxes, threshold = 5, className }: 
           onClick={() => setShowModal(false)}
         >
           <div
-            className="w-full max-w-lg sm:max-w-xl rounded-3xl border border-blue-100 bg-white/90 shadow-2xl backdrop-blur-lg relative overflow-hidden animate-fade-in-up"
+            className="relative w-full max-w-lg animate-fade-in-up overflow-hidden rounded-3xl border border-blue-100 bg-white/90 shadow-2xl backdrop-blur-lg sm:max-w-xl"
             onClick={event => event.stopPropagation()}
-            style={{ fontFamily: '"Space Grotesk", "Work Sans", sans-serif' }}
           >
             {/* Header con gradiente y botón cerrar flotante */}
             <div className="flex flex-col items-center justify-center pt-8 pb-4 px-8 border-b border-blue-100 bg-gradient-to-r from-blue-50 to-white rounded-t-3xl relative">
               <span className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-red-100 shadow animate-pulse mb-2">
                 <FiAlertTriangle className="w-8 h-8 text-red-500" />
               </span>
-              <h2 className="text-2xl font-extrabold text-red-700 drop-shadow mb-1 tracking-tight">Alertas de Entrada</h2>
+              <h2 className="app-title mb-1">Alertas de Entrada</h2>
               <p className="text-sm text-slate-500 font-medium text-center">Estas son las alertas de temperatura activas en la zona de entrada.</p>
               <button
                 className="absolute top-4 right-4 text-slate-400 hover:text-red-500 text-2xl font-bold focus:outline-none transition-colors"
@@ -80,7 +79,7 @@ export default function EntradaAlertButton({ boxes, threshold = 5, className }: 
                           <span className="ml-2 text-xs text-slate-700 bg-slate-100 rounded px-2 py-0.5">Id: {item.autoId}</span>
                         </div>
                         {item.client ? (
-                          <div className="text-[11px] text-slate-600 mb-1">Cliente: {item.client}</div>
+                          <div className="text-base text-slate-600 mb-1">Cliente: {item.client}</div>
                         ) : null}
                         {typeof item.temperature === 'number' && (
                           <span className="inline-block text-xs font-semibold text-white bg-red-500 rounded px-2 py-0.5 animate-pulse shadow">{item.temperature} °C</span>

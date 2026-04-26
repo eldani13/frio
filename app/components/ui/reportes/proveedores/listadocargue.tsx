@@ -200,9 +200,9 @@ export default function ListadoCargue() {
   }
 
   return (
-    <div className="border border-slate-100 rounded-2xl overflow-hidden font-['Inter'] bg-white shadow-sm">
+    <div className="border border-slate-100 rounded-2xl overflow-hidden  bg-white shadow-sm">
       <div className="bg-[#A8D5BA]/20 p-5 border-b border-slate-100">
-        <h3 className="text-[18px] font-bold text-slate-800 tracking-tight uppercase">
+        <h3 className="app-title uppercase tracking-tight">
           En inventario proveedores
         </h3>
         <p className="mt-1 text-xs text-slate-600">
@@ -260,7 +260,7 @@ export default function ListadoCargue() {
               </th>
             </tr>
           </thead>
-          <tbody className="text-slate-700 text-[14px]">
+          <tbody className="text-slate-700 text-base">
             {loading ? (
               Array.from({ length: 4 }).map((_, idx) => (
                 <tr key={`sk-${idx}`} className="animate-pulse">
@@ -297,7 +297,7 @@ export default function ListadoCargue() {
                       className="whitespace-nowrap px-4 py-4 border-b border-slate-100 max-w-[20rem]"
                       title={d.descripcion}
                     >
-                      <span className="inline-block rounded-lg bg-slate-100 px-3 py-1.5 font-semibold text-[13px] text-slate-700 truncate max-w-full">
+                      <span className="inline-block rounded-lg bg-slate-100 px-3 py-1.5 font-semibold text-base text-slate-700 truncate max-w-full">
                         {d.descripcion}
                       </span>
                     </td>
@@ -346,7 +346,7 @@ export default function ListadoCargue() {
           aria-label="Total de inventario"
         >
           <div className="flex flex-col items-stretch sm:flex-row sm:items-center sm:justify-end sm:gap-4">
-            <span className="text-center text-[11px] font-bold uppercase tracking-[0.2em] text-slate-500 sm:text-right sm:pt-1">
+            <span className="text-center text-base font-bold uppercase tracking-[0.2em] text-slate-500 sm:text-right sm:pt-1">
               Total pedido (líneas mostradas)
             </span>
             <div className="mt-2 flex flex-col items-center gap-1 sm:mt-0 sm:items-end">

@@ -1,7 +1,16 @@
 "use client";
-import { useState, useEffect } from "react";
-import { HiOutlineXMark } from "react-icons/hi2";
+import { useState, useEffect, useMemo } from "react";
 import { Camion } from "@/app/types/camion";
+import { MARCA_VEHICULO_OTRA, MARCAS_VEHICULOS, marcaEstaEnLista } from "@/app/lib/marcasVehiculos";
+import {
+  FORMULARIO_CREACION_BODY,
+  FORMULARIO_CREACION_GRID,
+  FORMULARIO_CREACION_INPUT,
+  FORMULARIO_CREACION_LABEL,
+  FORMULARIO_CREACION_SELECT,
+  FormularioPlantilla,
+  FormularioPlantillaAcciones,
+} from "@/app/components/ui/FormularioPlantilla";
 
 interface TruckFormProps {
   isOpen: boolean;
@@ -29,8 +38,21 @@ const INITIAL_STATE: TruckFormData = {
 export const TruckForm = ({ isOpen, onClose, onSuccess, truck }: TruckFormProps) => {
   const [formData, setFormData] = useState<TruckFormData>(INITIAL_STATE);
   const [loading, setLoading] = useState(false);
+  const [marcaError, setMarcaError] = useState<string | null>(null);
+
+  const valorMarcaEnSelect = useMemo(() => {
+    const b = formData.brand.trim();
+    if (!b) return "";
+    const canon = MARCAS_VEHICULOS.find(
+      (m) => m.localeCompare(b, "es", { sensitivity: "base" }) === 0,
+    );
+    return canon ?? MARCA_VEHICULO_OTRA;
+  }, [formData.brand]);
+
+  const marcaEsOtra = valorMarcaEnSelect === MARCA_VEHICULO_OTRA;
 
   useEffect(() => {
+    setMarcaError(null);
     if (truck) {
       setFormData({
         plate: truck.plate,
@@ -49,10 +71,13 @@ export const TruckForm = ({ isOpen, onClose, onSuccess, truck }: TruckFormProps)
     }
   }, [truck, isOpen]);
 
-  if (!isOpen) return null;
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setMarcaError(null);
+    if (!formData.brand.trim()) {
+      setMarcaError("Elegí marca.");
+      return;
+    }
     setLoading(true);
     try {
       await onSuccess(formData);
@@ -66,108 +91,175 @@ export const TruckForm = ({ isOpen, onClose, onSuccess, truck }: TruckFormProps)
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value, type } = e.target;
-    
-    setFormData(prev => ({
+    if (name === "brand") setMarcaError(null);
+    setFormData((prev) => ({
       ...prev,
-      [name]: type === 'number' ? Number(value) : value
+      [name]: type === "number" ? Number(value) : value,
     }));
   };
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20 backdrop-blur-sm p-4">
-      <div className="bg-white w-full max-w-2xl rounded-[12px] shadow-xl border border-gray-100 p-6 animate-in fade-in zoom-in duration-200 overflow-y-auto max-h-[90vh]">
-        <div className="flex justify-between items-center mb-6">
-          <h2 className="text-[18px] font-semibold text-gray-900">
-            {truck ? "Editar Camión" : "Nuevo Camión"}
-          </h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 transition-colors">
-            <HiOutlineXMark size={24} />
-          </button>
-        </div>
+  const handleMarcaSelect = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const v = e.target.value;
+    setMarcaError(null);
+    if (v === "") {
+      setFormData((p) => ({ ...p, brand: "" }));
+      return;
+    }
+    if (v === MARCA_VEHICULO_OTRA) {
+      setFormData((p) => ({
+        ...p,
+        brand: marcaEstaEnLista(p.brand) ? "" : p.brand.trim(),
+      }));
+      return;
+    }
+    setFormData((p) => ({ ...p, brand: v }));
+  };
 
-        <form onSubmit={handleSubmit} className="space-y-5">
-          {/* Fila 1: Placa y Marca */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-[11px] font-bold text-gray-500 uppercase mb-1">Placa / Matrícula</label>
+  return (
+    <FormularioPlantilla
+      isOpen={isOpen}
+      onClose={onClose}
+      titulo={truck ? "Editar camión" : "Nuevo camión"}
+      subtitulo="Flota básica"
+      titleId="camion-form-title"
+      maxWidthClass="max-w-2xl"
+      footer={
+        <FormularioPlantillaAcciones
+          formId="camion-form"
+          onCancel={onClose}
+          submitLabel={truck ? "Actualizar camión" : "Crear camión"}
+          loading={loading}
+        />
+      }
+    >
+      <form id="camion-form" onSubmit={handleSubmit} className={`${FORMULARIO_CREACION_BODY} space-y-5`}>
+          <div className="grid grid-cols-1 gap-x-4 gap-y-5 md:grid-cols-[minmax(8.5rem,10.5rem)_minmax(0,1fr)] md:items-end">
+            <div className="w-full max-w-[11rem] md:max-w-none">
+              <label htmlFor="camion-plate" className={FORMULARIO_CREACION_LABEL}>
+                Placa
+              </label>
               <input
+                id="camion-plate"
                 name="plate"
                 type="text"
                 value={formData.plate}
                 onChange={handleChange}
                 placeholder="ABC-123"
-                className="w-full px-4 py-2 border border-gray-200 rounded-[8px] focus:outline-none focus:border-[#A8D5BA] transition-all text-[14px] uppercase"
+                maxLength={16}
+                className={`w-full ${FORMULARIO_CREACION_INPUT} uppercase`}
                 required
               />
             </div>
-            <div>
-              <label className="block text-[11px] font-bold text-gray-500 uppercase mb-1">Marca y Modelo</label>
-              <div className="flex gap-2">
-                <input
-                  name="brand"
-                  placeholder="Marca"
-                  value={formData.brand}
-                  onChange={handleChange}
-                  className="w-full px-4 py-2 border border-gray-200 rounded-[8px] focus:outline-none focus:border-[#A8D5BA] text-[14px]"
-                  required
-                />
-                <input
-                  name="model"
-                  placeholder="Año"
-                  value={formData.model}
-                  onChange={handleChange}
-                  className="w-32 px-4 py-2 border border-gray-200 rounded-[8px] focus:outline-none focus:border-[#A8D5BA] text-[14px]"
-                />
+            <div className="min-w-0 w-full">
+              <div className="flex w-full min-w-0 flex-row flex-nowrap items-end gap-2 sm:gap-3">
+                <div className="min-w-0 flex-1 basis-0">
+                  <label htmlFor="camion-brand" className={FORMULARIO_CREACION_LABEL}>
+                    Marca
+                  </label>
+                  <div className="flex flex-row flex-nowrap gap-2">
+                    <select
+                      id="camion-brand"
+                      value={valorMarcaEnSelect}
+                      onChange={handleMarcaSelect}
+                      className={`min-h-[48px] w-full min-w-[9rem] flex-1 sm:min-w-[11rem] ${FORMULARIO_CREACION_SELECT}`}
+                    >
+                      <option value="">— Elegí marca —</option>
+                      {MARCAS_VEHICULOS.map((m) => (
+                        <option key={m} value={m}>
+                          {m}
+                        </option>
+                      ))}
+                      <option value={MARCA_VEHICULO_OTRA}>Otra marca…</option>
+                    </select>
+                    {marcaEsOtra ? (
+                      <input
+                        id="camion-brand-otra"
+                        name="brand"
+                        type="text"
+                        value={formData.brand}
+                        onChange={handleChange}
+                        placeholder="Marca"
+                        title="Escribí la marca"
+                        className={`block w-[9rem] shrink-0 ${FORMULARIO_CREACION_INPUT}`}
+                        autoComplete="organization"
+                      />
+                    ) : null}
+                  </div>
+                </div>
+                <div className="w-32 shrink-0 sm:w-36">
+                  <label htmlFor="camion-model" className={FORMULARIO_CREACION_LABEL}>
+                    Modelo
+                  </label>
+                  <input
+                    id="camion-model"
+                    name="model"
+                    placeholder="Ej. 2022"
+                    value={formData.model}
+                    onChange={handleChange}
+                    className={`w-full ${FORMULARIO_CREACION_INPUT}`}
+                  />
+                </div>
               </div>
+              {marcaError ? <p className="mt-1.5 text-base text-red-600">{marcaError}</p> : null}
             </div>
           </div>
 
-          {/* Fila 2: Capacidades */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className={FORMULARIO_CREACION_GRID}>
             <div>
-              <label className="block text-[11px] font-bold text-gray-500 uppercase mb-1">Peso Máx (Kg)</label>
+              <label htmlFor="camion-maxWeight" className={FORMULARIO_CREACION_LABEL}>
+                Peso máx (kg)
+              </label>
               <input
+                id="camion-maxWeight"
                 name="maxWeightKg"
                 type="number"
                 value={formData.maxWeightKg}
                 onChange={handleChange}
-                className="w-full px-4 py-2 border border-gray-200 rounded-[8px] focus:outline-none focus:border-[#A8D5BA] text-[14px]"
+                className={FORMULARIO_CREACION_INPUT}
                 required
               />
             </div>
             <div>
-              <label className="block text-[11px] font-bold text-gray-500 uppercase mb-1">Volumen (M³)</label>
+              <label htmlFor="camion-maxVol" className={FORMULARIO_CREACION_LABEL}>
+                Volumen (m³)
+              </label>
               <input
+                id="camion-maxVol"
                 name="maxVolumeM3"
                 type="number"
                 value={formData.maxVolumeM3}
                 onChange={handleChange}
-                className="w-full px-4 py-2 border border-gray-200 rounded-[8px] focus:outline-none focus:border-[#A8D5BA] text-[14px]"
+                className={FORMULARIO_CREACION_INPUT}
                 required
               />
             </div>
             <div>
-              <label className="block text-[11px] font-bold text-gray-500 uppercase mb-1">Cap. Pallets</label>
+              <label htmlFor="camion-pallets" className={FORMULARIO_CREACION_LABEL}>
+                Cap. pallets
+              </label>
               <input
+                id="camion-pallets"
                 name="palletCapacity"
                 type="number"
                 value={formData.palletCapacity}
                 onChange={handleChange}
-                className="w-full px-4 py-2 border border-gray-200 rounded-[8px] focus:outline-none focus:border-[#A8D5BA] text-[14px]"
+                className={FORMULARIO_CREACION_INPUT}
                 required
               />
             </div>
           </div>
 
-          {/* Fila 3: Tipo y Temperatura */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 border-t pt-4">
+          <div className={`${FORMULARIO_CREACION_GRID} border-t border-gray-100 pt-4 md:grid-cols-2`}>
             <div>
-              <label className="block text-[11px] font-bold text-gray-500 uppercase mb-1">Tipo de Vehículo</label>
+              <label htmlFor="camion-type" className={FORMULARIO_CREACION_LABEL}>
+                Tipo de vehículo
+              </label>
               <select
+                id="camion-type"
                 name="type"
                 value={formData.type}
                 onChange={handleChange}
-                className="w-full px-4 py-2 border border-gray-200 rounded-[8px] focus:outline-none focus:border-[#A8D5BA] text-[14px] bg-white"
+                className={FORMULARIO_CREACION_SELECT}
               >
                 <option value="Seco">Seco</option>
                 <option value="Refrigerado">Refrigerado</option>
@@ -175,38 +267,22 @@ export const TruckForm = ({ isOpen, onClose, onSuccess, truck }: TruckFormProps)
               </select>
             </div>
             <div>
-              <label className="block text-[11px] font-bold text-gray-500 uppercase mb-1">Rango Térmico (Opcional)</label>
+              <label htmlFor="camion-temp" className={FORMULARIO_CREACION_LABEL}>
+                Rango térmico
+              </label>
               <input
+                id="camion-temp"
                 name="tempRange"
                 type="text"
-                disabled={formData.type === 'Seco'}
+                disabled={formData.type === "Seco"}
                 value={formData.tempRange}
                 onChange={handleChange}
                 placeholder="-18°C a 5°C"
-                className="w-full px-4 py-2 border border-gray-200 rounded-[8px] focus:outline-none focus:border-[#A8D5BA] text-[14px] disabled:bg-gray-50"
+                className={`${FORMULARIO_CREACION_INPUT} disabled:bg-gray-50`}
               />
             </div>
           </div>
-
-          {/* Footer del Modal */}
-          <div className="flex gap-3 pt-4">
-            <button
-              type="button"
-              onClick={onClose}
-              className="flex-1 px-4 py-2 border border-gray-200 rounded-[8px] text-[14px] font-medium text-gray-600 hover:bg-gray-50 transition-all"
-            >
-              Cancelar
-            </button>
-            <button
-              type="submit"
-              disabled={loading}
-              className="flex-1 px-4 py-2 bg-[#A8D5BA] text-[#2D5A3F] rounded-[8px] text-[14px] font-medium hover:bg-[#97c4a9] active:scale-95 transition-all disabled:opacity-50"
-            >
-              {loading ? "Guardando..." : truck ? "Actualizar Camión" : "Crear Camión"}
-            </button>
-          </div>
         </form>
-      </div>
-    </div>
+    </FormularioPlantilla>
   );
 };

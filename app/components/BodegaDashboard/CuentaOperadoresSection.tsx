@@ -129,7 +129,7 @@ export function CuentaOperadoresSection() {
     <div className="flex w-full max-w-4xl flex-col gap-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="text-lg font-bold text-slate-900">Operadores de cuenta</h2>
+          <h2 className="app-title">Operadores de cuenta</h2>
           <p className="mt-1 text-sm text-slate-500">
             Usuarios con rol <span className="font-semibold text-slate-700">operador de cuentas</span>. Inician sesión
             con correo y contraseña.
@@ -164,10 +164,10 @@ export function CuentaOperadoresSection() {
             <table className="w-full min-w-[520px] border-collapse text-left text-sm">
               <thead>
                 <tr className="border-b border-slate-200 bg-slate-50">
-                  <th className="px-4 py-3 text-[11px] font-bold uppercase tracking-wide text-slate-500">Nombre</th>
-                  <th className="px-4 py-3 text-[11px] font-bold uppercase tracking-wide text-slate-500">Correo</th>
-                  <th className="px-4 py-3 text-[11px] font-bold uppercase tracking-wide text-slate-500">Código</th>
-                  <th className="px-4 py-3 text-[11px] font-bold uppercase tracking-wide text-slate-500">Alta</th>
+                  <th className="px-4 py-3 text-base font-bold uppercase tracking-wide text-slate-500">Nombre</th>
+                  <th className="px-4 py-3 text-base font-bold uppercase tracking-wide text-slate-500">Correo</th>
+                  <th className="px-4 py-3 text-base font-bold uppercase tracking-wide text-slate-500">Código</th>
+                  <th className="px-4 py-3 text-base font-bold uppercase tracking-wide text-slate-500">Alta</th>
                 </tr>
               </thead>
               <tbody>
@@ -191,12 +191,12 @@ export function CuentaOperadoresSection() {
                       key={r.id}
                       className="border-b border-slate-100 transition-colors hover:bg-violet-50/80"
                     >
-                      <td className="px-4 py-3 text-[13px] font-medium text-slate-800">{r.name}</td>
-                      <td className="px-4 py-3 text-[13px] text-slate-700">{r.email || "—"}</td>
-                      <td className="px-4 py-3 font-mono text-[13px] font-semibold text-slate-900">
+                      <td className="px-4 py-3 text-base font-medium text-slate-800">{r.name}</td>
+                      <td className="px-4 py-3 text-base text-slate-700">{r.email || "—"}</td>
+                      <td className="px-4 py-3 font-mono text-base font-semibold text-slate-900">
                         {r.code || "—"}
                       </td>
-                      <td className="whitespace-nowrap px-4 py-3 text-[13px] text-slate-600">
+                      <td className="whitespace-nowrap px-4 py-3 text-base text-slate-600">
                         {r.createdAt ?? "—"}
                       </td>
                     </tr>
@@ -225,7 +225,7 @@ export function CuentaOperadoresSection() {
                 <p className="text-xs font-semibold uppercase tracking-[0.25em] text-slate-400">
                   Nuevo operador de cuenta
                 </p>
-                <h3 id="modal-operador-cuenta-titulo" className="mt-1 text-xl font-semibold text-slate-900">
+                <h3 id="modal-operador-cuenta-titulo" className="app-title mt-1">
                   Crear operador de cuenta
                 </h3>
                 <p className="mt-1 text-sm text-slate-600">ID se genera al guardar.</p>

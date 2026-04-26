@@ -346,19 +346,19 @@ export default function ConfiguratorPanel({
           <table className="w-full min-w-[920px] border-collapse text-left text-sm">
             <thead>
               <tr className="border-b border-slate-200 bg-slate-50">
-                <th className="whitespace-nowrap px-4 py-3 font-bold uppercase tracking-wide text-[11px] text-slate-500">
+                <th className="whitespace-nowrap px-4 py-3 font-bold uppercase tracking-wide text-base text-slate-500">
                   Código
                 </th>
-                <th className="min-w-[10rem] px-4 py-3 font-bold uppercase tracking-wide text-[11px] text-slate-500">
+                <th className="min-w-[10rem] px-4 py-3 font-bold uppercase tracking-wide text-base text-slate-500">
                   Nombre
                 </th>
-                <th className="min-w-[10rem] px-4 py-3 font-bold uppercase tracking-wide text-[11px] text-slate-500">
+                <th className="min-w-[10rem] px-4 py-3 font-bold uppercase tracking-wide text-base text-slate-500">
                   Bodega asignada
                 </th>
-                <th className="whitespace-nowrap px-4 py-3 font-bold uppercase tracking-wide text-[11px] text-slate-500">
+                <th className="whitespace-nowrap px-4 py-3 font-bold uppercase tracking-wide text-base text-slate-500">
                   Credenciales
                 </th>
-                <th className="min-w-[8rem] px-4 py-3 font-bold uppercase tracking-wide text-[11px] text-slate-500">
+                <th className="min-w-[8rem] px-4 py-3 font-bold uppercase tracking-wide text-base text-slate-500">
                   Acciones
                 </th>
               </tr>
@@ -382,14 +382,14 @@ export default function ConfiguratorPanel({
                       key={client.id}
                       className="border-b border-slate-100 transition-colors hover:bg-violet-50/80"
                     >
-                      <td className="whitespace-nowrap px-4 py-3 font-mono text-[13px] font-semibold text-slate-900">
+                      <td className="whitespace-nowrap px-4 py-3 font-mono text-base font-semibold text-slate-900">
                         {client.code}
                       </td>
-                      <td className="max-w-[14rem] px-4 py-3 text-[13px] font-medium text-slate-800">
+                      <td className="max-w-[14rem] px-4 py-3 text-base font-medium text-slate-800">
                         <span className={client.disabled ? "text-slate-400" : ""}>{client.name}</span>
                       </td>
                       <td
-                        className="max-w-[12rem] px-4 py-3 text-[13px] text-slate-800"
+                        className="max-w-[12rem] px-4 py-3 text-base text-slate-800"
                         title={
                           warehouseNameByAccountCode.get(ensureFiveClientCode(client.code ?? "")) ??
                           undefined
@@ -481,16 +481,16 @@ export default function ConfiguratorPanel({
           <table className="w-full min-w-[860px] border-collapse text-left text-sm">
             <thead>
               <tr className="border-b border-slate-200 bg-slate-50">
-                <th className="min-w-[12rem] px-4 py-3 font-bold uppercase tracking-wide text-[11px] text-slate-500">
+                <th className="min-w-[12rem] px-4 py-3 font-bold uppercase tracking-wide text-base text-slate-500">
                   Nombre
                 </th>
-                <th className="whitespace-nowrap px-4 py-3 font-bold uppercase tracking-wide text-[11px] text-slate-500">
+                <th className="whitespace-nowrap px-4 py-3 font-bold uppercase tracking-wide text-base text-slate-500">
                   Capacidad
                 </th>
-                <th className="min-w-[11rem] px-4 py-3 font-bold uppercase tracking-wide text-[11px] text-slate-500">
+                <th className="min-w-[11rem] px-4 py-3 font-bold uppercase tracking-wide text-base text-slate-500">
                   Bodega asignada
                 </th>
-                <th className="min-w-[8rem] px-4 py-3 font-bold uppercase tracking-wide text-[11px] text-slate-500">
+                <th className="min-w-[8rem] px-4 py-3 font-bold uppercase tracking-wide text-base text-slate-500">
                   Acciones
                 </th>
               </tr>
@@ -528,23 +528,23 @@ export default function ConfiguratorPanel({
                       <td className="max-w-[16rem] px-4 py-3">
                         <div className="flex flex-col gap-0.5">
                           <span
-                            className={`text-[13px] font-semibold text-slate-900 ${warehouse.disabled ? "text-slate-400" : ""}`}
+                            className={`text-base font-semibold text-slate-900 ${warehouse.disabled ? "text-slate-400" : ""}`}
                           >
                             {warehouse.name || "Sin nombre"}
                           </span>
-                          <span className="font-mono text-[11px] text-slate-500">{shortId}</span>
-                          <span className="inline-flex w-fit rounded-full border border-slate-200 bg-slate-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-700">
+                          <span className="font-mono text-base text-slate-500">{shortId}</span>
+                          <span className="inline-flex w-fit rounded-full border border-slate-200 bg-slate-100 px-2 py-0.5 text-base font-semibold uppercase tracking-wide text-slate-700">
                             {effectiveStatus === "externa" ? "Externa" : "Interna"}
                           </span>
                         </div>
                       </td>
-                      <td className="whitespace-nowrap px-4 py-3 text-[13px] font-semibold tabular-nums text-slate-800">
+                      <td className="whitespace-nowrap px-4 py-3 text-base font-semibold tabular-nums text-slate-800">
                         {capacityLabel}
                       </td>
-                      <td className="max-w-[14rem] px-4 py-3 text-[13px] text-slate-800" title={assignedDisplay}>
+                      <td className="max-w-[14rem] px-4 py-3 text-base text-slate-800" title={assignedDisplay}>
                         <div className="flex flex-col gap-0.5">
                           <span className="line-clamp-2">{assignedDisplay}</span>
-                          <span className="font-mono text-[11px] text-slate-500">
+                          <span className="font-mono text-base text-slate-500">
                             {normalizedCode || "Sin código"}
                           </span>
                         </div>
@@ -618,22 +618,22 @@ export default function ConfiguratorPanel({
               <table className="w-full min-w-[960px] border-collapse text-left text-sm">
                 <thead>
                   <tr className="border-b border-slate-200 bg-slate-50">
-                    <th className="whitespace-nowrap px-4 py-3 font-bold uppercase tracking-wide text-[11px] text-slate-500">
+                    <th className="whitespace-nowrap px-4 py-3 font-bold uppercase tracking-wide text-base text-slate-500">
                       Código
                     </th>
-                    <th className="min-w-[8rem] px-4 py-3 font-bold uppercase tracking-wide text-[11px] text-slate-500">
+                    <th className="min-w-[8rem] px-4 py-3 font-bold uppercase tracking-wide text-base text-slate-500">
                       Rol
                     </th>
-                    <th className="min-w-[10rem] px-4 py-3 font-bold uppercase tracking-wide text-[11px] text-slate-500">
+                    <th className="min-w-[10rem] px-4 py-3 font-bold uppercase tracking-wide text-base text-slate-500">
                       Nombre
                     </th>
-                    <th className="min-w-[10rem] px-4 py-3 font-bold uppercase tracking-wide text-[11px] text-slate-500">
+                    <th className="min-w-[10rem] px-4 py-3 font-bold uppercase tracking-wide text-base text-slate-500">
                       Cuenta
                     </th>
-                    <th className="whitespace-nowrap px-4 py-3 font-bold uppercase tracking-wide text-[11px] text-slate-500">
+                    <th className="whitespace-nowrap px-4 py-3 font-bold uppercase tracking-wide text-base text-slate-500">
                       Credenciales
                     </th>
-                    <th className="min-w-[8rem] px-4 py-3 font-bold uppercase tracking-wide text-[11px] text-slate-500">
+                    <th className="min-w-[8rem] px-4 py-3 font-bold uppercase tracking-wide text-base text-slate-500">
                       Acciones
                     </th>
                   </tr>
@@ -660,7 +660,7 @@ export default function ConfiguratorPanel({
                           key={`${user.id}-${index}`}
                           className="border-b border-slate-100 transition-colors hover:bg-violet-50/80"
                         >
-                          <td className="whitespace-nowrap px-4 py-3 font-mono text-[13px] font-semibold text-slate-900">
+                          <td className="whitespace-nowrap px-4 py-3 font-mono text-base font-semibold text-slate-900">
                             {code}
                           </td>
                           <td className="px-4 py-3">
@@ -668,11 +668,11 @@ export default function ConfiguratorPanel({
                               {roleLabels[user.role] ?? user.role}
                             </span>
                           </td>
-                          <td className="max-w-[14rem] px-4 py-3 text-[13px] font-medium text-slate-800">
+                          <td className="max-w-[14rem] px-4 py-3 text-base font-medium text-slate-800">
                             <span className={user.disabled ? "text-slate-400" : ""}>{user.name}</span>
                           </td>
                           <td
-                            className="max-w-[12rem] px-4 py-3 text-[13px] text-slate-800"
+                            className="max-w-[12rem] px-4 py-3 text-base text-slate-800"
                             title={
                               user.clientId
                                 ? (clientNameById.get(user.clientId) ?? user.clientId)
@@ -772,17 +772,17 @@ export default function ConfiguratorPanel({
           {isLeafView ? (
             <>
               <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Configuración</p>
-              <h2 className="text-lg font-semibold text-slate-900">Panel de configurador</h2>
+              <h2 className="app-title">Panel de configurador</h2>
               <p className="text-sm text-slate-600">
                 Usá el botón Menú del encabezado para volver al inicio del configurador.
               </p>
             </>
           ) : view === "creacion" ? (
-            <h2 className="text-lg font-semibold text-slate-900">Creación</h2>
+            <h2 className="app-title">Creación</h2>
           ) : view === "asignacion" ? (
-            <h2 className="text-lg font-semibold text-slate-900">Creación y asignación</h2>
+            <h2 className="app-title">Creación y asignación</h2>
           ) : view === "tareasPendiente" ? (
-            <h2 className="text-lg font-semibold text-slate-900">Integración</h2>
+            <h2 className="app-title">Integración</h2>
           ) : null}
         </div>
       ) : null}
@@ -1068,7 +1068,7 @@ export default function ConfiguratorPanel({
             <div className="flex items-start justify-between gap-3">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.25em] text-slate-400">Nueva cuenta</p>
-                <h3 className="mt-1 text-xl font-semibold text-slate-900">Crear cuenta</h3>
+                <h3 className="app-title mt-1">Crear cuenta</h3>
                 <p className="mt-1 text-sm text-slate-600">Completa los campos para registrar una cuenta.</p>
               </div>
               <button
@@ -1152,7 +1152,7 @@ export default function ConfiguratorPanel({
             <div className="flex items-start justify-between gap-3">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.25em] text-slate-400">Nuevo usuario</p>
-                <h3 className="mt-1 text-xl font-semibold text-slate-900">Crear usuario</h3>
+                <h3 className="app-title mt-1">Crear usuario</h3>
                 <p className="mt-1 text-sm text-slate-600">ID se genera al guardar.</p>
               </div>
               <button
@@ -1317,9 +1317,9 @@ export default function ConfiguratorPanel({
             <div className="flex items-start justify-between gap-3">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.25em] text-slate-400">Nueva bodega</p>
-                <h3 className="mt-1 text-xl font-semibold text-slate-900">Crear bodega</h3>
+                <h3 className="app-title mt-1">Crear bodega</h3>
                 <p className="mt-1 text-sm text-slate-600">ID se genera al guardar.</p>
-                <p className="mt-2 inline-flex rounded-full bg-[#f1f5f9] px-2 py-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-[#334155]">
+                <p className="mt-2 inline-flex rounded-full bg-[#f1f5f9] px-2 py-1 text-base font-semibold uppercase tracking-[0.08em] text-[#334155]">
                   {createWarehouseStatus === "externa" ? "Bodega externa" : "Bodega interna"}
                 </p>
               </div>
@@ -1406,7 +1406,7 @@ export default function ConfiguratorPanel({
             <div className="flex items-start justify-between gap-3">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.25em] text-slate-400">Editar cliente</p>
-                <h3 className="mt-1 text-xl font-semibold text-slate-900">{editClient.name}</h3>
+                <h3 className="app-title mt-1">{editClient.name}</h3>
                 <p className="mt-1 text-sm text-slate-600">Actualiza nombre o código.</p>
               </div>
               <button
@@ -1492,7 +1492,7 @@ export default function ConfiguratorPanel({
             <div className="flex items-start justify-between gap-3">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.25em] text-slate-400">Editar bodega</p>
-                <h3 className="mt-1 text-xl font-semibold text-slate-900">{editWarehouse.name ?? "Sin nombre"}</h3>
+                <h3 className="app-title mt-1">{editWarehouse.name ?? "Sin nombre"}</h3>
                 <p className="mt-1 text-sm text-slate-600">Actualiza nombre, capacidad o tipo.</p>
               </div>
               <button
@@ -1595,7 +1595,7 @@ export default function ConfiguratorPanel({
             <div className="flex items-start justify-between gap-3">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.25em] text-slate-400">Editar usuario</p>
-                <h3 className="mt-1 text-xl font-semibold text-slate-900">{editUser.name}</h3>
+                <h3 className="app-title mt-1">{editUser.name}</h3>
                 <p className="mt-1 text-sm text-slate-600">Actualiza rol, nombre o cliente.</p>
               </div>
               <button

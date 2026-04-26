@@ -58,7 +58,7 @@ export default function TrucksPage() {
   };
 
   return (
-    <main className="max-w-6xl mx-auto p-8 font-['Inter']">
+    <main className="max-w-6xl mx-auto p-8">
       {/* Header de la página */}
       <header className="mb-10 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div className="flex items-center gap-4">
@@ -66,7 +66,7 @@ export default function TrucksPage() {
             <HiOutlineSquares2X2 size={28} />
           </div>
           <div>
-            <h1 className="text-[28px] font-extrabold text-gray-900 tracking-tight">Flota de Camiones</h1>
+            <h1 className="app-title">Flota de Camiones</h1>
           </div>
         </div>
         
@@ -75,7 +75,7 @@ export default function TrucksPage() {
             setSelectedTruck(null); 
             setIsModalOpen(true); 
           }}
-          className="bg-[#A8D5BA] text-[#2D5A3F] px-6 py-2.5 rounded-[10px] font-semibold text-[14px] flex items-center gap-2 hover:bg-[#97c4a9] transition-all active:scale-95 shadow-sm"
+          className="bg-[#A8D5BA] text-[#2D5A3F] px-6 py-2.5 rounded-[10px] font-semibold text-base flex items-center gap-2 hover:bg-[#97c4a9] transition-all active:scale-95 shadow-sm"
         >
           <HiOutlinePlus strokeWidth={2.5} /> Nuevo Vehículo
         </button>
@@ -102,7 +102,7 @@ export default function TrucksPage() {
       />
       
       {/* Resumen rápido al pie (Opcional) */}
-      <footer className="mt-6 flex gap-4 text-[12px] text-gray-400">
+      <footer className="mt-6 flex gap-4 text-base text-gray-400">
         <span>Total unidades: <strong>{trucks.length}</strong></span>
         <span>•</span>
         <span>Disponibles: <strong>{trucks.filter(t => t.isAvailable).length}</strong></span>

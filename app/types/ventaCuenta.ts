@@ -38,6 +38,9 @@ export interface VentaEnCurso {
   codeCuenta?: string;
   /** ms o desde Timestamp Firestore; sirve para asignar consecutivo a ventas sin numericId. */
   createdAt?: number;
+  /** Bodega interna donde se toma el stock / se registra la venta (alta manual). */
+  origenWarehouseId?: string;
+  origenWarehouseNombre?: string;
   /** Bodega interna destino cuando la venta está en «Transporte» hacia bodega. */
   destinoWarehouseId?: string;
   destinoWarehouseNombre?: string;

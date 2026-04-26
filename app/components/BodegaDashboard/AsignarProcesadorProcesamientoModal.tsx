@@ -1,11 +1,15 @@
 "use client";
 
 import React from "react";
-import { FiCpu, FiX } from "react-icons/fi";
+import { FiCpu, FiSearch } from "react-icons/fi";
+import { ModalPlantilla } from "@/app/components/ui/ModalPlantilla";
 import type { Client, Slot } from "@/app/interfaces/bodega";
 import { SolicitudProcesamientoService } from "@/app/services/solicitudProcesamientoService";
 import type { SolicitudProcesamiento } from "@/app/types/solicitudProcesamiento";
 import { normalizeProcesamientoEstado } from "@/app/types/solicitudProcesamiento";
+import { cantidadPrimarioProcesamientoTexto } from "@/app/lib/procesamientoDisplay";
+import { formatEstimadoUnidadesSecundario } from "@/lib/catalogoProcesamiento";
+import { PrecioSecundarioCatalogoLive } from "@/app/components/ui/procesamiento/PrecioSecundarioCatalogoLive";
 
 function clientIdsParaBodega(clients: Client[], warehouseCodeCuenta: string): string[] {
   const code = String(warehouseCodeCuenta ?? "").trim();
@@ -16,8 +20,12 @@ function clientIdsParaBodega(clients: Client[], warehouseCodeCuenta: string): st
     .filter(Boolean);
 }
 
-function filasTerminadas(rows: SolicitudProcesamiento[]): SolicitudProcesamiento[] {
-  return rows.filter((r) => normalizeProcesamientoEstado(r.estado) === "Terminado");
+/** Tras el cierre del procesador: **Pendiente** (nuevo) u órdenes **Terminado** (legado). */
+function filasPostCierreProcesamiento(rows: SolicitudProcesamiento[]): SolicitudProcesamiento[] {
+  return rows.filter((r) => {
+    const e = normalizeProcesamientoEstado(r.estado);
+    return e === "Pendiente" || e === "Terminado";
+  });
 }
 
 /** Clave estable cuenta + solicitud (misma que usa el slot al ubicar el resultado en bodega). */
@@ -25,7 +33,7 @@ function keyProcesamientoCuentaSolicitud(clientId: string, solicitudId: string):
   return `${String(clientId ?? "").trim()}::${String(solicitudId ?? "").trim()}`;
 }
 
-/** Solicitudes cuyo resultado ya figura en alguna posición del mapa de bodega (`procesamientoSolicitudId`). */
+/** Solicitudes cuyo resultado ya figura en alguna posición del almacenamiento (`procesamientoSolicitudId`). */
 function keysProcesamientoYaUbicadasEnMapa(slots: Slot[]): Set<string> {
   const set = new Set<string>();
   for (const s of slots) {
@@ -36,31 +44,17 @@ function keysProcesamientoYaUbicadasEnMapa(slots: Slot[]): Set<string> {
   return set;
 }
 
-/** Terminadas que aún no tienen caja/slot en el mapa con ese `procesamientoSolicitudId`. */
-function filasTerminadasPendientesDeUbicarEnMapa(
-  rows: SolicitudProcesamiento[],
-  slots: Slot[],
-): SolicitudProcesamiento[] {
+/** Pendiente / Terminado (legado) sin casillero en mapa con ese `procesamientoSolicitudId`. */
+function filasPendientesUbicarEnMapa(rows: SolicitudProcesamiento[], slots: Slot[]): SolicitudProcesamiento[] {
   const yaEnMapa = keysProcesamientoYaUbicadasEnMapa(slots);
-  return filasTerminadas(rows).filter((r) => {
+  return filasPostCierreProcesamiento(rows).filter((r) => {
     const k = keyProcesamientoCuentaSolicitud(r.clientId, r.id);
     return k && !yaEnMapa.has(k);
   });
 }
 
-function formatCantidad(n: number): string {
-  if (!Number.isFinite(n)) return "—";
-  return Number.isInteger(n) ? String(n) : n.toLocaleString("es-CO", { maximumFractionDigits: 4 });
-}
-
-function etiquetaUnidadPrimario(row: SolicitudProcesamiento): string {
-  if (row.unidadPrimarioVisualizacion === "peso") return "Peso";
-  if (row.unidadPrimarioVisualizacion === "cantidad") return "Cantidad";
-  return "—";
-}
-
 /**
- * Modal del jefe: órdenes **Terminado** cuyo resultado **aún no** fue ubicado en el mapa de bodega.
+ * Modal del jefe: órdenes **Pendiente** (o **Terminado** legado) cuyo resultado **aún no** fue ubicado en el almacenamiento.
  */
 export function AsignarProcesadorProcesamientoModal({
   isOpen,
@@ -99,52 +93,80 @@ export function AsignarProcesadorProcesamientoModal({
     );
   }, [isOpen, clientIds, warehouseCodeCuenta]);
 
-  const todasTerminadas = React.useMemo(() => filasTerminadas(rows), [rows]);
-  const terminadasPendientesMapa = React.useMemo(
-    () => filasTerminadasPendientesDeUbicarEnMapa(rows, slots),
-    [rows, slots],
-  );
+  const todasPostCierre = React.useMemo(() => filasPostCierreProcesamiento(rows), [rows]);
+  const terminadasPendientesMapa = React.useMemo(() => filasPendientesUbicarEnMapa(rows, slots), [rows, slots]);
 
-  if (!isOpen) return null;
+  const [busqueda, setBusqueda] = React.useState("");
+  React.useEffect(() => {
+    if (!isOpen) setBusqueda("");
+  }, [isOpen]);
+
+  const terminadasFiltradas = React.useMemo(() => {
+    const q = busqueda.trim().toLowerCase();
+    if (!q) return terminadasPendientesMapa;
+    return terminadasPendientesMapa.filter((row) => {
+      const blob = [
+        row.numero,
+        row.productoPrimarioTitulo,
+        row.productoSecundarioTitulo,
+        row.clientId,
+        row.id,
+      ]
+        .join(" ")
+        .toLowerCase();
+      return blob.includes(q);
+    });
+  }, [terminadasPendientesMapa, busqueda]);
 
   const codeOk = Boolean(String(warehouseCodeCuenta ?? "").trim());
 
   return (
-    <div
-      className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-900/45 p-3 backdrop-blur-[2px] sm:p-4"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="asignar-proc-modal-title"
-      onClick={onClose}
-    >
-      <div
-        className="w-full max-w-lg overflow-hidden rounded-3xl border border-sky-100 bg-white shadow-2xl sm:max-w-xl"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="relative flex items-start gap-4 border-b border-slate-100 bg-linear-to-r from-sky-50 via-white to-white px-5 py-5 sm:px-6">
-          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-sky-100 text-sky-700 shadow-inner">
-            <FiCpu className="h-6 w-6" />
-          </div>
-          <div className="min-w-0 flex-1 pr-10">
-            <h2 id="asignar-proc-modal-title" className="text-lg font-bold tracking-tight text-slate-900 sm:text-xl">
-              Procesamiento finalizado
-            </h2>
-            <p className="mt-1.5 text-sm leading-relaxed text-slate-600">
-              Órdenes <strong>Terminado</strong> que todavía no tienen el resultado ubicado en el{" "}
-              <strong>mapa de bodega</strong>. Si ya se trasladaron a una posición, dejan de aparecer acá.
-            </p>
-          </div>
+    <ModalPlantilla
+      open={isOpen}
+      onClose={onClose}
+      titulo="Procesamiento finalizado"
+      tituloId="asignar-proc-modal-title"
+      headerIcon={<FiCpu className="h-7 w-7 text-blue-600" strokeWidth={2} aria-hidden />}
+      zIndexClass="z-[70]"
+      maxWidthClass="max-w-xl"
+      cardMaxHeightClass="max-h-[min(90vh,720px)]"
+      subtitulo={
+        <span>
+          Órdenes en <strong className="font-semibold text-slate-700">Pendiente</strong> (procesador ya cerró) que
+          todavía no tienen el resultado ubicado en el <strong className="font-semibold text-slate-700">almacenamiento</strong>.
+          Si ya se trasladaron a una posición, dejan de aparecer acá.
+        </span>
+      }
+      footer={
+        <div className="flex justify-end">
           <button
             type="button"
             onClick={onClose}
-            className="absolute right-4 top-4 rounded-xl p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
-            aria-label="Cerrar"
+            className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-base font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50"
           >
-            <FiX className="h-5 w-5" />
+            Cerrar
           </button>
         </div>
-
-        <div className="max-h-[min(62vh,480px)] space-y-4 overflow-y-auto px-5 py-5 sm:px-6">
+      }
+    >
+        <div className="max-h-[min(62vh,480px)] space-y-4 overflow-y-auto">
+          {terminadasPendientesMapa.length > 0 ? (
+            <div className="relative">
+              <FiSearch
+                className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"
+                aria-hidden
+              />
+              <input
+                type="search"
+                value={busqueda}
+                onChange={(e) => setBusqueda(e.target.value)}
+                placeholder="Buscar por número, producto…"
+                className="w-full rounded-xl border border-slate-200 bg-white py-2.5 pl-10 pr-3 text-sm text-slate-900 shadow-sm placeholder:text-slate-400 focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-200/60"
+                autoComplete="off"
+                aria-label="Filtrar órdenes terminadas"
+              />
+            </div>
+          ) : null}
           {!codeOk ? (
             <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
               Esta bodega no tiene <strong>codeCuenta</strong> asignado.
@@ -159,21 +181,26 @@ export function AsignarProcesadorProcesamientoModal({
           ) : null}
           {terminadasPendientesMapa.length === 0 ? (
             <p className="text-sm text-slate-600">
-              {todasTerminadas.length > 0 ? (
+              {todasPostCierre.length > 0 ? (
                 <>
-                  Todas las órdenes en <strong>Terminado</strong> ya tienen el resultado ubicado en el mapa de bodega.
-                  No queda ninguna pendiente de trasladar desde procesamiento.
+                  Todas las órdenes post-proceso ya tienen el resultado ubicado en el almacenamiento. No queda ninguna
+                  pendiente de trasladar desde procesamiento.
                 </>
               ) : (
                 <>
-                  No hay órdenes de procesamiento <strong>finalizadas</strong> todavía. Cuando el procesador marque una
-                  orden como terminada, aparecerá acá hasta que la ubiques en el mapa con un traslado a bodega.
+                  No hay órdenes de procesamiento <strong>finalizadas</strong> todavía. Cuando el procesador pase una
+                  orden a <strong>Pendiente</strong>, aparecerá acá hasta que la ubiques en el mapa con un traslado a
+                  bodega.
                 </>
               )}
             </p>
+          ) : terminadasFiltradas.length === 0 ? (
+            <p className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-3 text-sm text-slate-600">
+              Ninguna orden coincide con la búsqueda. Probá con otro término o borrá el filtro.
+            </p>
           ) : (
             <ul className="space-y-3">
-              {terminadasPendientesMapa.map((row) => {
+              {terminadasFiltradas.map((row) => {
                 const key = `${row.clientId}::${row.id}`;
                 return (
                   <li
@@ -182,23 +209,37 @@ export function AsignarProcesadorProcesamientoModal({
                   >
                     <div className="flex flex-wrap items-start justify-between gap-2">
                       <p className="font-mono text-sm font-bold text-slate-900">{row.numero}</p>
-                      <span className="rounded-full bg-emerald-100 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-emerald-800">
-                        Terminado
+                      <span
+                        className={`rounded-full px-2.5 py-0.5 text-base font-bold uppercase tracking-wide ${
+                          normalizeProcesamientoEstado(row.estado) === "Pendiente"
+                            ? "bg-violet-100 text-violet-900"
+                            : "bg-slate-200 text-slate-800"
+                        }`}
+                      >
+                        {normalizeProcesamientoEstado(row.estado)}
                       </span>
                     </div>
-                    <p className="mt-2 text-[10px] font-bold uppercase tracking-wide text-slate-500">Primario</p>
+                    <p className="mt-2 text-base font-bold uppercase tracking-wide text-slate-500">Primario</p>
                     <p className="mt-0.5 text-xs leading-snug text-slate-800">{row.productoPrimarioTitulo}</p>
-                    <p className="mt-2 text-[10px] font-bold uppercase tracking-wide text-slate-500">
+                    <p className="mt-2 text-base font-bold uppercase tracking-wide text-slate-500">
                       Secundario (objetivo)
                     </p>
                     <p className="mt-0.5 text-xs leading-snug text-slate-800">
                       → {row.productoSecundarioTitulo}
                     </p>
+                    <p className="mt-1 text-xs text-slate-600">
+                      Precio (catálogo):{" "}
+                      <PrecioSecundarioCatalogoLive
+                        clientId={row.clientId}
+                        productoSecundarioId={row.productoSecundarioId}
+                        className="font-semibold tabular-nums text-slate-800"
+                      />
+                    </p>
                     <p className="mt-2 text-xs font-semibold text-slate-700">
-                      Cantidad: {formatCantidad(Number(row.cantidadPrimario) || 0)} · {etiquetaUnidadPrimario(row)}
+                      Insumo: {cantidadPrimarioProcesamientoTexto(row)}
                       {row.estimadoUnidadesSecundario != null &&
                       Number.isFinite(Number(row.estimadoUnidadesSecundario))
-                        ? ` · est. sec. ${formatCantidad(Number(row.estimadoUnidadesSecundario))} u.`
+                        ? ` · est. sec. ${formatEstimadoUnidadesSecundario(Number(row.estimadoUnidadesSecundario))} u.`
                         : ""}
                     </p>
                   </li>
@@ -207,17 +248,6 @@ export function AsignarProcesadorProcesamientoModal({
             </ul>
           )}
         </div>
-
-        <div className="border-t border-slate-100 bg-slate-50/90 px-5 py-4 sm:px-6">
-          <button
-            type="button"
-            onClick={onClose}
-            className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 sm:w-auto"
-          >
-            Cerrar
-          </button>
-        </div>
-      </div>
-    </div>
+    </ModalPlantilla>
   );
 }

@@ -2,6 +2,7 @@
 import { HiOutlinePencilSquare, HiOutlineTrash, HiArrowsUpDown } from "react-icons/hi2";
 import { Catalogo } from "@/app/types/catalogo";
 import { etiquetaUnidadVisualizacion } from "@/lib/unidadVisualizacionCatalogo";
+import { formatoPrecioCatalogo } from "@/lib/catalogoPrecio";
 
 interface Props {
   productos: Catalogo[];
@@ -34,7 +35,7 @@ function CatalogoSortableHeader({ label, sortKey, onSort }: SortableHeaderProps)
       className={`sticky top-0 z-20 border-b border-slate-200 bg-slate-50 p-4 ${sortKey ? "cursor-pointer transition-colors hover:bg-slate-100" : ""}`}
       onClick={() => sortKey && onSort(sortKey)}
     >
-      <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-wide text-slate-500">
+      <div className="flex items-center gap-2 text-base font-bold uppercase tracking-wide text-slate-500">
         {label}
         {sortKey && <HiArrowsUpDown className="text-slate-400" size={12} />}
       </div>
@@ -66,18 +67,18 @@ export const CatalogoTable = ({ productos, productosCatalogo, onEdit, onDelete, 
               <CatalogoSortableHeader label="Nombre Op 1" onSort={onSort} />
               <CatalogoSortableHeader label="Valor Op 1" onSort={onSort} />
               <CatalogoSortableHeader label="Vinculado" onSort={onSort} />
-              <CatalogoSortableHeader label="Costo" sortKey="costPerItem" onSort={onSort} />
+              <CatalogoSortableHeader label="Precio" sortKey="price" onSort={onSort} />
               <CatalogoSortableHeader label="Impuesto" onSort={onSort} />
               <CatalogoSortableHeader label="Tracker inv." onSort={onSort} />
               <CatalogoSortableHeader label="Stock" sortKey="inventoryQty" onSort={onSort} />
               
               {/* HEADER DE ACCIONES: Sticky a la derecha Y arriba */}
-              <th className="sticky top-0 right-0 z-30 border-b border-slate-200 bg-slate-50 p-4 text-right text-[10px] font-bold uppercase tracking-wide text-slate-500 shadow-[-4px_0_8px_-2px_rgba(0,0,0,0.05)]">
+              <th className="sticky top-0 right-0 z-30 border-b border-slate-200 bg-slate-50 p-4 text-right text-base font-bold uppercase tracking-wide text-slate-500 shadow-[-4px_0_8px_-2px_rgba(0,0,0,0.05)]">
                 Acciones
               </th>
             </tr>
           </thead>
-          <tbody className="text-[13px]">
+          <tbody className="text-base">
             {productos.map((p) => (
               <tr
                 key={p.id}
@@ -96,15 +97,15 @@ export const CatalogoTable = ({ productos, productosCatalogo, onEdit, onDelete, 
                 <td className="p-4 bg-white group-hover:bg-violet-50/80 transition-colors">{p.tags}</td>
                 <td className="p-4 bg-white group-hover:bg-violet-50/80 transition-colors">{p.publishedOnline ? "SÍ" : "NO"}</td>
                 <td className="p-4 bg-white group-hover:bg-violet-50/80 transition-colors">
-                  <span className="rounded-md bg-slate-100 px-2 py-1 text-[11px] font-semibold text-slate-800">{p.status}</span>
+                  <span className="rounded-md bg-slate-100 px-2 py-1 text-base font-semibold text-slate-800">{p.status}</span>
                 </td>
                 <td className="p-4 bg-white group-hover:bg-violet-50/80 transition-colors">{p.sku}</td>
                 <td className="p-4 bg-white group-hover:bg-violet-50/80 transition-colors">{p.barcode}</td>
                 <td className="p-4 bg-white group-hover:bg-violet-50/80 transition-colors">{p.optionName1}</td>
                 <td className="p-4 bg-white group-hover:bg-violet-50/80 transition-colors">{p.optionValue1}</td>
                 <td className="p-4 bg-white group-hover:bg-violet-50/80 transition-colors">{p.linkedOption1}</td>
-                <td className="p-4 text-red-500 bg-white group-hover:bg-violet-50/80 transition-colors">
-                  {p.costPerItem != null ? `$${p.costPerItem}` : "—"}
+                <td className="p-4 bg-white font-medium text-slate-800 transition-colors group-hover:bg-violet-50/80">
+                  {formatoPrecioCatalogo(p)}
                 </td>
                 <td className="p-4 bg-white group-hover:bg-violet-50/80 transition-colors">{p.chargeTax ? "SÍ" : "NO"}</td>
                 <td className="p-4 bg-white group-hover:bg-violet-50/80 transition-colors">{p.inventoryTracker}</td>

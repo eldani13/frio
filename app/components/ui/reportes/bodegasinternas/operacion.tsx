@@ -1,7 +1,6 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
-import { Inter } from "next/font/google";
 import {
   MdShoppingBag,
   MdInventory2,
@@ -34,7 +33,7 @@ import {
   type FilaInventarioInterno,
 } from "@/lib/bodegaInternalInventoryRows";
 
-const inter = Inter({ subsets: ["latin"], weight: ["400", "600", "700"] });
+const GEIST_STACK = "var(--font-geist-sans),ui-sans-serif,system-ui,sans-serif";
 
 const COLORS = {
   text: "#1A1C1E",
@@ -125,7 +124,7 @@ function KpiCard({
             {label}
           </p>
           <p
-            className="mt-1 text-[28px] font-bold leading-none tracking-tight"
+            className="mt-1 text-base font-bold leading-none tracking-tight"
             style={{ color: COLORS.text }}
           >
             {value}
@@ -167,8 +166,8 @@ function PieLabel(props: {
       fill={fill}
       textAnchor={anchor}
       dominantBaseline="central"
-      className="text-[11px] font-medium"
-      style={{ fontFamily: inter.style.fontFamily }}
+      className="text-base font-medium"
+      style={{ fontFamily: GEIST_STACK }}
     >
       {name}
     </text>
@@ -339,7 +338,7 @@ const Operacion: React.FC<Props> = ({ warehouseId, onTotalChange }) => {
   if (filas.length === 0) {
     return (
       <div
-        className={`${inter.className} rounded-2xl border border-slate-200 bg-white px-6 py-12 text-center text-slate-600`}
+        className="rounded-2xl border border-slate-200 bg-white px-6 py-12 text-center text-slate-600 font-sans"
       >
         <p className="text-sm font-medium">
           No hay posiciones ocupadas en el mapa de esta bodega. Los gráficos se mostrarán cuando
@@ -351,11 +350,11 @@ const Operacion: React.FC<Props> = ({ warehouseId, onTotalChange }) => {
 
   return (
     <div
-      className={`${inter.className} w-full rounded-2xl border border-slate-100 bg-white px-4 py-8 shadow-sm sm:px-6`}
+      className="w-full rounded-2xl border border-slate-100 bg-white px-4 py-8 font-sans shadow-sm sm:px-6"
       style={{ color: COLORS.text }}
     >
       <header className="mb-8 border-b border-slate-100 pb-5">
-        <h2 className="text-lg font-bold tracking-tight" style={{ color: COLORS.text }}>
+        <h2 className="app-title" style={{ color: COLORS.text }}>
           Resumen gráfico — bodega interna
         </h2>
         <p className="mt-1 text-xs text-slate-500">
@@ -395,7 +394,7 @@ const Operacion: React.FC<Props> = ({ warehouseId, onTotalChange }) => {
 
         <div className="grid gap-6 lg:grid-cols-2">
           <div className="rounded-[12px] border border-[#E5E7EB] bg-white px-4 py-5 sm:px-5">
-            <h3 className="mb-1 text-base font-bold tracking-tight" style={{ color: COLORS.text }}>
+            <h3 className="app-title mb-1" style={{ color: COLORS.text }}>
               Top 5 — {tieneKg ? "por kilogramos" : "por posiciones"}
             </h3>
             <p className="mb-4 text-xs text-slate-500">
@@ -444,7 +443,7 @@ const Operacion: React.FC<Props> = ({ warehouseId, onTotalChange }) => {
                     <Tooltip
                       cursor={{ fill: "rgba(148, 163, 184, 0.12)" }}
                       contentStyle={{
-                        fontFamily: inter.style.fontFamily,
+                        fontFamily: GEIST_STACK,
                         fontSize: 12,
                         borderRadius: 12,
                         border: "1px solid #E5E7EB",
@@ -469,7 +468,7 @@ const Operacion: React.FC<Props> = ({ warehouseId, onTotalChange }) => {
           </div>
 
           <div className="rounded-[12px] border border-[#E5E7EB] bg-white px-4 py-5 sm:px-5">
-            <h3 className="mb-1 text-base font-bold tracking-tight" style={{ color: COLORS.text }}>
+            <h3 className="app-title mb-1" style={{ color: COLORS.text }}>
               Posiciones por estado térmico
             </h3>
             <p className="mb-4 text-xs text-slate-500">
@@ -499,7 +498,7 @@ const Operacion: React.FC<Props> = ({ warehouseId, onTotalChange }) => {
                     </Pie>
                     <Tooltip
                       contentStyle={{
-                        fontFamily: inter.style.fontFamily,
+                        fontFamily: GEIST_STACK,
                         fontSize: 12,
                         borderRadius: 12,
                         border: "1px solid #E5E7EB",
@@ -521,7 +520,7 @@ const Operacion: React.FC<Props> = ({ warehouseId, onTotalChange }) => {
         <div className="rounded-[12px] border border-[#E5E7EB] bg-white px-4 py-5 sm:px-5">
           <div className="mb-4 flex flex-wrap items-center gap-2">
             <MdThermostat className="h-5 w-5 text-slate-500" aria-hidden />
-            <h3 className="text-base font-bold tracking-tight" style={{ color: COLORS.text }}>
+            <h3 className="app-title" style={{ color: COLORS.text }}>
               Temperatura por posición
             </h3>
           </div>
@@ -583,7 +582,7 @@ const Operacion: React.FC<Props> = ({ warehouseId, onTotalChange }) => {
                     />
                     <Tooltip
                       contentStyle={{
-                        fontFamily: inter.style.fontFamily,
+                        fontFamily: GEIST_STACK,
                         fontSize: 12,
                         borderRadius: 12,
                         border: "1px solid #E5E7EB",

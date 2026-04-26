@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { FiCamera, FiCheckCircle, FiPackage, FiX } from "react-icons/fi";
 import { HiOutlineTruck } from "react-icons/hi2";
 import { formatKgEs } from "@/app/lib/decimalEs";
@@ -33,16 +33,23 @@ function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promi
   return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
 }
 
+const PASOS_ENTREGA = 4;
+
 export function TransporteViajesPanel({ uid, displayName }: Props) {
   const [viajes, setViajes] = useState<ViajeVentaTransporteConContext[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [sel, setSel] = useState<ViajeVentaTransporteConContext | null>(null);
+  /** 0 checklist · 1 foto · 2 firma · 3 conforme */
+  const [pasoEntrega, setPasoEntrega] = useState(0);
+  const [lineaVerificada, setLineaVerificada] = useState<Record<number, boolean>>({});
   const [fotoFile, setFotoFile] = useState<File | null>(null);
   const [fotoPreview, setFotoPreview] = useState<string | null>(null);
   const [cantidades, setCantidades] = useState<Record<number, string>>({});
-  const [conforme, setConforme] = useState(true);
+  /** null hasta elegir en el último paso */
+  const [conforme, setConforme] = useState<boolean | null>(null);
   const [descripcion, setDescripcion] = useState("");
+  const [firmaDataUrlCapturada, setFirmaDataUrlCapturada] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [saveErr, setSaveErr] = useState<string | null>(null);
 
@@ -50,41 +57,60 @@ export function TransporteViajesPanel({ uid, displayName }: Props) {
   const drawing = useRef(false);
   const firmaDibujadaRef = useRef(false);
 
-  const reload = useCallback(() => {
+  useEffect(() => {
     setLoading(true);
     setError(null);
-    void ViajeVentaTransporteService.listEnCursoGlobal()
-      .then(setViajes)
-      .catch(() => {
+    const unsub = ViajeVentaTransporteService.subscribeEnCursoGlobal(
+      (items) => {
+        setViajes(items);
+        setLoading(false);
+        setError(null);
+      },
+      () => {
         setViajes([]);
-        setError("No se pudieron cargar los viajes. Revisá permisos y conexión.");
-      })
-      .finally(() => setLoading(false));
+        setError("No se pudieron cargar los viajes en vivo. Revisá permisos y conexión.");
+        setLoading(false);
+      },
+    );
+    return () => unsub();
   }, []);
 
+  /** Si el viaje abierto ya no está «En curso» (p. ej. otra pestaña o entrega), cerrar el modal. */
   useEffect(() => {
-    reload();
-  }, [reload]);
+    if (!sel) return;
+    const exists = viajes.some(
+      (v) => v.id === sel.id && v.ventaId === sel.ventaId && v.idClienteDueno === sel.idClienteDueno,
+    );
+    if (!exists) setSel(null);
+  }, [viajes, sel]);
 
   useEffect(() => {
     if (!sel) {
+      setPasoEntrega(0);
+      setLineaVerificada({});
       setFotoFile(null);
       setFotoPreview(null);
       setCantidades({});
-      setConforme(true);
+      setConforme(null);
       setDescripcion("");
+      setFirmaDataUrlCapturada(null);
       setSaveErr(null);
       return;
     }
     const next: Record<number, string> = {};
+    const chk: Record<number, boolean> = {};
     (sel.lineItemsEsperados ?? []).forEach((li, i) => {
       next[i] = String(li.cantidad ?? "");
+      chk[i] = false;
     });
     setCantidades(next);
+    setLineaVerificada(chk);
+    setPasoEntrega(0);
     setFotoFile(null);
     setFotoPreview(null);
-    setConforme(true);
+    setConforme(null);
     setDescripcion("");
+    setFirmaDataUrlCapturada(null);
     setSaveErr(null);
     firmaDibujadaRef.current = false;
     const c = canvasRef.current;
@@ -96,6 +122,19 @@ export function TransporteViajesPanel({ uid, displayName }: Props) {
       }
     }
   }, [sel]);
+
+  useEffect(() => {
+    if (!sel || pasoEntrega !== 2) return;
+    const c = canvasRef.current;
+    if (!c) return;
+    const ctx = c.getContext("2d");
+    if (!ctx) return;
+    if (!firmaDataUrlCapturada) {
+      firmaDibujadaRef.current = false;
+      ctx.fillStyle = "#fff";
+      ctx.fillRect(0, 0, c.width, c.height);
+    }
+  }, [sel, pasoEntrega, firmaDataUrlCapturada]);
 
   const onFotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
@@ -169,6 +208,7 @@ export function TransporteViajesPanel({ uid, displayName }: Props) {
 
   const limpiarFirma = () => {
     firmaDibujadaRef.current = false;
+    setFirmaDataUrlCapturada(null);
     const c = canvasRef.current;
     if (!c) return;
     const ctx = c.getContext("2d");
@@ -177,32 +217,107 @@ export function TransporteViajesPanel({ uid, displayName }: Props) {
     ctx.fillRect(0, 0, c.width, c.height);
   };
 
+  const validarPasoYAvanzar = () => {
+    if (!sel) return;
+    setSaveErr(null);
+    const lineas = sel.lineItemsEsperados ?? [];
+    if (pasoEntrega === 0) {
+      for (let i = 0; i < lineas.length; i++) {
+        if (!lineaVerificada[i]) {
+          setSaveErr("Tenés que marcar cada producto como verificado antes de continuar.");
+          return;
+        }
+        const raw = String(cantidades[i] ?? "").replace(",", ".").trim();
+        const q = Number(raw);
+        if (!Number.isFinite(q) || q < 0) {
+          setSaveErr("Indicá una cantidad entregada válida (número ≥ 0) en cada línea.");
+          return;
+        }
+      }
+      setPasoEntrega(1);
+      return;
+    }
+    if (pasoEntrega === 1) {
+      if (!fotoFile) {
+        setSaveErr("Tenés que subir una foto de evidencia antes de continuar.");
+        return;
+      }
+      setPasoEntrega(2);
+      return;
+    }
+    if (pasoEntrega === 2) {
+      const tieneFirmaCanvas = Boolean(firmaDibujadaRef.current && canvasRef.current);
+      const tieneFirmaGuardada = Boolean(firmaDataUrlCapturada?.trim());
+      if (!tieneFirmaCanvas && !tieneFirmaGuardada) {
+        setSaveErr("Tenés que dibujar la firma de quien recibe antes de continuar.");
+        return;
+      }
+      if (tieneFirmaCanvas && canvasRef.current) {
+        setFirmaDataUrlCapturada(firmaCanvasToDataUrl(canvasRef.current));
+      }
+      setPasoEntrega(3);
+    }
+  };
+
+  const irAnteriorPaso = () => {
+    setSaveErr(null);
+    if (pasoEntrega <= 0) return;
+    if (pasoEntrega === 3) {
+      setConforme(null);
+      setDescripcion("");
+    }
+    if (pasoEntrega === 2) {
+      setFirmaDataUrlCapturada(null);
+    }
+    setPasoEntrega((p) => Math.max(0, p - 1));
+  };
+
   const handleEntregar = async () => {
     if (!sel) {
       setSaveErr("Falta información del viaje.");
       return;
     }
+    if (pasoEntrega !== PASOS_ENTREGA - 1) {
+      setSaveErr("Completá todos los pasos antes de cerrar la entrega.");
+      return;
+    }
+    if (conforme === null) {
+      setSaveErr("Indicá si el pedido fue conforme (sí o no).");
+      return;
+    }
+    if (!fotoFile) {
+      setSaveErr("La foto de evidencia es obligatoria. Volvé al paso anterior y subí una imagen.");
+      return;
+    }
+    const firmaCheckRaw =
+      firmaDataUrlCapturada?.trim() ||
+      (firmaDibujadaRef.current && canvasRef.current ? firmaCanvasToDataUrl(canvasRef.current) : "");
+    if (!firmaCheckRaw.trim()) {
+      setSaveErr("La firma de quien recibe es obligatoria. Volvé al paso de firma y dibujá antes de cerrar.");
+      return;
+    }
+    if (!conforme && !descripcion.trim()) {
+      setSaveErr("Si no estás conforme, describí el motivo antes de cerrar.");
+      return;
+    }
+
     setSaving(true);
     setSaveErr(null);
     try {
       /** Firestore suele responder en segundos; evita quedar colgado si hay un bug de red. */
       const SAVE_MS = 180_000;
 
-      let evidenciaFotoUrl: string | undefined;
-      if (fotoFile) {
-        /** Subida con `uploadBytes` (hasta 10 MB); el timeout aplica al batch de Firestore abajo. */
-        evidenciaFotoUrl = await ViajeVentaTransporteService.subirEvidenciaFoto(
-          sel.idClienteDueno,
-          sel.ventaId,
-          sel.id,
-          fotoFile,
-        );
-      }
+      const evidenciaFotoUrl = await ViajeVentaTransporteService.subirEvidenciaFoto(
+        sel.idClienteDueno,
+        sel.ventaId,
+        sel.id,
+        fotoFile,
+      );
 
-      const firmaDataUrl =
-        firmaDibujadaRef.current && canvasRef.current
-          ? firmaCanvasToDataUrl(canvasRef.current)
-          : undefined;
+      const firmaRaw =
+        firmaDataUrlCapturada?.trim() ||
+        (firmaDibujadaRef.current && canvasRef.current ? firmaCanvasToDataUrl(canvasRef.current) : "");
+      const firmaDataUrl = firmaRaw.trim();
 
       const lineItemsEntregados: ViajeLineaEntrega[] = (sel.lineItemsEsperados ?? []).map((li, idx) => ({
         catalogoProductId: li.catalogoProductId,
@@ -220,7 +335,7 @@ export function TransporteViajesPanel({ uid, displayName }: Props) {
           entregaConforme: conforme,
           evidenciaFotoUrl,
           firmaDataUrl,
-          descripcionIncidencia: conforme ? undefined : descripcion.trim() || undefined,
+          descripcionIncidencia: conforme ? undefined : descripcion.trim(),
           entregadoPorUid: uid,
           entregadoPorNombre: displayName,
         }),
@@ -228,7 +343,6 @@ export function TransporteViajesPanel({ uid, displayName }: Props) {
         "Guardar la entrega en la base no respondió.",
       );
       setSel(null);
-      reload();
     } catch (err: unknown) {
       setSaveErr(err instanceof Error ? err.message : "No se pudo registrar la entrega.");
     } finally {
@@ -244,21 +358,10 @@ export function TransporteViajesPanel({ uid, displayName }: Props) {
             <HiOutlineTruck size={28} />
           </span>
           <div>
-            <h1 className="text-xl font-bold text-slate-900">Viajes de entrega (ventas)</h1>
-            <p className="mt-1 text-sm text-slate-600">
-              Listado de viajes <strong>en curso</strong>. Al entregar: compará cantidades, adjuntá evidencia,
-              firmá; si la entrega <strong>no está conforme</strong>, podés describir la incidencia.
-            </p>
+            <h1 className="app-title">Viajes de entrega (ventas)</h1>
+            <p className="mt-1 text-xs text-slate-500">La lista se actualiza sola cuando hay cambios.</p>
           </div>
         </div>
-        <button
-          type="button"
-          onClick={() => reload()}
-          disabled={loading}
-          className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
-        >
-          Actualizar
-        </button>
       </div>
 
       {error ? (
@@ -272,12 +375,12 @@ export function TransporteViajesPanel({ uid, displayName }: Props) {
           <table className="w-full min-w-[800px] border-collapse text-left text-sm">
             <thead>
               <tr className="border-b border-slate-200 bg-slate-50">
-                <th className="px-3 py-2 text-[10px] font-bold uppercase text-slate-500">Viaje</th>
-                <th className="px-3 py-2 text-[10px] font-bold uppercase text-slate-500">Venta</th>
-                <th className="px-3 py-2 text-[10px] font-bold uppercase text-slate-500">Cliente</th>
-                <th className="px-3 py-2 text-[10px] font-bold uppercase text-slate-500">Kg (venta)</th>
-                <th className="px-3 py-2 text-[10px] font-bold uppercase text-slate-500">Estado</th>
-                <th className="px-3 py-2 text-[10px] font-bold uppercase text-slate-500">Acción</th>
+                <th className="px-3 py-2 text-base font-bold uppercase text-slate-500">Viaje</th>
+                <th className="px-3 py-2 text-base font-bold uppercase text-slate-500">Venta</th>
+                <th className="px-3 py-2 text-base font-bold uppercase text-slate-500">Cliente</th>
+                <th className="px-3 py-2 text-base font-bold uppercase text-slate-500">Kg (venta)</th>
+                <th className="px-3 py-2 text-base font-bold uppercase text-slate-500">Estado</th>
+                <th className="px-3 py-2 text-base font-bold uppercase text-slate-500">Acción</th>
               </tr>
             </thead>
             <tbody>
@@ -303,10 +406,10 @@ export function TransporteViajesPanel({ uid, displayName }: Props) {
                         {v.ventaCompradorNombre}
                       </div>
                       {v.ventaCodeCuenta ? (
-                        <div className="truncate text-[11px] text-slate-500">Cuenta · {v.ventaCodeCuenta}</div>
+                        <div className="truncate text-base text-slate-500">Cuenta · {v.ventaCodeCuenta}</div>
                       ) : null}
                       {v.ventaDestinoNombre ? (
-                        <div className="truncate text-[11px] text-slate-500">→ {v.ventaDestinoNombre}</div>
+                        <div className="truncate text-base text-slate-500">→ {v.ventaDestinoNombre}</div>
                       ) : null}
                     </td>
                     <td
@@ -316,7 +419,7 @@ export function TransporteViajesPanel({ uid, displayName }: Props) {
                       {formatKgEs(v.kgTotalEstimado ?? 0)} kg
                     </td>
                     <td className="px-3 py-2">
-                      <span className="inline-flex rounded-full bg-amber-100 px-2.5 py-0.5 text-[10px] font-semibold text-amber-900">
+                      <span className="inline-flex rounded-full bg-amber-100 px-2.5 py-0.5 text-base font-semibold text-amber-900">
                         {v.estado}
                       </span>
                     </td>
@@ -326,7 +429,7 @@ export function TransporteViajesPanel({ uid, displayName }: Props) {
                         onClick={() => setSel(v)}
                         className="rounded-xl bg-slate-900 px-3 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-slate-800"
                       >
-                        Registrar entrega
+                        Realizar entrega
                       </button>
                     </td>
                   </tr>
@@ -363,8 +466,8 @@ export function TransporteViajesPanel({ uid, displayName }: Props) {
                   <HiOutlineTruck className="h-7 w-7" aria-hidden />
                 </span>
                 <div className="min-w-0 pt-0.5">
-                  <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-amber-800/90">
-                    Registrar entrega
+                  <p className="text-base font-bold uppercase tracking-[0.14em] text-amber-800/90">
+                    Realizar entrega
                   </p>
                   <h2
                     id="viaje-entrega-titulo"
@@ -380,7 +483,7 @@ export function TransporteViajesPanel({ uid, displayName }: Props) {
               </div>
 
               <div className="mt-4 rounded-2xl border border-slate-100 bg-white/90 px-4 py-3 shadow-sm">
-                <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Destinatario</p>
+                <p className="text-base font-bold uppercase tracking-wide text-slate-400">Destinatario</p>
                 <p className="mt-1 text-base font-semibold leading-snug text-slate-900">{sel.ventaCompradorNombre}</p>
                 <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-slate-600">
                   {sel.ventaCodeCuenta ? (
@@ -395,138 +498,185 @@ export function TransporteViajesPanel({ uid, displayName }: Props) {
                   ) : null}
                 </div>
               </div>
+
+              <p className="mt-4 text-center text-base font-semibold uppercase tracking-wide text-slate-500">
+                Paso {pasoEntrega + 1} de {PASOS_ENTREGA}
+              </p>
             </div>
 
             <div className="min-h-0 flex-1 overflow-y-auto px-5 py-5 sm:px-6">
-              <section className="rounded-2xl border border-slate-100 bg-slate-50/80 p-4">
-                <p className="mb-3 flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-slate-500">
-                  <FiPackage className="h-4 w-4 text-slate-400" aria-hidden />
-                  Unidades · esperado vs entregado
-                </p>
-                <ul className="space-y-2">
-                  {(sel.lineItemsEsperados ?? []).map((li, idx) => (
-                    <li
-                      key={`${sel.id}-li-${idx}`}
-                      className="flex flex-col gap-2 rounded-xl border border-white bg-white px-3 py-3 shadow-sm sm:flex-row sm:items-center sm:justify-between sm:gap-3"
-                    >
-                      <span className="min-w-0 flex-1 text-sm font-medium leading-snug text-slate-900">
-                        {li.titleSnapshot}
-                      </span>
-                      <div className="flex flex-wrap items-center gap-3 sm:justify-end">
-                        <span className="text-xs text-slate-500">
-                          Pedido: <span className="font-semibold text-slate-700">{li.cantidad}</span>
-                        </span>
-                        <label className="flex items-center gap-2 text-xs font-medium text-slate-600">
-                          Entregado
+              {pasoEntrega === 0 ? (
+                <section className="rounded-2xl border border-slate-100 bg-slate-50/80 p-4">
+                  <p className="mb-1 flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-slate-500">
+                    <FiPackage className="h-4 w-4 text-slate-400" aria-hidden />
+                    Verificar productos
+                  </p>
+                  <p className="mb-3 text-xs text-slate-600">
+                    Marcá cada ítem como verificado en destino e indicá la cantidad entregada (obligatorio en todas las
+                    líneas).
+                  </p>
+                  <ul className="space-y-3">
+                    {(sel.lineItemsEsperados ?? []).map((li, idx) => (
+                      <li
+                        key={`${sel.id}-li-${idx}`}
+                        className="rounded-xl border border-white bg-white px-3 py-3 shadow-sm"
+                      >
+                        <label className="flex cursor-pointer items-start gap-3">
                           <input
-                            type="number"
-                            min={0}
-                            step={1}
-                            className="w-20 rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-right text-sm font-semibold tabular-nums text-slate-900 shadow-inner"
-                            value={cantidades[idx] ?? ""}
+                            type="checkbox"
+                            checked={Boolean(lineaVerificada[idx])}
                             onChange={(e) =>
-                              setCantidades((prev) => ({ ...prev, [idx]: e.target.value }))
+                              setLineaVerificada((prev) => ({ ...prev, [idx]: e.target.checked }))
                             }
+                            className="mt-1 h-4 w-4 shrink-0 rounded border-slate-300 text-amber-600 focus:ring-amber-500"
                           />
+                          <span className="min-w-0 flex-1 text-sm font-medium leading-snug text-slate-900">
+                            {li.titleSnapshot}
+                          </span>
                         </label>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              </section>
+                        <div className="mt-3 flex flex-wrap items-center gap-3 border-t border-slate-100 pt-3 sm:justify-end">
+                          <span className="text-xs text-slate-500">
+                            Pedido: <span className="font-semibold text-slate-700">{li.cantidad}</span>
+                          </span>
+                          <label className="flex items-center gap-2 text-xs font-medium text-slate-600">
+                            Cantidad entregada
+                            <input
+                              type="number"
+                              min={0}
+                              step={1}
+                              className="w-24 rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-right text-sm font-semibold tabular-nums text-slate-900 shadow-inner"
+                              value={cantidades[idx] ?? ""}
+                              onChange={(e) =>
+                                setCantidades((prev) => ({ ...prev, [idx]: e.target.value }))
+                              }
+                            />
+                          </label>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+              ) : null}
 
-              <label className="mt-5 flex cursor-pointer flex-col gap-2">
-                <span className="flex items-center gap-2 text-sm font-semibold text-slate-800">
-                  <FiCamera className="h-4 w-4 text-amber-600" aria-hidden />
-                  Foto de evidencia
-                  <span className="rounded-md bg-slate-100 px-1.5 py-0.5 text-[10px] font-bold uppercase text-slate-600">
-                    Opcional
+              {pasoEntrega === 1 ? (
+                <label className="flex cursor-pointer flex-col gap-2">
+                  <span className="flex flex-wrap items-center gap-2 text-sm font-semibold text-slate-800">
+                    <FiCamera className="h-4 w-4 text-amber-600" aria-hidden />
+                    Evidencia de la entrega (foto)
+                    <span className="text-rose-600">*</span>
                   </span>
-                </span>
-                <div className="flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-slate-200 bg-slate-50/50 px-4 py-6 transition hover:border-amber-300 hover:bg-amber-50/30">
-                  <input
-                    type="file"
-                    accept="image/*"
-                    capture="environment"
-                    onChange={onFotoChange}
-                    className="text-xs file:mr-3 file:rounded-lg file:border-0 file:bg-amber-100 file:px-3 file:py-1.5 file:text-sm file:font-semibold file:text-amber-900 hover:file:bg-amber-200"
+                  <div className="flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-slate-200 bg-slate-50/50 px-4 py-6 transition hover:border-amber-300 hover:bg-amber-50/30">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      capture="environment"
+                      onChange={onFotoChange}
+                      className="text-xs file:mr-3 file:rounded-lg file:border-0 file:bg-amber-100 file:px-3 file:py-1.5 file:text-sm file:font-semibold file:text-amber-900 hover:file:bg-amber-200"
+                    />
+                    <p className="mt-2 text-center text-base text-slate-500">
+                      Obligatorio: fotografiá la entrega, el remito o la caja. Hasta 10 MB.
+                    </p>
+                  </div>
+                  {fotoPreview ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={fotoPreview}
+                      alt="Vista previa de evidencia"
+                      className="mt-2 max-h-48 w-full rounded-xl border border-slate-200 object-contain shadow-inner"
+                    />
+                  ) : null}
+                </label>
+              ) : null}
+
+              {pasoEntrega === 2 ? (
+                <div className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm">
+                  <p className="text-sm font-semibold text-slate-800">
+                    Firma de quien recibe <span className="text-rose-600">*</span>
+                  </p>
+                  <p className="mt-0.5 text-xs text-slate-500">
+                    Obligatorio: dibujá con el dedo o el mouse en el recuadro (quien recibe el pedido).
+                  </p>
+                  <canvas
+                    ref={canvasRef}
+                    width={400}
+                    height={160}
+                    className="mt-3 w-full max-w-[400px] cursor-crosshair rounded-xl border-2 border-slate-200 bg-white shadow-inner touch-none"
+                    onMouseDown={startDraw}
+                    onMouseMove={moveDraw}
+                    onMouseUp={endDraw}
+                    onMouseLeave={endDraw}
+                    onTouchStart={startDraw}
+                    onTouchMove={moveDraw}
+                    onTouchEnd={endDraw}
                   />
-                  <p className="mt-2 text-center text-[11px] text-slate-500">
-                    Podés fotografiar la entrega, el remito o la caja. Hasta 10 MB.
+                  <button
+                    type="button"
+                    onClick={limpiarFirma}
+                    className="mt-2 text-xs font-semibold text-amber-800 underline decoration-amber-300 underline-offset-2 hover:text-amber-950"
+                  >
+                    Limpiar firma
+                  </button>
+                </div>
+              ) : null}
+
+              {pasoEntrega === 3 ? (
+                <div className="space-y-4">
+                  <p className="text-sm font-semibold text-slate-900">
+                    ¿Estás conforme con el pedido entregado respecto de lo solicitado?
+                    <span className="ml-1 text-rose-600">*</span>
+                  </p>
+                  <div className="flex flex-col gap-3 sm:flex-row">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setConforme(true);
+                        setDescripcion("");
+                        setSaveErr(null);
+                      }}
+                      className={`flex-1 rounded-2xl border-2 px-4 py-3 text-sm font-bold transition ${
+                        conforme === true
+                          ? "border-emerald-500 bg-emerald-50 text-emerald-900"
+                          : "border-slate-200 bg-white text-slate-700 hover:border-emerald-300"
+                      }`}
+                    >
+                      Sí, conforme
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setConforme(false);
+                        setSaveErr(null);
+                      }}
+                      className={`flex-1 rounded-2xl border-2 px-4 py-3 text-sm font-bold transition ${
+                        conforme === false
+                          ? "border-rose-500 bg-rose-50 text-rose-900"
+                          : "border-slate-200 bg-white text-slate-700 hover:border-rose-300"
+                      }`}
+                    >
+                      No conforme
+                    </button>
+                  </div>
+                  {conforme === false ? (
+                    <label className="flex flex-col gap-2">
+                      <span className="text-sm font-medium text-slate-700">
+                        ¿Por qué no? <span className="text-rose-600">*</span>
+                      </span>
+                      <textarea
+                        value={descripcion}
+                        onChange={(e) => setDescripcion(e.target.value)}
+                        rows={4}
+                        required
+                        className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm shadow-inner placeholder:text-slate-400"
+                        placeholder="Ej.: faltaron unidades, daño en embalaje, producto equivocado…"
+                      />
+                    </label>
+                  ) : null}
+                  <p className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-2 text-base leading-relaxed text-slate-600">
+                    El estado final de la venta (<strong className="text-emerald-800">Cerrado (ok)</strong> o{" "}
+                    <strong className="text-rose-800">Cerrado (no ok)</strong>) combina estas respuestas con si las
+                    cantidades entregadas coinciden exactamente con las pedidas.
                   </p>
                 </div>
-                {fotoPreview ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={fotoPreview}
-                    alt="Vista previa de evidencia"
-                    className="mt-2 max-h-48 w-full rounded-xl border border-slate-200 object-contain shadow-inner"
-                  />
-                ) : null}
-              </label>
-
-              <div className="mt-5 rounded-2xl border border-slate-100 bg-white p-4 shadow-sm">
-                <p className="text-sm font-semibold text-slate-800">
-                  Firma de quien recibe{" "}
-                  <span className="rounded-md bg-slate-100 px-1.5 py-0.5 text-[10px] font-bold uppercase text-slate-600">
-                    Opcional
-                  </span>
-                </p>
-                <p className="mt-0.5 text-xs text-slate-500">Si aplica, dibujá con el dedo o el mouse en el recuadro</p>
-                <canvas
-                  ref={canvasRef}
-                  width={400}
-                  height={160}
-                  className="mt-3 w-full max-w-[400px] cursor-crosshair rounded-xl border-2 border-slate-200 bg-white shadow-inner touch-none"
-                  onMouseDown={startDraw}
-                  onMouseMove={moveDraw}
-                  onMouseUp={endDraw}
-                  onMouseLeave={endDraw}
-                  onTouchStart={startDraw}
-                  onTouchMove={moveDraw}
-                  onTouchEnd={endDraw}
-                />
-                <button
-                  type="button"
-                  onClick={limpiarFirma}
-                  className="mt-2 text-xs font-semibold text-amber-800 underline decoration-amber-300 underline-offset-2 hover:text-amber-950"
-                >
-                  Limpiar firma
-                </button>
-              </div>
-
-              <label className="mt-5 flex cursor-pointer items-start gap-3 rounded-xl border border-emerald-100 bg-emerald-50/50 px-4 py-3 text-sm text-slate-800">
-                <input
-                  type="checkbox"
-                  checked={conforme}
-                  onChange={(e) => setConforme(e.target.checked)}
-                  className="mt-0.5 h-4 w-4 shrink-0 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
-                />
-                <span>
-                  <span className="font-semibold text-emerald-900">Entrega conforme</span>
-                  <span className="mt-0.5 block text-xs font-normal text-slate-600">
-                    Marcá si lo entregado coincide con lo pedido en cada línea. Foto y firma son opcionales.
-                  </span>
-                </span>
-              </label>
-              <p className="mt-2 rounded-xl border border-slate-100 bg-slate-50 px-3 py-2 text-[11px] leading-relaxed text-slate-600">
-                El cierre <strong className="text-emerald-800">Cerrado (ok)</strong> o{" "}
-                <strong className="text-rose-800">Cerrado (no ok)</strong> depende solo de si las{" "}
-                <strong>cantidades entregadas</strong> coinciden con las pedidas y si marcás{" "}
-                <strong>entrega conforme</strong> (no exige foto ni firma).
-              </p>
-
-              {!conforme ? (
-                <label className="mt-4 flex flex-col gap-2">
-                  <span className="text-sm font-medium text-slate-700">Incidencia (opcional)</span>
-                  <textarea
-                    value={descripcion}
-                    onChange={(e) => setDescripcion(e.target.value)}
-                    rows={3}
-                    className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm shadow-inner placeholder:text-slate-400"
-                    placeholder="Ej.: faltaron unidades, daño en embalaje…"
-                  />
-                </label>
               ) : null}
 
               {saveErr ? (
@@ -544,21 +694,42 @@ export function TransporteViajesPanel({ uid, displayName }: Props) {
               >
                 Cancelar
               </button>
-              <button
-                type="button"
-                disabled={saving}
-                onClick={() => void handleEntregar()}
-                className="min-h-[44px] flex-[1.15] inline-flex items-center justify-center gap-2 rounded-2xl bg-emerald-600 py-3 text-sm font-bold text-white shadow-md transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                {saving ? (
-                  "Guardando…"
-                ) : (
-                  <>
-                    <FiCheckCircle className="h-5 w-5 shrink-0" aria-hidden />
-                    Confirmar entrega
-                  </>
-                )}
-              </button>
+              {pasoEntrega > 0 ? (
+                <button
+                  type="button"
+                  disabled={saving}
+                  onClick={irAnteriorPaso}
+                  className="min-h-[44px] flex-1 rounded-2xl border border-slate-200 bg-white py-3 text-sm font-semibold text-slate-600 shadow-sm transition hover:bg-slate-50 disabled:opacity-50"
+                >
+                  Anterior
+                </button>
+              ) : null}
+              {pasoEntrega < PASOS_ENTREGA - 1 ? (
+                <button
+                  type="button"
+                  disabled={saving}
+                  onClick={validarPasoYAvanzar}
+                  className="min-h-[44px] flex-[1.15] rounded-2xl bg-amber-600 py-3 text-sm font-bold text-white shadow-md transition hover:bg-amber-500 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Siguiente
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  disabled={saving || conforme === null || (conforme === false && !descripcion.trim())}
+                  onClick={() => void handleEntregar()}
+                  className="min-h-[44px] flex-[1.15] inline-flex items-center justify-center gap-2 rounded-2xl bg-emerald-600 py-3 text-sm font-bold text-white shadow-md transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {saving ? (
+                    "Guardando…"
+                  ) : (
+                    <>
+                      <FiCheckCircle className="h-5 w-5 shrink-0" aria-hidden />
+                      Cerrar entrega
+                    </>
+                  )}
+                </button>
+              )}
             </div>
           </div>
         </div>

@@ -24,10 +24,7 @@ const LoginCard: React.FC<LoginCardProps> = ({
 }) => {
   const [showPassword, setShowPassword] = useState(false);
   return (
-    <div
-      className="w-full max-w-md rounded-3xl border border-white/60 bg-white/95 p-8 shadow-2xl backdrop-blur-lg"
-      style={{ fontFamily: '"Space Grotesk", "Work Sans", sans-serif' }}
-    >
+    <div className="w-full max-w-md rounded-3xl border border-white/60 bg-white/95 p-8 shadow-2xl backdrop-blur-lg">
       {/* Logo/Icon */}
       <div className="flex flex-col items-center mb-4">
         <div className="flex items-center justify-center w-16 h-16 rounded-full bg-slate-900/90 shadow-lg mb-2">
@@ -39,7 +36,7 @@ const LoginCard: React.FC<LoginCardProps> = ({
       </div>
 
       <div className="text-center">
-        <h2 className="text-3xl font-extrabold text-slate-900 tracking-tight">Iniciar sesión</h2>
+        <h2 className="app-title">Iniciar sesión</h2>
         <p className="mt-2 text-base text-slate-600">Accede para gestionar la operación diaria.</p>
       </div>
 

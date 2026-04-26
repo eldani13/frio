@@ -14,7 +14,15 @@ import {
 } from "@/lib/bodegaInternalInventoryRows";
 import { kilosPedidoLineItem } from "@/app/lib/ordenCompraLineKgPedido";
 import { OrdenCompraService } from "@/app/services/ordenCompraService";
+import { CatalogoService } from "@/app/services/catalogoService";
+import { OrdenVentaService } from "@/app/services/ordenVentaService";
+import {
+  kgEsperadoLineaVentaEnViaje,
+  ViajeVentaTransporteService,
+} from "@/app/services/viajeVentaTransporteService";
+import type { Catalogo } from "@/app/types/catalogo";
 import type { OrdenCompra } from "@/app/types/ordenCompra";
+import type { VentaEnCurso } from "@/app/types/ventaCuenta";
 
 import BodegaExtModule from "@/app/components/ui/reportes/bodegasexternas/page";
 import BodegaIntModule from "@/app/components/ui/reportes/bodegasinternas/page";
@@ -41,6 +49,24 @@ function sumRowsKg(
 
 /** Mismos estados que el listado «Proveedores» en reportes. */
 const ESTADOS_OC_TARJETA_PROVEEDOR = new Set(["iniciado", "en curso", "transporte"]);
+
+/**
+ * Órdenes que siguen contando como «inventario en venta» en bodega (stock aún no enviado al flujo de transporte).
+ * «Transporte» va solo en la tarjeta Transporte (viajes en curso), no duplicar kg en Ventas.
+ */
+const ESTADOS_VENTA_TARJETA = new Set(["iniciado", "en curso"]);
+
+function totalKgDesdeVentasCompradorInventario(ventas: VentaEnCurso[], catalogos: Catalogo[]): number {
+  let acc = 0;
+  for (const v of ventas) {
+    if (!ESTADOS_VENTA_TARJETA.has(String(v.estado ?? "").trim().toLowerCase())) continue;
+    for (const li of v.lineItems ?? []) {
+      const k = kgEsperadoLineaVentaEnViaje(li, catalogos);
+      acc += Number.isFinite(k) ? k : 0;
+    }
+  }
+  return acc;
+}
 
 function ordenCuentaParaTarjetaProveedor(o: OrdenCompra): boolean {
   return ESTADOS_OC_TARJETA_PROVEEDOR.has((o.estado ?? "").trim().toLowerCase());
@@ -75,6 +101,12 @@ const ReportesSection = () => {
 
   const [proveedorTotalKg, setProveedorTotalKg] = useState(0);
   const [proveedorTotalGridLoading, setProveedorTotalGridLoading] = useState(false);
+
+  const [transporteTotalKg, setTransporteTotalKg] = useState(0);
+  const [transporteTotalGridLoading, setTransporteTotalGridLoading] = useState(false);
+
+  const [compradorTotalKg, setCompradorTotalKg] = useState(0);
+  const [compradorTotalGridLoading, setCompradorTotalGridLoading] = useState(false);
 
   const [warehouseRows, setWarehouseRows] = useState<WarehouseMeta[]>([]);
   const [warehousesLoading, setWarehousesLoading] = useState(false);
@@ -205,6 +237,91 @@ const ReportesSection = () => {
     };
   }, [authLoading, activeModule, codeCuenta, idCliente]);
 
+  // Total kg tarjeta «Transporte»: suma kg estimados de todos los viajes de venta En curso (misma fuente que el listado).
+  useEffect(() => {
+    if (authLoading || activeModule !== null) return;
+    if (!codeCuenta.trim() || !idCliente.trim()) {
+      setTransporteTotalKg(0);
+      setTransporteTotalGridLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    setTransporteTotalKg(0);
+    setTransporteTotalGridLoading(true);
+
+    const stopLoadingTimer = window.setTimeout(() => {
+      if (!cancelled) setTransporteTotalGridLoading(false);
+    }, EXTERNAL_GRID_TOTAL_MAX_WAIT_MS);
+
+    void (async () => {
+      try {
+        const viajes = await ViajeVentaTransporteService.listEnCursoParaCuenta(idCliente, codeCuenta);
+        if (cancelled) return;
+        const kg = viajes.reduce((acc, v) => {
+          const k = Number(v.kgTotalEstimado);
+          return acc + (Number.isFinite(k) && k > 0 ? k : 0);
+        }, 0);
+        setTransporteTotalKg(kg);
+        setTransporteTotalGridLoading(false);
+        window.clearTimeout(stopLoadingTimer);
+      } catch {
+        if (!cancelled) {
+          setTransporteTotalKg(0);
+          setTransporteTotalGridLoading(false);
+          window.clearTimeout(stopLoadingTimer);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(stopLoadingTimer);
+    };
+  }, [authLoading, activeModule, codeCuenta, idCliente]);
+
+  // Total kg tarjeta «Ventas»: mismas líneas y estados que el listado «En inventario venta» (sin Transporte).
+  useEffect(() => {
+    if (authLoading || activeModule !== null) return;
+    if (!codeCuenta.trim() || !idCliente.trim()) {
+      setCompradorTotalKg(0);
+      setCompradorTotalGridLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    setCompradorTotalKg(0);
+    setCompradorTotalGridLoading(true);
+
+    const stopLoadingTimer = window.setTimeout(() => {
+      if (!cancelled) setCompradorTotalGridLoading(false);
+    }, EXTERNAL_GRID_TOTAL_MAX_WAIT_MS);
+
+    void (async () => {
+      try {
+        const [ventas, cats] = await Promise.all([
+          OrdenVentaService.getAllByCodeCuenta(idCliente, codeCuenta),
+          CatalogoService.getAll(idCliente, codeCuenta),
+        ]);
+        if (cancelled) return;
+        setCompradorTotalKg(totalKgDesdeVentasCompradorInventario(ventas, cats));
+        setCompradorTotalGridLoading(false);
+        window.clearTimeout(stopLoadingTimer);
+      } catch {
+        if (!cancelled) {
+          setCompradorTotalKg(0);
+          setCompradorTotalGridLoading(false);
+          window.clearTimeout(stopLoadingTimer);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(stopLoadingTimer);
+    };
+  }, [authLoading, activeModule, codeCuenta, idCliente]);
+
   // Total kg en la tarjeta "Bodega interna": suma mapas de todas las internas (grilla inicial o listado de bodegas).
   useEffect(() => {
     if (authLoading) return;
@@ -318,7 +435,16 @@ const ReportesSection = () => {
       icon: <MdBusiness size={28} />,
       color: "bg-white",
     },
-    { id: "TRANSPORTE", label: "Transporte", value: "(0 Kg)", icon: <HiOutlineTruck size={28} />, color: "bg-white" },
+    {
+      id: "TRANSPORTE",
+      label: "Transporte",
+      value:
+        transporteTotalGridLoading && transporteTotalKg === 0
+          ? "(…)"
+          : `(${transporteTotalKg.toLocaleString("es-CO", { maximumFractionDigits: 2 })} Kg)`,
+      icon: <HiOutlineTruck size={28} />,
+      color: "bg-white",
+    },
     {
       id: "BODEGA_INT",
       label: "Bodega interna",
@@ -339,13 +465,22 @@ const ReportesSection = () => {
       icon: <MdFactory size={28} />,
       color: "bg-white",
     },
-    { id: "COMPRADOR", label: "Ventas", value: "(0 Kg)", icon: <MdShoppingCart size={28} />, color: "bg-white" },
+    {
+      id: "COMPRADOR",
+      label: "Ventas",
+      value:
+        compradorTotalGridLoading && compradorTotalKg === 0
+          ? "(…)"
+          : `(${compradorTotalKg.toLocaleString("es-CO", { maximumFractionDigits: 2 })} Kg)`,
+      icon: <MdShoppingCart size={28} />,
+      color: "bg-white",
+    },
   ];
 
   if (!activeModule) {
     return (
       <section className="rounded-2xl bg-[#f8fafc] p-8 shadow-sm border border-slate-200">
-        <h2 className="text-xl font-bold text-slate-800 mb-8 text-center uppercase tracking-wider">Inventario de Mercancía</h2>
+        <h2 className="app-title mb-8 text-center uppercase tracking-wider">Inventario de Mercancía</h2>
 
         <div className="grid grid-cols-2 gap-4 max-w-5xl mx-auto">
           {modulos.map((m) => (
@@ -364,8 +499,9 @@ const ReportesSection = () => {
               </div>
 
               <div className="text-left">
-                <h3 className="text-xl font-extrabold text-slate-900 leading-tight">
-                  {m.label} <span className="text-slate-500 font-medium text-lg">{m.value}</span>
+                <h3 className="app-title leading-tight">
+                  {m.label}{" "}
+                  <span className="text-slate-500 font-medium text-base">{m.value}</span>
                 </h3>
               </div>
             </button>
@@ -383,12 +519,12 @@ const ReportesSection = () => {
         className="flex items-center gap-3 px-6 py-3 border-2 border-[#A8D5BA] rounded-2xl bg-white text-slate-900 hover:bg-[#A8D5BA]/10 transition-all active:scale-95 font-bold shadow-sm cursor-pointer mb-6"
       >
         <BiArrowBack size={26} className="text-[#3a5a40]" />
-        <span className="text-[18px]">Regresar</span>
+        <span className="text-base">Regresar</span>
       </button>
 
       {enPasoListadoBodegas && (
         <div className="max-w-2xl mx-auto">
-          <h2 className="text-xl font-bold text-slate-900 mb-2">{listTitle}</h2>
+          <h2 className="app-title mb-2">{listTitle}</h2>
 
           {authLoading ? (
             <p className="text-slate-400 text-sm italic py-8 text-center">Cargando sesión…</p>
@@ -417,7 +553,7 @@ const ReportesSection = () => {
                   >
                     <div>
                       <span
-                        className={`text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded ${
+                        className={`text-base font-bold uppercase tracking-widest px-2 py-1 rounded ${
                           b.status === "interna" ? "bg-blue-50 text-blue-600" : "bg-purple-50 text-purple-600"
                         }`}
                       >

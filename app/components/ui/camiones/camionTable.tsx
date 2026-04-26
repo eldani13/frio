@@ -14,37 +14,37 @@ export const TruckTable = ({ trucks, onEdit, onDelete }: Props) => {
         <table className="w-full min-w-[1200px] border-collapse text-left text-sm">
           <thead>
             <tr className="bg-slate-50 [&>th]:border-b [&>th]:border-slate-200">
-              <th className="whitespace-nowrap px-4 py-3 text-left text-[11px] font-bold uppercase tracking-wide text-slate-500">
+              <th className="whitespace-nowrap px-4 py-3 text-left text-base font-bold uppercase tracking-wide text-slate-500">
                 ID / Cód
               </th>
-              <th className="whitespace-nowrap px-4 py-3 text-left text-[11px] font-bold uppercase tracking-wide text-slate-500">
+              <th className="whitespace-nowrap px-4 py-3 text-left text-base font-bold uppercase tracking-wide text-slate-500">
                 Placa
               </th>
-              <th className="whitespace-nowrap px-4 py-3 text-left text-[11px] font-bold uppercase tracking-wide text-slate-500">
+              <th className="whitespace-nowrap px-4 py-3 text-left text-base font-bold uppercase tracking-wide text-slate-500">
                 Marca / Modelo
               </th>
-              <th className="whitespace-nowrap px-4 py-3 text-center text-[11px] font-bold uppercase tracking-wide text-slate-500">
+              <th className="whitespace-nowrap px-4 py-3 text-center text-base font-bold uppercase tracking-wide text-slate-500">
                 Tipo
               </th>
-              <th className="whitespace-nowrap px-4 py-3 text-right text-[11px] font-bold uppercase tracking-wide text-slate-500">
+              <th className="whitespace-nowrap px-4 py-3 text-right text-base font-bold uppercase tracking-wide text-slate-500">
                 Peso Máx
               </th>
-              <th className="whitespace-nowrap px-4 py-3 text-right text-[11px] font-bold uppercase tracking-wide text-slate-500">
+              <th className="whitespace-nowrap px-4 py-3 text-right text-base font-bold uppercase tracking-wide text-slate-500">
                 Volumen
               </th>
-              <th className="whitespace-nowrap px-4 py-3 text-center text-[11px] font-bold uppercase tracking-wide text-slate-500">
+              <th className="whitespace-nowrap px-4 py-3 text-center text-base font-bold uppercase tracking-wide text-slate-500">
                 Pallets
               </th>
-              <th className="whitespace-nowrap px-4 py-3 text-left text-[11px] font-bold uppercase tracking-wide text-slate-500">
+              <th className="whitespace-nowrap px-4 py-3 text-left text-base font-bold uppercase tracking-wide text-slate-500">
                 Rango Temp
               </th>
-              <th className="whitespace-nowrap px-4 py-3 text-center text-[11px] font-bold uppercase tracking-wide text-slate-500">
+              <th className="whitespace-nowrap px-4 py-3 text-center text-base font-bold uppercase tracking-wide text-slate-500">
                 Estado
               </th>
-              <th className="whitespace-nowrap px-4 py-3 text-left text-[11px] font-bold uppercase tracking-wide text-slate-500">
+              <th className="whitespace-nowrap px-4 py-3 text-left text-base font-bold uppercase tracking-wide text-slate-500">
                 Creado
               </th>
-              <th className="sticky right-0 z-20 bg-slate-50 px-4 py-3 text-right text-[11px] font-bold uppercase tracking-wide text-slate-500 shadow-[-10px_0_15px_-3px_rgba(0,0,0,0.05)]">
+              <th className="sticky right-0 z-20 bg-slate-50 px-4 py-3 text-right text-base font-bold uppercase tracking-wide text-slate-500 shadow-[-10px_0_15px_-3px_rgba(0,0,0,0.05)]">
                 Acciones
               </th>
             </tr>
@@ -57,19 +57,19 @@ export const TruckTable = ({ trucks, onEdit, onDelete }: Props) => {
               >
                 <td className="bg-white px-4 py-3 group-hover:bg-violet-50/80">
                   <div className="flex flex-col">
-                    <span className="text-[12px] text-slate-500">#{t.numericId}</span>
-                    <span className="font-mono text-[13px] font-semibold text-slate-900">{t.code}</span>
+                    <span className="text-base text-slate-500">#{t.numericId}</span>
+                    <span className="font-mono text-base font-semibold text-slate-900">{t.code}</span>
                   </div>
                 </td>
-                <td className="bg-white px-4 py-3 text-[13px] font-semibold uppercase text-slate-900 group-hover:bg-violet-50/80">
+                <td className="bg-white px-4 py-3 text-base font-semibold uppercase text-slate-900 group-hover:bg-violet-50/80">
                   {t.plate}
                 </td>
-                <td className="bg-white px-4 py-3 text-[13px] text-slate-700 group-hover:bg-violet-50/80">
+                <td className="bg-white px-4 py-3 text-base text-slate-700 group-hover:bg-violet-50/80">
                   {t.brand} <span className="text-slate-500">({t.model})</span>
                 </td>
                 <td className="bg-white px-4 py-3 text-center group-hover:bg-violet-50/80">
                   <span
-                    className={`rounded-full px-2 py-1 text-[11px] font-semibold ${
+                    className={`rounded-full px-2 py-1 text-base font-semibold ${
                       t.type === "Refrigerado"
                         ? "bg-sky-100 text-sky-800"
                         : t.type === "Seco"
@@ -80,21 +80,21 @@ export const TruckTable = ({ trucks, onEdit, onDelete }: Props) => {
                     {t.type}
                   </span>
                 </td>
-                <td className="bg-white px-4 py-3 text-right text-[13px] font-medium tabular-nums text-slate-800 group-hover:bg-violet-50/80">
+                <td className="bg-white px-4 py-3 text-right text-base font-medium tabular-nums text-slate-800 group-hover:bg-violet-50/80">
                   {t.maxWeightKg.toLocaleString()} kg
                 </td>
-                <td className="bg-white px-4 py-3 text-right text-[13px] font-medium tabular-nums text-slate-800 group-hover:bg-violet-50/80">
+                <td className="bg-white px-4 py-3 text-right text-base font-medium tabular-nums text-slate-800 group-hover:bg-violet-50/80">
                   {t.maxVolumeM3} m³
                 </td>
-                <td className="bg-white px-4 py-3 text-center text-[13px] font-semibold text-slate-900 group-hover:bg-violet-50/80">
+                <td className="bg-white px-4 py-3 text-center text-base font-semibold text-slate-900 group-hover:bg-violet-50/80">
                   {t.palletCapacity}
                 </td>
-                <td className="bg-white px-4 py-3 text-[13px] italic text-slate-600 group-hover:bg-violet-50/80">
+                <td className="bg-white px-4 py-3 text-base italic text-slate-600 group-hover:bg-violet-50/80">
                   {t.tempRange || "N/A"}
                 </td>
                 <td className="bg-white px-4 py-3 text-center group-hover:bg-violet-50/80">
                   <span
-                    className={`inline-flex items-center gap-1 text-[12px] font-semibold ${
+                    className={`inline-flex items-center gap-1 text-base font-semibold ${
                       t.isAvailable ? "text-emerald-700" : "text-rose-500"
                     }`}
                   >
@@ -104,7 +104,7 @@ export const TruckTable = ({ trucks, onEdit, onDelete }: Props) => {
                     {t.isAvailable ? "Disponible" : "Ocupado"}
                   </span>
                 </td>
-                <td className="whitespace-nowrap bg-white px-4 py-3 text-[12px] text-slate-500 group-hover:bg-violet-50/80">
+                <td className="whitespace-nowrap bg-white px-4 py-3 text-base text-slate-500 group-hover:bg-violet-50/80">
                   {new Date(t.createdAt).toLocaleDateString()}
                 </td>
                 <td className="sticky right-0 z-10 bg-white px-4 py-3 text-right shadow-[-10px_0_15px_-3px_rgba(0,0,0,0.05)] transition-colors group-hover:bg-violet-50/80">

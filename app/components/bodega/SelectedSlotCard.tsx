@@ -30,16 +30,13 @@ export default function SelectedSlotCard({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center backdrop-blur-sm bg-black/10 animate-fade-in px-2 sm:px-4">
-      <div
-        className="w-full max-w-lg sm:max-w-xl rounded-3xl border border-blue-100 bg-white/90 shadow-2xl backdrop-blur-lg relative overflow-hidden animate-fade-in-up"
-        style={{ fontFamily: '"Space Grotesk", "Work Sans", sans-serif' }}
-      >
+      <div className="relative w-full max-w-lg animate-fade-in-up overflow-hidden rounded-3xl border border-blue-100 bg-white/90 shadow-2xl backdrop-blur-lg sm:max-w-xl">
         {/* Header con gradiente y botón cerrar flotante */}
         <div className="flex flex-col items-center justify-center pt-8 pb-4 px-8 border-b border-blue-100 bg-linear-to-r from-blue-50 to-white rounded-t-3xl relative">
           <span className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-blue-100 shadow mb-2">
             <svg width="32" height="32" fill="none" viewBox="0 0 24 24" stroke="currentColor" className="text-blue-500"><circle cx="12" cy="12" r="10" strokeWidth="2" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 12h8M12 8v8" /></svg>
           </span>
-          <h2 className="text-2xl font-extrabold text-blue-700 drop-shadow mb-1 tracking-tight">Posición seleccionada</h2>
+          <h2 className="app-title mb-1">Posición seleccionada</h2>
           <p className="text-sm text-slate-500 font-medium text-center">Detalles de la posición <span className="font-bold text-blue-700">{slot.position}</span>.</p>
           <button
             className="absolute top-4 right-4 text-slate-400 hover:text-blue-500 text-2xl font-bold focus:outline-none transition-colors"

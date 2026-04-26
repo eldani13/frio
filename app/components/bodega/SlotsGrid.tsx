@@ -21,6 +21,8 @@ export default function SlotsGrid({
   page = 0,
   pageSize = slots.length,
   onPageChange,
+  clients,
+  slotCantidadContext,
 }: ExtendedSlotsGridProps) {
   const totalPages = Math.max(1, Math.ceil(slots.length / pageSize));
   const currentPage = Math.min(Math.max(page, 0), totalPages - 1);
@@ -28,76 +30,66 @@ export default function SlotsGrid({
   const end = start + pageSize;
   const visibleSlots = slots.slice(start, end);
   return (
-    <div className="self-start rounded-2xl bg-white p-2 sm:p-4 shadow-md border border-blue-200 w-full">
-      <div className="relative mb-3 flex flex-col gap-2 sm:mb-4 sm:flex-row sm:items-start sm:justify-between sm:gap-3">
-        <div className="mb-2 flex flex-wrap items-center gap-2 sm:mb-0">
-          <h2 className="flex items-center gap-1 sm:gap-2 text-sm font-semibold text-slate-900 sm:text-lg">
-            <span className="inline-block">
-              <FiArchive className="h-4 w-4 text-cyan-400 sm:h-5 sm:w-5" />
+    <div className="flex w-full shrink-0 flex-col rounded-xl border border-slate-200 bg-white px-4 pb-4 pt-4 shadow-sm sm:px-6 sm:pb-5 sm:pt-5">
+      <div className="mb-5 flex min-w-0 shrink-0 flex-col gap-4 sm:mb-6 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
+          <h2 className="app-title flex min-w-0 items-center gap-2.5">
+            <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-violet-100 text-violet-600">
+              <FiArchive className="h-[18px] w-[18px] sm:h-5 sm:w-5" aria-hidden />
             </span>
-            Mapa de Bodega
+            <span>Almacenamiento</span>
           </h2>
-          {titleActions}
         </div>
-        <div className="flex items-center gap-2 sm:gap-3 sm:ml-auto relative z-10 mt-1 sm:mt-0">
-          {headerActions ? <div>{headerActions}</div> : null}
-          {(role === "administrador" || role === "jefe") && typeof occupiedCount === "number" && typeof totalSlots === "number" && (
-            <div className="flex items-center gap-2 bg-blue-50 border border-blue-200 rounded-lg px-3 py-1 shadow text-xs font-semibold text-blue-900">
-              <FiArchive className="w-4 h-4 text-blue-500" />
+        <div className="flex flex-wrap items-center gap-2 sm:ml-auto sm:justify-end">
+          {headerActions ? <div className="flex items-center gap-2">{headerActions}</div> : null}
+          {titleActions ? <div className="flex shrink-0 items-center">{titleActions}</div> : null}
+          {typeof occupiedCount === "number" &&
+          typeof totalSlots === "number" &&
+          role !== "administrador" ? (
+            <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-semibold text-slate-800">
+              <FiArchive className="h-4 w-4 text-violet-500" aria-hidden />
               Ocupadas: {occupiedCount} / {totalSlots}
             </div>
-          )}
+          ) : null}
         </div>
       </div>
 
-      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 gap-2 sm:gap-4">
-        {visibleSlots.map((slot) => (
-          <SlotCard
-            key={slot.position}
-            slot={slot}
-            isSelected={slot.position === selectedPosition}
-            onSelect={onSelect}
-          />
-        ))}
-      </div>
-      {totalPages > 1 ? (
-        <div className="flex items-center justify-between mt-3 text-xs text-slate-700">
-          <button
-            type="button"
-            className="rounded-lg border border-slate-200 px-3 py-1 bg-white font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
-            onClick={() => onPageChange?.(Math.max(0, currentPage - 1))}
-            disabled={currentPage === 0}
-          >
-            Anterior
-          </button>
-          <span className="font-semibold">
-            {currentPage + 1} de {totalPages}
-          </span>
-          <button
-            type="button"
-            className="rounded-lg border border-slate-200 px-3 py-1 bg-white font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
-            onClick={() => onPageChange?.(Math.min(totalPages - 1, currentPage + 1))}
-            disabled={currentPage >= totalPages - 1}
-          >
-            Siguiente
-          </button>
+      <div className="min-w-0 space-y-3">
+        <div className="grid w-full min-w-0 grid-cols-2 gap-1.5 sm:grid-cols-3 sm:gap-2 md:grid-cols-4 lg:grid-cols-4">
+          {visibleSlots.map((slot) => (
+            <SlotCard
+              key={slot.position}
+              slot={slot}
+              isSelected={slot.position === selectedPosition}
+              onSelect={onSelect}
+              clients={clients}
+              slotCantidadContext={slotCantidadContext}
+            />
+          ))}
         </div>
-      ) : null}
-      <div className="flex justify-end mt-2 sm:mt-4">
-        <div className="flex flex-wrap items-center justify-end gap-x-3 gap-y-1 sm:gap-3">
-          <div className="flex items-center gap-1">
-            <span className="h-2.5 w-3 sm:h-3 sm:w-4 rounded-sm bg-cyan-200 border border-cyan-400 inline-block" />
-            <span className="text-[10px] sm:text-xs text-slate-600">Ocupada (primario)</span>
+        {totalPages > 1 ? (
+          <div className="flex items-center justify-between pt-1 text-xs text-slate-700">
+            <button
+              type="button"
+              className="rounded-lg border border-slate-200 bg-white px-3 py-1 font-semibold disabled:cursor-not-allowed disabled:opacity-50"
+              onClick={() => onPageChange?.(Math.max(0, currentPage - 1))}
+              disabled={currentPage === 0}
+            >
+              Anterior
+            </button>
+            <span className="font-semibold">
+              {currentPage + 1} de {totalPages}
+            </span>
+            <button
+              type="button"
+              className="rounded-lg border border-slate-200 bg-white px-3 py-1 font-semibold disabled:cursor-not-allowed disabled:opacity-50"
+              onClick={() => onPageChange?.(Math.min(totalPages - 1, currentPage + 1))}
+              disabled={currentPage >= totalPages - 1}
+            >
+              Siguiente
+            </button>
           </div>
-          <div className="flex items-center gap-1">
-            <span className="h-2.5 w-3 sm:h-3 sm:w-4 rounded-sm bg-sky-500 border border-sky-700 inline-block" />
-            <span className="text-[10px] sm:text-xs text-slate-600">Ocupada (procesado)</span>
-          </div>
-          <div className="flex items-center gap-1">
-            <span className="w-2 h-2 sm:w-3 sm:h-3 rounded-full bg-slate-300 inline-block"></span>
-            <span className="text-[10px] sm:text-xs text-slate-600">Vacía</span>
-          </div>
-        </div>
+        ) : null}
       </div>
     </div>
   );

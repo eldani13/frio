@@ -17,8 +17,18 @@ import type { VentaPendienteCartonaje } from "@/app/types/ventaCuenta";
 import { SolicitudProcesamientoService } from "@/app/services/solicitudProcesamientoService";
 import type { SolicitudProcesamiento } from "@/app/types/solicitudProcesamiento";
 import { normalizeProcesamientoEstado } from "@/app/types/solicitudProcesamiento";
+import { procesamientoUbicacionCompletaEnMapa } from "@/app/lib/pendientesMovimientoProcesamiento";
+import {
+  BODEGA_ZONE_STATUS_ICON_ACTIVE_CLASS,
+  BODEGA_ZONE_STATUS_ICON_INACTIVE_CLASS,
+  BODEGA_ZONE_STATUS_NUM_ACTIVE_CLASS,
+  BODEGA_ZONE_STATUS_NUM_INACTIVE_CLASS,
+  BODEGA_ZONE_STATUS_PILL_ACTIVE_CLASS,
+  BODEGA_ZONE_STATUS_PILL_INACTIVE_CLASS,
+} from "@/app/lib/bodegaDisplay";
 import {
   deductSlotsAfterProcesamientoTerminado,
+  findSlotPrimarioParaDevolverDesperdicio,
   tareaColaOperarioToSolicitudInventario,
   type ResultadoDescuentoProcesamiento,
 } from "@/lib/procesamientoInventarioBodega";
@@ -32,6 +42,7 @@ import {
   FiAlertTriangle,
   FiClipboard,
 } from "react-icons/fi";
+import { BodegaZonaEstadoModalShell } from "./bodega/BodegaZonaEstadoModalShell";
 import {
   addDoc,
   collection,
@@ -71,6 +82,7 @@ import type {
 } from "../interfaces/bodega";
 import RequestsQueue from "./bodega/RequestsQueue";
 import LoginCard from "./bodega/LoginCard";
+import { kgSobranteParaDevolucionMapa, unidadesSecundarioEnterasParaMapa } from "@/app/lib/sobranteKg";
 import {
   DEFAULT_WAREHOUSE_ID,
   ensureHistoryState,
@@ -176,6 +188,53 @@ const ALERT_DELAY_MS = 2 * 60 * 1000;
 const ALERT_ORDER_PREFIX = "alerta-orden-";
 const ALERT_REPORT_PREFIX = "alerta-fallo-";
 
+function orderSourceToZoneKey(source: OrderSource): ZoneKey {
+  if (source === "ingresos") return "entrada";
+  if (source === "salida") return "salida";
+  return "bodega";
+}
+
+function orderIsOverdue(order: BodegaOrder, alertClock: number): boolean {
+  return alertClock - order.createdAtMs >= ALERT_DELAY_MS;
+}
+
+/** Zona del tablero asociada a una alerta persistida (temp, demora u orden reportada). */
+function zoneKeyForAlertItem(alert: AlertItem, orders: BodegaOrder[]): ZoneKey | null {
+  const id = alert.id;
+  const tempM = id.match(/^alerta-temp-(entrada|bodega|salida)-/);
+  if (tempM) {
+    const z = tempM[1];
+    if (z === "entrada") return "entrada";
+    if (z === "salida") return "salida";
+    return "bodega";
+  }
+  if (id.startsWith(ALERT_ORDER_PREFIX)) {
+    const oid = id.slice(ALERT_ORDER_PREFIX.length);
+    const o = orders.find((x) => x.id === oid);
+    return o ? orderSourceToZoneKey(o.sourceZone) : null;
+  }
+  if (id.startsWith(ALERT_REPORT_PREFIX)) {
+    const sid = alert.sourceOrderId;
+    if (!sid) return null;
+    const o = orders.find((x) => x.id === sid);
+    return o ? orderSourceToZoneKey(o.sourceZone) : null;
+  }
+  return null;
+}
+
+/** Casillero con caja registrada (nombre o autoId). */
+function boxCasilleroConCaja(box: Box): boolean {
+  return Boolean(String(box.autoId ?? "").trim() || String(box.name ?? "").trim());
+}
+
+function boxTemperaturaAltaIngresoSalida(box: Box): boolean {
+  return (
+    typeof box.temperature === "number" &&
+    Number.isFinite(box.temperature) &&
+    box.temperature > HIGH_TEMP_ALERT_THRESHOLD
+  );
+}
+
 const normalizeCapacity = (value?: number) => {
   if (typeof value !== "number") return DEFAULT_TOTAL_SLOTS;
   const safe = Math.max(0, Math.floor(value));
@@ -215,6 +274,8 @@ const CLEARED_BODEGA_SLOT_PATCH: Partial<Slot> = {
   procesamientoSecundarioTitulo: undefined,
   procesamientoUnidadesSecundario: undefined,
   procesamientoSolicitudId: undefined,
+  procesamientoDesperdicioDevueltoSolicitudId: undefined,
+  catalogoProductId: undefined,
 };
 
 const padNumber = (value: number, length: number) =>
@@ -297,6 +358,16 @@ const normalizeSlots = (value: unknown, expectedSize = DEFAULT_TOTAL_SLOTS): Slo
     const procSolRaw = record.procesamientoSolicitudId;
     const procSolId =
       typeof procSolRaw === "string" && procSolRaw.trim() ? procSolRaw.trim() : undefined;
+    const procDespDevRaw = record.procesamientoDesperdicioDevueltoSolicitudId;
+    const procDespDevId =
+      typeof procDespDevRaw === "string" && procDespDevRaw.trim()
+        ? procDespDevRaw.trim().slice(0, 120)
+        : undefined;
+    const catalogoProductIdRaw = record.catalogoProductId;
+    const catalogoProductId =
+      typeof catalogoProductIdRaw === "string" && catalogoProductIdRaw.trim()
+        ? catalogoProductIdRaw.trim()
+        : undefined;
     const ordenCompraId =
       typeof record.ordenCompraId === "string" && record.ordenCompraId.trim()
         ? record.ordenCompraId.trim()
@@ -325,6 +396,8 @@ const normalizeSlots = (value: unknown, expectedSize = DEFAULT_TOTAL_SLOTS): Slo
       ...(procSecTitulo ? { procesamientoSecundarioTitulo: procSecTitulo } : {}),
       ...(procSecUnits !== undefined ? { procesamientoUnidadesSecundario: procSecUnits } : {}),
       ...(procSolId ? { procesamientoSolicitudId: procSolId } : {}),
+      ...(procDespDevId ? { procesamientoDesperdicioDevueltoSolicitudId: procDespDevId } : {}),
+      ...(catalogoProductId ? { catalogoProductId } : {}),
       ...(ordenCompraId ? { ordenCompraId } : {}),
       ...(ordenCompraClienteId ? { ordenCompraClienteId } : {}),
       ...(ordenVentaId ? { ordenVentaId } : {}),
@@ -392,6 +465,10 @@ const filterBoxesByCapacity = (items: Box[], capacity: number) =>
 
 const filterOrdersByCapacity = (items: BodegaOrder[], capacity: number) =>
   items.filter((order) => {
+    /** Origen virtual (pos. 0): no filtrar por `capacity` del almacén para no perder órdenes pendientes si el cupo en Firestore no coincide con el mapa. */
+    if (order.type === "a_bodega" && order.sourceZone === "procesamiento") {
+      return true;
+    }
     const within = (value?: number) => typeof value !== "number" || value <= capacity;
     return within(order.sourcePosition) && within(order.targetPosition);
   });
@@ -519,6 +596,15 @@ const normalizeOrders = (value: unknown): BodegaOrder[] | null => {
         continue;
       }
       const uv = pr.unidadPrimarioVisualizacion;
+      const rd = pr.rolDevolucion;
+      const rolDevolucion =
+        rd === "desperdicio" || rd === "procesado" ? rd : undefined;
+      const skRaw = pr.sobranteKg;
+      const sobranteKgParsed =
+        typeof skRaw === "number" && Number.isFinite(skRaw) ? Math.max(0, skRaw) : undefined;
+      const dkRaw = pr.desperdicioKg;
+      const desperdicioKgLegacy =
+        typeof dkRaw === "number" && Number.isFinite(dkRaw) ? Math.max(0, dkRaw) : undefined;
       procesamientoOrigen = {
         cuentaClientId,
         solicitudId,
@@ -541,6 +627,9 @@ const normalizeOrders = (value: unknown): BodegaOrder[] | null => {
             : pr.estimadoUnidadesSecundario === null
               ? null
               : undefined,
+        ...(rolDevolucion ? { rolDevolucion } : {}),
+        ...(sobranteKgParsed !== undefined ? { sobranteKg: sobranteKgParsed } : {}),
+        ...(desperdicioKgLegacy !== undefined ? { desperdicioKg: desperdicioKgLegacy } : {}),
       };
       sourcePosition =
         typeof record.sourcePosition === "number" && Number.isFinite(record.sourcePosition)
@@ -591,6 +680,28 @@ const normalizeOrders = (value: unknown): BodegaOrder[] | null => {
 
   return orders;
 };
+
+function solicitudLikeFromProcesamientoOrigen(po: ProcesamientoOrigenOrden): SolicitudProcesamiento {
+  const uv = po.unidadPrimarioVisualizacion;
+  return {
+    id: po.solicitudId,
+    clientId: po.cuentaClientId,
+    codeCuenta: "",
+    clientName: "",
+    creadoPorNombre: "",
+    creadoPorUid: "",
+    numero: po.numero,
+    numericId: 0,
+    productoPrimarioId: po.productoPrimarioId ?? "",
+    productoPrimarioTitulo: po.productoPrimarioTitulo,
+    productoSecundarioId: "",
+    productoSecundarioTitulo: po.productoSecundarioTitulo,
+    cantidadPrimario: po.cantidadPrimario,
+    unidadPrimarioVisualizacion: uv === "peso" || uv === "cantidad" ? uv : "peso",
+    fecha: "",
+    estado: normalizeProcesamientoEstado("Pendiente"),
+  };
+}
 
 const createOrderId = () => {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
@@ -741,7 +852,7 @@ async function mirrorUsersProfileToUsuariosIfNeeded(
 }
 
 export default function BodegaDashboard() {
-  const [selectedBoxModal, setSelectedBoxModal] = useState<Box | Slot | null>(null);
+  const [_selectedBoxModal, setSelectedBoxModal] = useState<Box | Slot | null>(null);
   const [editTempModal, setEditTempModal] = useState<{
     position: number;
     autoId: string;
@@ -1835,8 +1946,9 @@ export default function BodegaDashboard() {
     const keys = new Set<string>();
     orders.forEach((order) => {
       if (order.sourceZone === "procesamiento" && order.procesamientoOrigen) {
+        const rol = order.procesamientoOrigen.rolDevolucion ?? "procesado";
         keys.add(
-          `procesamiento:${order.procesamientoOrigen.cuentaClientId}:${order.procesamientoOrigen.solicitudId}`,
+          `procesamiento:${order.procesamientoOrigen.cuentaClientId}:${order.procesamientoOrigen.solicitudId}:${rol}`,
         );
       } else {
         keys.add(`${order.sourceZone}:${order.sourcePosition}`);
@@ -1884,30 +1996,89 @@ export default function BodegaDashboard() {
 
   const solicitudesProcTerminadas = useMemo(
     () =>
-      solicitudesProcSubscriptionRows.filter(
-        (r) => normalizeProcesamientoEstado(r.estado) === "Terminado",
-      ),
+      solicitudesProcSubscriptionRows.filter((r) => {
+        const e = normalizeProcesamientoEstado(r.estado);
+        return e === "Pendiente" || e === "Terminado";
+      }),
     [solicitudesProcSubscriptionRows],
   );
 
   const solicitudesProcesamientoTerminadasDisponibles = useMemo(() => {
-    const pend = new Set(
+    const pendProc = new Set(
       orders
-        .filter((o) => o.type === "a_bodega" && o.sourceZone === "procesamiento" && o.procesamientoOrigen)
+        .filter(
+          (o) =>
+            o.type === "a_bodega" &&
+            o.sourceZone === "procesamiento" &&
+            o.procesamientoOrigen &&
+            (o.procesamientoOrigen.rolDevolucion ?? "procesado") === "procesado",
+        )
         .map(
           (o) =>
             `${String(o.procesamientoOrigen!.cuentaClientId).trim()}::${String(o.procesamientoOrigen!.solicitudId).trim()}`,
         ),
     );
-    const yaEnMapa = new Set<string>();
-    for (const slot of slots) {
-      const sol = String(slot.procesamientoSolicitudId ?? "").trim();
-      const cli = String(slot.client ?? "").trim();
-      if (sol && cli) yaEnMapa.add(`${cli}::${sol}`);
-    }
     return solicitudesProcTerminadas.filter((s) => {
       const key = `${String(s.clientId).trim()}::${String(s.id).trim()}`;
-      return !pend.has(key) && !yaEnMapa.has(key);
+      if (pendProc.has(key)) return false;
+      const tieneProc = slots.some((slot) => {
+        if (String(slot.client ?? "").trim() !== String(s.clientId).trim()) return false;
+        if (String(slot.procesamientoSolicitudId ?? "").trim() !== String(s.id).trim()) return false;
+        return String(slot.procesamientoSecundarioTitulo ?? "").trim() !== "";
+      });
+      if (tieneProc) return false;
+      return true;
+    });
+  }, [solicitudesProcTerminadas, orders, slots]);
+
+  const solicitudesProcesamientoTerminadasDisponiblesDesperdicio = useMemo(() => {
+    const pendDesp = new Set(
+      orders
+        .filter(
+          (o) =>
+            o.type === "a_bodega" &&
+            o.sourceZone === "procesamiento" &&
+            o.procesamientoOrigen?.rolDevolucion === "desperdicio",
+        )
+        .map(
+          (o) =>
+            `${String(o.procesamientoOrigen!.cuentaClientId).trim()}::${String(o.procesamientoOrigen!.solicitudId).trim()}`,
+        ),
+    );
+    return solicitudesProcTerminadas.filter((s) => {
+      const sk = kgSobranteParaDevolucionMapa(s);
+      if (sk <= 0) return false;
+      const key = `${String(s.clientId).trim()}::${String(s.id).trim()}`;
+      if (pendDesp.has(key)) return false;
+      const yaDevuelto = slots.some((slot) => {
+        if (String(slot.client ?? "").trim() !== String(s.clientId).trim()) return false;
+        return String(slot.procesamientoDesperdicioDevueltoSolicitudId ?? "").trim() === String(s.id).trim();
+      });
+      if (yaDevuelto) return false;
+      const rowLike: SolicitudProcesamiento = {
+        id: s.id,
+        clientId: s.clientId,
+        codeCuenta: s.codeCuenta,
+        clientName: s.clientName,
+        creadoPorNombre: s.creadoPorNombre,
+        creadoPorUid: s.creadoPorUid,
+        numero: s.numero,
+        numericId: s.numericId,
+        productoPrimarioId: s.productoPrimarioId,
+        productoPrimarioTitulo: s.productoPrimarioTitulo,
+        productoSecundarioId: s.productoSecundarioId,
+        productoSecundarioTitulo: s.productoSecundarioTitulo,
+        cantidadPrimario: s.cantidadPrimario,
+        unidadPrimarioVisualizacion: s.unidadPrimarioVisualizacion,
+        warehouseId: s.warehouseId,
+        estimadoUnidadesSecundario: s.estimadoUnidadesSecundario,
+        reglaConversionCantidadPrimario: s.reglaConversionCantidadPrimario,
+        reglaConversionUnidadesSecundario: s.reglaConversionUnidadesSecundario,
+        perdidaProcesamientoPct: s.perdidaProcesamientoPct,
+        fecha: s.fecha,
+        estado: s.estado,
+      };
+      return Boolean(findSlotPrimarioParaDevolverDesperdicio(slots, rowLike));
     });
   }, [solicitudesProcTerminadas, orders, slots]);
 
@@ -1951,6 +2122,9 @@ export default function BodegaDashboard() {
     }
     if (order.type === "a_bodega") {
       if (order.sourceZone === "procesamiento" && order.procesamientoOrigen) {
+        if (order.procesamientoOrigen.rolDevolucion === "desperdicio") {
+          return `Desperdicio ${order.procesamientoOrigen.numero} → primario (cas. ${target})`;
+        }
         return `Procesamiento ${order.procesamientoOrigen.numero} → bodega ${target}`;
       }
       return `${sourceLabel} ${order.sourcePosition} · Destino bodega ${target}`;
@@ -2089,6 +2263,35 @@ export default function BodegaDashboard() {
       });
     });
 
+    /**
+     * Producto ya en casillero (asignado a entrada/salida) pendiente de traslado o despacho → alerta.
+     * No duplicamos si ya hay alerta por temperatura alta en esa caja.
+     */
+    inboundBoxes.forEach((box) => {
+      if (!boxCasilleroConCaja(box)) return;
+      if (boxTemperaturaAltaIngresoSalida(box)) return;
+      items.entrada.push({
+        id: `alerta-entrada-pendiente-${box.position}-${String(box.autoId ?? "").trim() || "sin-id"}`,
+        title: `Entrada pendiente · casillero ${box.position}`,
+        description: `Caja ${String(box.name ?? "").trim() || "—"} · ${String(box.autoId ?? "").trim() || "—"} · producto en ingreso pendiente de traslado o gestión.`,
+        meta: String(box.client ?? "").trim()
+          ? `Cliente · ${String(box.client).trim()}`
+          : undefined,
+      });
+    });
+    outboundBoxes.forEach((box) => {
+      if (!boxCasilleroConCaja(box)) return;
+      if (boxTemperaturaAltaIngresoSalida(box)) return;
+      items.salida.push({
+        id: `alerta-salida-pendiente-${box.position}-${String(box.autoId ?? "").trim() || "sin-id"}`,
+        title: `Salida pendiente · casillero ${box.position}`,
+        description: `Caja ${String(box.name ?? "").trim() || "—"} · ${String(box.autoId ?? "").trim() || "—"} · producto en salida pendiente de despacho o gestión.`,
+        meta: String(box.client ?? "").trim()
+          ? `Cliente · ${String(box.client).trim()}`
+          : undefined,
+      });
+    });
+
     overdueOrders.forEach((order) => {
       const zone: ZoneKey =
         order.sourceZone === "ingresos"
@@ -2104,8 +2307,35 @@ export default function BodegaDashboard() {
       });
     });
 
+    /** Jefe: reportes ya delegados al operario siguen como «alerta» hasta que se cierren. */
+    if (session?.role === "jefe") {
+      for (const alert of alerts) {
+        if (!alert.id.startsWith(ALERT_REPORT_PREFIX)) continue;
+        if (!assignedAlertIds.has(alert.id)) continue;
+        const zk = zoneKeyForAlertItem(alert, orders);
+        if (!zk) continue;
+        items[zk].push({
+          id: `jefe-alerta-asignada-${alert.id}`,
+          title: alert.title || "Reporte de fallo",
+          description: alert.description,
+          meta: alert.meta ?? "Asignada al operario · pendiente de gestión",
+        });
+      }
+    }
+
     return items;
-  }, [bodegaHighSlots, inboundHighBoxes, outboundHighBoxes, overdueOrders]);
+  }, [
+    assignedAlertIds,
+    alerts,
+    bodegaHighSlots,
+    inboundBoxes,
+    inboundHighBoxes,
+    outboundBoxes,
+    outboundHighBoxes,
+    overdueOrders,
+    orders,
+    session?.role,
+  ]);
 
   const zoneTaskItems = useMemo(() => {
     const byZone: Record<ZoneKey, DetailItem[]> = {
@@ -2114,14 +2344,41 @@ export default function BodegaDashboard() {
       salida: [],
     };
 
-    orders.forEach((order) => {
-      const zone: ZoneKey =
-        order.sourceZone === "ingresos"
-          ? "entrada"
-          : order.sourceZone === "salida"
-            ? "salida"
-            : "bodega";
+    const zoneForOrder = (order: BodegaOrder): ZoneKey =>
+      order.sourceZone === "ingresos"
+        ? "entrada"
+        : order.sourceZone === "salida"
+          ? "salida"
+          : "bodega";
 
+    if (session?.role === "jefe") {
+      orders.forEach((order) => {
+        if (orderIsOverdue(order, alertClock)) return;
+        const zone = zoneForOrder(order);
+        byZone[zone].push({
+          id: `tarea-${zone}-${order.id}`,
+          title: "Tarea pendiente",
+          description: formatOrderDetails(order),
+          meta: `Solicitado por ${order.createdBy} · ${order.createdAt}`,
+        });
+      });
+      for (const alert of alerts) {
+        if (!alert.id.startsWith(ALERT_REPORT_PREFIX)) continue;
+        if (assignedAlertIds.has(alert.id)) continue;
+        const zk = zoneKeyForAlertItem(alert, orders);
+        if (!zk) continue;
+        byZone[zk].push({
+          id: `jefe-tarea-report-${alert.id}`,
+          title: alert.title || "Reporte de fallo",
+          description: alert.description,
+          meta: alert.meta ?? "Pendiente: asignar al operario",
+        });
+      }
+      return byZone;
+    }
+
+    orders.forEach((order) => {
+      const zone = zoneForOrder(order);
       byZone[zone].push({
         id: `tarea-${zone}-${order.id}`,
         title: "Tarea pendiente",
@@ -2131,40 +2388,70 @@ export default function BodegaDashboard() {
     });
 
     return byZone;
-  }, [orders]);
+  }, [alertClock, alerts, assignedAlertIds, orders, session?.role]);
 
   const renderStatusButtons = (zone: ZoneKey) => {
     const alertCount = zoneAlertItems[zone].length;
     const taskCount = zoneTaskItems[zone].length;
+    const jefeStatusCopy = session?.role === "jefe";
+    /** Misma barra de estado en las tres zonas del tablero (0 si no hay → estilo atenuado). */
+    const alwaysShowBoth = zone === "bodega" || zone === "entrada" || zone === "salida";
 
-    if (alertCount === 0 && taskCount === 0) {
+    if (!alwaysShowBoth && alertCount === 0 && taskCount === 0) {
       return null;
     }
 
+    const alertInactive = alertCount === 0;
+    const taskInactive = taskCount === 0;
+
     return (
       <div className="flex items-center gap-2">
-        {alertCount > 0 ? (
-          <button
-            type="button"
-            onClick={() => setStatusModal({ zone, kind: "alertas" })}
-            className="flex items-center gap-2 rounded-full bg-rose-600 px-3 py-1 text-xs font-semibold text-white shadow-sm transition hover:bg-rose-500"
-            aria-label={`Ver alertas en ${zoneLabels[zone]}`}
-          >
-            <FiAlertTriangle className="h-4 w-4" />
+        <button
+          type="button"
+          onClick={() => setStatusModal({ zone, kind: "alertas" })}
+          className={alertInactive ? BODEGA_ZONE_STATUS_PILL_INACTIVE_CLASS : BODEGA_ZONE_STATUS_PILL_ACTIVE_CLASS}
+          title={
+            jefeStatusCopy
+              ? "Demoras, temperatura alta y reportes ya asignados al operario (seguimiento)."
+              : undefined
+          }
+          aria-label={
+            jefeStatusCopy
+              ? `Alertas y seguimiento en ${zoneLabels[zone]}: demoras, temperatura, reportes delegados`
+              : `Ver alertas en ${zoneLabels[zone]}`
+          }
+        >
+          <FiAlertTriangle
+            className={alertInactive ? BODEGA_ZONE_STATUS_ICON_INACTIVE_CLASS : BODEGA_ZONE_STATUS_ICON_ACTIVE_CLASS}
+            aria-hidden
+          />
+          <span className={alertInactive ? BODEGA_ZONE_STATUS_NUM_INACTIVE_CLASS : BODEGA_ZONE_STATUS_NUM_ACTIVE_CLASS}>
             {alertCount}
-          </button>
-        ) : null}
-        {taskCount > 0 ? (
-          <button
-            type="button"
-            onClick={() => setStatusModal({ zone, kind: "tareas" })}
-            className="flex items-center gap-2 rounded-full bg-amber-300 px-3 py-1 text-xs font-semibold text-amber-950 shadow-sm transition hover:bg-amber-200"
-            aria-label={`Ver tareas en ${zoneLabels[zone]}`}
-          >
-            <FiClipboard className="h-4 w-4" />
+          </span>
+        </button>
+        <button
+          type="button"
+          onClick={() => setStatusModal({ zone, kind: "tareas" })}
+          className={taskInactive ? BODEGA_ZONE_STATUS_PILL_INACTIVE_CLASS : BODEGA_ZONE_STATUS_PILL_ACTIVE_CLASS}
+          title={
+            jefeStatusCopy
+              ? "Órdenes en curso (sin demora) y reportes pendientes de asignar al operario."
+              : undefined
+          }
+          aria-label={
+            jefeStatusCopy
+              ? `Tareas pendientes en ${zoneLabels[zone]}: órdenes activas y reportes sin asignar`
+              : `Ver tareas en ${zoneLabels[zone]}`
+          }
+        >
+          <FiClipboard
+            className={taskInactive ? BODEGA_ZONE_STATUS_ICON_INACTIVE_CLASS : BODEGA_ZONE_STATUS_ICON_ACTIVE_CLASS}
+            aria-hidden
+          />
+          <span className={taskInactive ? BODEGA_ZONE_STATUS_NUM_INACTIVE_CLASS : BODEGA_ZONE_STATUS_NUM_ACTIVE_CLASS}>
             {taskCount}
-          </button>
-        ) : null}
+          </span>
+        </button>
       </div>
     );
   };
@@ -2791,7 +3078,7 @@ export default function BodegaDashboard() {
 
       const estadoMsg = sinDiferencias ? "Cerrado(ok)" : "Cerrado(no ok)";
       setMessage(
-        `Ingreso desde venta ${payload.orden.numero}: ${created.length} caja(s) en zona de ingreso. La venta quedó en «${estadoMsg}».`,
+        `Salida / venta ${payload.orden.numero}: ${created.length} caja(s) en zona de ingreso. La venta quedó en «${estadoMsg}».`,
       );
     },
     [
@@ -2821,6 +3108,43 @@ export default function BodegaDashboard() {
     }
 
     if (destination === "a_bodega" && sourceZone === "procesamiento" && procesamientoOrigen) {
+      const rol = procesamientoOrigen.rolDevolucion ?? "procesado";
+      if (rol === "desperdicio") {
+        const sk = Number(procesamientoOrigen.sobranteKg);
+        if (!Number.isFinite(sk) || sk <= 0) {
+          setMessage("Indicá kg de sobrante válidos (fracción del primario a reintegrar).");
+          return;
+        }
+        const rowLike = solicitudLikeFromProcesamientoOrigen(procesamientoOrigen);
+        const found = findSlotPrimarioParaDevolverDesperdicio(slots, rowLike);
+        if (!found) {
+          setMessage(
+            "No hay casillero en bodega con el producto primario para devolver el desperdicio.",
+          );
+          return;
+        }
+        const newOrderProc: BodegaOrder = {
+          id: createOrderId(),
+          type: "a_bodega",
+          sourcePosition: 0,
+          sourceZone: "procesamiento",
+          targetPosition: found.position,
+          createdAt: new Date().toLocaleString("es-CO"),
+          createdAtMs: Date.now(),
+          createdBy: role,
+          client: procesamientoOrigen.cuentaClientId,
+          autoId: `SOBR-${procesamientoOrigen.numero}`,
+          boxName: `Sobrante · ${procesamientoOrigen.productoPrimarioTitulo}`.slice(0, 240),
+          procesamientoOrigen: {
+            ...procesamientoOrigen,
+            rolDevolucion: "desperdicio",
+            sobranteKg: sk,
+          },
+        };
+        setOrders((prev) => [newOrderProc, ...prev]);
+        setMessage("Orden de devolución de sobrante creada.");
+        return;
+      }
       if (!targetPosition || !availableBodegaTargets.includes(targetPosition)) {
         setMessage("Selecciona una posicion libre en bodega.");
         return;
@@ -2844,7 +3168,7 @@ export default function BodegaDashboard() {
           0,
           240,
         ),
-        procesamientoOrigen,
+        procesamientoOrigen: { ...procesamientoOrigen, rolDevolucion: "procesado" },
       };
       setOrders((prev) => [newOrderProc, ...prev]);
       setMessage("Orden creada correctamente.");
@@ -3122,7 +3446,7 @@ export default function BodegaDashboard() {
       setTareasProcesamientoOperario(nextTareas);
       const num = meta.row.numero;
       if (quitar) {
-        setMessage(`Orden ${num} terminada.`);
+        setMessage(`Orden ${num} en «Pendiente»: falta ubicar el resultado en almacenamiento para cerrar el ciclo.`);
       } else {
         setMessage(
           meta.warning
@@ -3214,6 +3538,20 @@ export default function BodegaDashboard() {
             ? " No hay usuario con rol «procesador»: la tarea en cola sigue asignada al operario hasta que exista un procesador."
             : "";
       setMessage(`${baseMsg}${sufijoProc}`);
+      if (cid && sid) {
+        try {
+          await SolicitudProcesamientoService.registrarKgPrimarioDescontado(cid, sid, {
+            deductedKg: resultado.deductedKg,
+            cantidadPrimario: like.cantidadPrimario,
+            unidadPrimarioVisualizacion: like.unidadPrimarioVisualizacion,
+            estimadoUnidadesSecundario: like.estimadoUnidadesSecundario,
+            reglaConversionCantidadPrimario: like.reglaConversionCantidadPrimario,
+            reglaConversionUnidadesSecundario: like.reglaConversionUnidadesSecundario,
+          });
+        } catch (e) {
+          console.error("[BodegaDashboard] registrarKgPrimarioDescontado:", e);
+        }
+      }
       persistWarehouseStateNow({
         slots: resultado.slots,
         inboundBoxes,
@@ -3257,7 +3595,7 @@ export default function BodegaDashboard() {
         (t) => !(String(t.clientId ?? "").trim() === cid && String(t.solicitudId ?? "").trim() === sid),
       );
       setTareasProcesamientoOperario(nextTareas);
-      setMessage(`Orden ${like.numero} terminada.`);
+      setMessage(`Orden ${like.numero} en «Pendiente»: cuando el operario ubique todo en almacenamiento pasará a «Terminado».`);
       persistWarehouseStateNow({
         slots,
         inboundBoxes,
@@ -3290,6 +3628,25 @@ export default function BodegaDashboard() {
       alertasOperarioSolved,
       llamadasJefe,
     ],
+  );
+
+  /** Cuando el operario completó traslado procesamiento → mapa: si ya está todo ubicado, cerrar la solicitud como «Terminado». */
+  const intentarMarcarProcesamientoTerminadoTrasTraslado = useCallback(
+    async (procMeta: ProcesamientoOrigenOrden, slotsAfter: Slot[]) => {
+      const cid = String(procMeta.cuentaClientId ?? "").trim();
+      const sid = String(procMeta.solicitudId ?? "").trim();
+      if (!cid || !sid) return;
+      try {
+        const row = await SolicitudProcesamientoService.obtenerSolicitud(cid, sid);
+        if (!row) return;
+        if (normalizeProcesamientoEstado(row.estado) !== "Pendiente") return;
+        if (!procesamientoUbicacionCompletaEnMapa(slotsAfter, row)) return;
+        await SolicitudProcesamientoService.actualizarEstado(cid, sid, "Terminado");
+      } catch (e) {
+        console.error("[BodegaDashboard] Marcar Terminado tras ubicar procesamiento en mapa:", e);
+      }
+    },
+    [],
   );
 
   const executeOrder = (orderId: string) => {
@@ -3361,10 +3718,6 @@ export default function BodegaDashboard() {
         setMessage("La posicion de destino debe ser diferente.");
         return;
       }
-      if (slot.autoId.trim()) {
-        setMessage("La posicion de bodega ya esta ocupada.");
-        return;
-      }
 
       if (sourceIsProcesamiento) {
         const procMeta = order.procesamientoOrigen;
@@ -3372,6 +3725,62 @@ export default function BodegaDashboard() {
           setMessage("Orden invalida: falta dato de procesamiento.");
           return;
         }
+        const rolProc = procMeta.rolDevolucion ?? "procesado";
+        if (rolProc === "desperdicio") {
+          const dk = Number(procMeta.sobranteKg) || 0;
+          if (dk <= 0) {
+            setMessage("La orden no tiene kg de sobrante válidos.");
+            return;
+          }
+          const rowLike = solicitudLikeFromProcesamientoOrigen(procMeta);
+          const match = findSlotPrimarioParaDevolverDesperdicio(slots, rowLike);
+          if (!match || match.position !== target) {
+            setMessage(
+              "No se encontró el casillero del producto primario o el destino no coincide. Revisá el mapa.",
+            );
+            return;
+          }
+          if (!slot.autoId.trim()) {
+            setMessage("El casillero del primario no tiene producto; no se puede reintegrar desperdicio.");
+            return;
+          }
+          const recSlot = slot as unknown as Record<string, unknown>;
+          const curKg = kgFromFirestoreSlotRecord(recSlot) ?? (Number(slot.quantityKg) || 0);
+          const nextKg = (Number.isFinite(curKg) ? curKg : 0) + dk;
+          const sidMark = String(procMeta.solicitudId).trim().slice(0, 120);
+          const nextSlotsDesp = slots.map((item) => {
+            if (item.position !== target) return item;
+            return {
+              ...item,
+              quantityKg: nextKg,
+              procesamientoDesperdicioDevueltoSolicitudId: sidMark,
+            };
+          });
+          const nextStatsDesp = { ...stats, movimientosBodega: stats.movimientosBodega + 1 };
+          const nextOrdersDesp = orders.filter((item) => item.id !== orderId);
+          persistWarehouseStateNow({
+            slots: nextSlotsDesp,
+            inboundBoxes,
+            outboundBoxes,
+            dispatchedBoxes,
+            orders: nextOrdersDesp,
+            stats: nextStatsDesp,
+            ...meta,
+          });
+          setSlots(nextSlotsDesp);
+          setOrders(nextOrdersDesp);
+          setStats(nextStatsDesp);
+          addMovimientoBodega({ ...order, completadoAtMs: Date.now() });
+          setMessage("Sobrante reintegrado al mismo producto primario en bodega.");
+          void intentarMarcarProcesamientoTerminadoTrasTraslado(procMeta, nextSlotsDesp);
+          return;
+        }
+
+        if (slot.autoId.trim()) {
+          setMessage("La posicion de bodega ya esta ocupada.");
+          return;
+        }
+
         const qty = Math.max(0, Number(procMeta.cantidadPrimario) || 0);
         if (qty <= 0) {
           setMessage("La orden no tiene cantidad valida para ubicar en bodega.");
@@ -3410,8 +3819,9 @@ export default function BodegaDashboard() {
             est = rEst;
           }
         }
-        if (typeof est === "number" && Number.isFinite(est) && est > 0) {
-          filled.procesamientoUnidadesSecundario = est;
+        const udsMapa = typeof est === "number" && Number.isFinite(est) ? unidadesSecundarioEnterasParaMapa(est) : 0;
+        if (udsMapa > 0) {
+          filled.procesamientoUnidadesSecundario = udsMapa;
         }
         if (procMeta.productoPrimarioId?.trim()) {
           filled.catalogoProductId = procMeta.productoPrimarioId.trim();
@@ -3435,6 +3845,12 @@ export default function BodegaDashboard() {
         setStats(nextStatsProc);
         addMovimientoBodega({ ...order, completadoAtMs: Date.now() });
         setMessage("Producto de procesamiento ubicado en bodega.");
+        void intentarMarcarProcesamientoTerminadoTrasTraslado(procMeta, nextSlotsProc);
+        return;
+      }
+
+      if (slot.autoId.trim()) {
+        setMessage("La posicion de bodega ya esta ocupada.");
         return;
       }
 
@@ -4546,6 +4962,9 @@ export default function BodegaDashboard() {
                 onPushTareaProcesamientoOperario={handlePushTareaProcesamientoOperario}
                 warehouseId={warehouseId}
                 onProcesamientoTerminadoInventario={handleProcesamientoTerminadoInventarioMapa}
+                ordenesBodegaPendientes={orders}
+                availableBodegaTargets={availableBodegaTargets}
+                onCrearOrdenBodega={handleCreateOrder}
               />
             ) : null}
 
@@ -4641,8 +5060,6 @@ export default function BodegaDashboard() {
                 alertasOperario={alertasOperario}
                 alertasOperarioSolved={alertasOperarioSolved}
                 onUpdateAlertasOperario={setAlertasOperario}
-                selectedBoxModal={selectedBoxModal}
-                setSelectedBoxModal={setSelectedBoxModal}
                 editTempModal={editTempModal}
                 setEditTempModal={setEditTempModal}
                 handleUpdateBoxTemperature={handleUpdateBoxTemperature}
@@ -4681,7 +5098,12 @@ export default function BodegaDashboard() {
                 onPushTareaProcesamientoOperario={handlePushTareaProcesamientoOperario}
                 onProcesamientoTerminadoInventario={handleProcesamientoTerminadoInventarioMapa}
                 solicitudesProcesamientoTerminadasDisponibles={solicitudesProcesamientoTerminadasDisponibles}
+                solicitudesProcesamientoTerminadasDisponiblesDesperdicio={
+                  solicitudesProcesamientoTerminadasDisponiblesDesperdicio
+                }
                 solicitudesProcesamientoTerminadas={solicitudesProcTerminadas}
+                ordenesBodegaPendientes={orders}
+                renderStatusButtons={renderStatusButtons}
               />
             ) : null}
 
@@ -4690,7 +5112,7 @@ export default function BodegaDashboard() {
                 <div className="rounded-2xl bg-white p-6 shadow-sm">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div>
-                      <h2 className="text-lg font-semibold text-slate-900">Gestion de alertas</h2>
+                      <h2 className="app-title">Gestion de alertas</h2>
                       <p className="mt-1 text-sm text-slate-600">Solo lectura para el administrador.</p>
                     </div>
                     <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
@@ -4743,7 +5165,7 @@ export default function BodegaDashboard() {
                 <div className="rounded-2xl bg-white p-6 shadow-sm">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div>
-                      <h2 className="text-lg font-semibold text-slate-900">Solicitudes pendientes</h2>
+                      <h2 className="app-title">Solicitudes pendientes</h2>
                       <p className="mt-1 text-sm text-slate-600">Vista consolidada para el administrador.</p>
                     </div>
                     <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
@@ -4752,6 +5174,7 @@ export default function BodegaDashboard() {
                   </div>
                   <div className="mt-4">
                     <RequestsQueue
+                      warehouseId={warehouseId}
                       requests={orders}
                       canExecute={false}
                       onExecute={() => undefined}
@@ -4778,6 +5201,7 @@ export default function BodegaDashboard() {
             {activeTab === "solicitudes" && isColaboradorBodega ? (
               <section className="grid gap-4">
                 <RequestsQueue
+                  warehouseId={warehouseId}
                   requests={orders}
                   canExecute={isOperario}
                   canExecuteWorkOrders={isOperario}
@@ -4816,7 +5240,7 @@ export default function BodegaDashboard() {
                 <div className="rounded-2xl bg-white p-6 shadow-sm">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div>
-                      <h2 className="text-lg font-semibold text-slate-900">Gestion de alertas</h2>
+                      <h2 className="app-title">Gestion de alertas</h2>
                       <p className="mt-1 text-sm text-slate-600">
                         {canManageAlerts
                           ? "Revisa y asigna las alertas al operario."
@@ -4903,7 +5327,7 @@ export default function BodegaDashboard() {
                   <p className="text-xs font-semibold uppercase tracking-[0.25em] text-slate-400">
                     Alertas
                   </p>
-                  <h3 className="mt-2 text-2xl font-semibold text-slate-900">Alertas activas</h3>
+                  <h3 className="app-title mt-2">Alertas activas</h3>
                   <p className="mt-1 text-sm text-slate-600">
                     {canManageAlerts
                       ? "Revisa y gestiona las alertas activas."
@@ -4990,7 +5414,7 @@ export default function BodegaDashboard() {
                   <p className="text-xs font-semibold uppercase tracking-[0.25em] text-slate-400">
                     Alertas asignadas
                   </p>
-                  <h3 className="mt-2 text-2xl font-semibold text-slate-900">Tareas del jefe</h3>
+                  <h3 className="app-title mt-2">Tareas del jefe</h3>
                   <p className="mt-1 text-sm text-slate-600">Ejecuta las alertas asignadas por el jefe.</p>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
@@ -5042,78 +5466,54 @@ export default function BodegaDashboard() {
         ) : null}
 
         {statusModal ? (
-          <div
-            className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-2 sm:p-4"
-            role="dialog"
-            aria-modal="true"
-            onClick={() => setStatusModal(null)}
+          <BodegaZonaEstadoModalShell
+            titleId="bodega-zona-status-modal-title"
+            label={statusModal.kind === "alertas" ? "Alertas" : "Tareas pendientes"}
+            title={zoneLabels[statusModal.zone]}
+            subtitle={
+              session?.role === "jefe"
+                ? statusModal.kind === "alertas"
+                  ? "Temperatura alta, órdenes demoradas y reportes ya delegados al operario (pendientes de cierre)."
+                  : "Órdenes en curso sin demora y reportes de fallo que aún no asignaste al operario."
+                : statusModal.kind === "alertas"
+                  ? "Detalles de alertas activas en esta zona."
+                  : "Tareas pendientes relacionadas con esta zona."
+            }
+            icon={
+              statusModal.kind === "alertas" ? (
+                <FiAlertTriangle className="h-6 w-6 shrink-0" aria-hidden />
+              ) : (
+                <FiClipboard className="h-6 w-6 shrink-0" aria-hidden />
+              )
+            }
+            onClose={() => setStatusModal(null)}
+            zClass="z-50"
           >
-            <div
-              className="w-full max-w-lg sm:max-w-2xl rounded-3xl bg-white p-0 shadow-2xl border border-blue-100 relative overflow-hidden"
-              onClick={(event) => event.stopPropagation()}
-            >
-              <div className="sticky top-0 z-10 flex items-center justify-between gap-3 bg-blue-50/80 px-6 py-4 border-b border-blue-100">
-                <div className="flex items-center gap-3">
-                  <span className={`inline-flex items-center justify-center w-10 h-10 rounded-full ${statusModal.kind === "alertas" ? "bg-red-100" : "bg-amber-100"}`}>
-                    {statusModal.kind === "alertas" ? (
-                      <svg className="w-6 h-6 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                    ) : (
-                      <svg className="w-6 h-6 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17v-2a4 4 0 118 0v2M12 9v2m0 4h.01" /></svg>
-                    )}
-                  </span>
-                  <div>
-                    <p className="text-xs font-semibold uppercase tracking-[0.25em] text-slate-400">
-                      {statusModal.kind === "alertas" ? "Alertas" : "Lista de tareas"}
-                    </p>
-                    <h3 className="mt-1 text-xl sm:text-2xl font-bold text-slate-900">
-                      {zoneLabels[statusModal.zone]}
-                    </h3>
-                    <p className="mt-1 text-xs sm:text-sm text-slate-600">
-                      {statusModal.kind === "alertas"
-                        ? "Detalles de alertas activas en esta zona."
-                        : "Tareas pendientes relacionadas con esta zona."}
-                    </p>
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setStatusModal(null)}
-                  className="rounded-full border border-slate-200 px-3 py-1 text-sm font-semibold text-slate-600 transition hover:bg-slate-100 hover:text-blue-700"
-                >
-                  Cerrar
-                </button>
-              </div>
-              <div className="p-6 grid gap-4 max-h-[60vh] overflow-y-auto bg-white">
+            {(statusModal.kind === "alertas"
+              ? zoneAlertItems[statusModal.zone]
+              : zoneTaskItems[statusModal.zone]
+            ).length === 0 ? (
+              <p className="text-sm leading-relaxed text-slate-600">
+                No hay <strong className="text-slate-800">elementos</strong> para mostrar en esta zona.
+              </p>
+            ) : (
+              <ul className="grid gap-3">
                 {(statusModal.kind === "alertas"
                   ? zoneAlertItems[statusModal.zone]
                   : zoneTaskItems[statusModal.zone]
-                ).length === 0 ? (
-                  <div className="text-center text-slate-400 py-8">
-                    <svg className="mx-auto w-12 h-12 text-slate-200" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                    <p className="mt-2 text-base font-semibold">No hay elementos para mostrar.</p>
-                  </div>
-                ) : (
-                  (statusModal.kind === "alertas"
-                    ? zoneAlertItems[statusModal.zone]
-                    : zoneTaskItems[statusModal.zone]
-                  ).map((item) => (
-                    <div
-                      key={item.id}
-                      className="rounded-xl border border-slate-200 bg-slate-50 p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 shadow-sm hover:shadow-md transition"
-                    >
-                      <div className="flex-1 min-w-0">
-                        <p className="text-base font-semibold text-slate-900 truncate">{item.title}</p>
-                        <p className="mt-1 text-sm text-slate-600 truncate">{item.description}</p>
-                        {item.meta ? (
-                          <p className="mt-2 text-xs font-semibold text-slate-500">{item.meta}</p>
-                        ) : null}
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
-          </div>
+                ).map((item) => (
+                  <li
+                    key={item.id}
+                    className="rounded-2xl border border-sky-100 bg-linear-to-br from-white to-sky-50/40 p-4 shadow-sm"
+                  >
+                    <p className="font-semibold leading-snug text-slate-900">{item.title}</p>
+                    <p className="mt-1 text-sm leading-relaxed text-slate-600">{item.description}</p>
+                    {item.meta ? <p className="mt-2 text-xs font-semibold text-slate-500">{item.meta}</p> : null}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </BodegaZonaEstadoModalShell>
         ) : null}
 
         {resolveModalAlert ? (
@@ -5132,7 +5532,7 @@ export default function BodegaDashboard() {
                   <p className="text-xs font-semibold uppercase tracking-[0.25em] text-slate-400">
                     Solucionar alerta
                   </p>
-                  <h3 className="mt-2 text-2xl font-semibold text-slate-900">{resolveModalAlert.title}</h3>
+                  <h3 className="app-title mt-2">{resolveModalAlert.title}</h3>
                   <p className="mt-1 text-sm text-slate-600">{resolveModalAlert.description}</p>
                 </div>
                 <button

@@ -140,6 +140,8 @@ function mapDoc(id: string, data: Record<string, unknown>): VentaEnCurso {
   if (!numero && Number.isFinite(nid) && nid > 0) {
     numero = `V-${String(nid).padStart(4, "0")}`;
   }
+  const origenWarehouseId = String(data.origenWarehouseId ?? "").trim() || undefined;
+  const origenWarehouseNombre = String(data.origenWarehouseNombre ?? "").trim() || undefined;
   const destinoWarehouseId = String(data.destinoWarehouseId ?? "").trim() || undefined;
   const destinoWarehouseNombre = String(data.destinoWarehouseNombre ?? "").trim() || undefined;
   const rawRec = data.recepcionBodega;
@@ -178,6 +180,8 @@ function mapDoc(id: string, data: Record<string, unknown>): VentaEnCurso {
     lineItems,
     codeCuenta: String(data.codeCuenta ?? "").trim() || undefined,
     createdAt: createdAtMsFromData(data),
+    ...(origenWarehouseId ? { origenWarehouseId } : {}),
+    ...(origenWarehouseNombre ? { origenWarehouseNombre } : {}),
     ...(destinoWarehouseId ? { destinoWarehouseId } : {}),
     ...(destinoWarehouseNombre ? { destinoWarehouseNombre } : {}),
     ...(recepcionBodega ? { recepcionBodega } : {}),
@@ -258,6 +262,8 @@ export const OrdenVentaService = {
       fecha: string;
       estado: string;
       lineItems: VentaEnCursoLineItem[];
+      origenWarehouseId?: string;
+      origenWarehouseNombre?: string;
     },
   ): Promise<void> {
     const cid = String(clientId ?? "").trim();
@@ -272,6 +278,8 @@ export const OrdenVentaService = {
       nextId = (Number(last.numericId) || 0) + 1;
     }
 
+    const owid = String(draft.origenWarehouseId ?? "").trim();
+    const ownom = String(draft.origenWarehouseNombre ?? "").trim();
     await addDoc(colRef(cid), {
       clientId: cid,
       codeCuenta: String(codeCuenta ?? "").trim(),
@@ -283,6 +291,12 @@ export const OrdenVentaService = {
       estado: String(draft.estado ?? "Iniciado").trim() || "Iniciado",
       lineItems: draft.lineItems.map(lineItemToFirestore),
       createdAt: serverTimestamp(),
+      ...(owid
+        ? {
+            origenWarehouseId: owid,
+            origenWarehouseNombre: ownom || owid,
+          }
+        : {}),
     });
   },
 

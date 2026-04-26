@@ -1,7 +1,15 @@
 "use client";
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { HiOutlineXMark } from "react-icons/hi2";
+import { HiArrowRight } from "react-icons/hi2";
+import {
+  FORMULARIO_CREACION_BODY,
+  FORMULARIO_CREACION_INPUT,
+  FORMULARIO_CREACION_LABEL,
+  FORMULARIO_CREACION_SELECT,
+  FormularioPlantilla,
+  FormularioPlantillaAcciones,
+} from "@/app/components/ui/FormularioPlantilla";
 import type { Catalogo } from "@/app/types/catalogo";
 import type { Slot, WarehouseMeta } from "@/app/interfaces/bodega";
 import { PROCESAMIENTO_ESTADOS } from "@/app/types/solicitudProcesamiento";
@@ -14,6 +22,7 @@ import {
   unidadesSecundarioPorRegla,
 } from "@/lib/catalogoProcesamiento";
 import { etiquetaUnidadVisualizacion } from "@/lib/unidadVisualizacionCatalogo";
+import { formatoPrecioCatalogo } from "@/lib/catalogoPrecio";
 import { subscribeWarehouseState } from "@/lib/bodegaCloudState";
 import { stockPrimarioDesdeSlotsPreferirKgCuandoExisten } from "@/lib/stockPrimarioBodega";
 
@@ -213,8 +222,8 @@ export function OrdenProcesamientoFormModal({
   }, [isOpen, warehouseFirestoreId]);
 
   const primario = useMemo(
-    () => primariosCatalogo.find((p) => p.id === primarioId),
-    [primariosCatalogo, primarioId],
+    () => primariosOrdenados.find((p) => p.id === primarioId),
+    [primariosOrdenados, primarioId],
   );
   const secundario = useMemo(
     () => secundariosDelPrimario.find((p) => p.id === secundarioId),
@@ -276,6 +285,33 @@ export function OrdenProcesamientoFormModal({
     return estimadoSecundarioAplicarPerdidaPct(estimadoTeorico, perdidaPctDelCatalogo);
   }, [estimadoTeorico, perdidaPctDelCatalogo]);
 
+  /** Unidades enteras, sobrante en kg (fracción de u. → primario) y merma en u./kg para el bloque Estimado. */
+  const desgloseEstimado = useMemo(() => {
+    if (estimado === null || estimado === undefined || !Number.isFinite(estimado) || estimado < 0) return null;
+    const uInt = Math.max(0, Math.floor(estimado + 1e-9));
+    const frac = Math.max(0, estimado - uInt);
+    const kgPorU = estimado > 1e-12 ? cantidadElegida / estimado : 0;
+    const sobranteKg = frac * kgPorU;
+
+    let mermaUnidades: number | null = null;
+    let mermaKg: number | null = null;
+    if (
+      estimadoTeorico !== null &&
+      estimadoTeorico !== undefined &&
+      Number.isFinite(estimadoTeorico) &&
+      estimadoTeorico >= 0
+    ) {
+      mermaUnidades = Math.max(0, estimadoTeorico - estimado);
+      if (estimadoTeorico > 1e-12) {
+        mermaKg = mermaUnidades * (cantidadElegida / estimadoTeorico);
+      } else {
+        mermaKg = 0;
+      }
+    }
+
+    return { uInt, sobranteKg, mermaUnidades, mermaKg };
+  }, [estimado, estimadoTeorico, cantidadElegida]);
+
   const codeCuentaDestino = useMemo(() => {
     const w = bodegasConCodigo.find((x) => x.id === bodegaWarehouseId);
     if (w?.codeCuenta?.trim()) return w.codeCuenta.trim();
@@ -306,7 +342,7 @@ export function OrdenProcesamientoFormModal({
         setError(
           !warehouseFirestoreId
             ? "No hay bodega interna vinculada a la cuenta para leer el mapa y validar stock (asigná una en «Asignar bodegas»)."
-            : "No hay stock de este primario en el mapa de bodega para tu cuenta (o las cajas no tienen kg/piezas). Revisá que el nombre en mapa coincida con el título del catálogo.",
+            : "No hay stock de este primario en el almacenamiento para tu cuenta (o las cajas no tienen kg/piezas). Revisá que el nombre en almacenamiento coincida con el título del catálogo.",
         );
         return;
       }
@@ -400,44 +436,46 @@ export function OrdenProcesamientoFormModal({
     Math.round(cantidadElegida) <= maxCantidad &&
     unidadesSecundarioPorUnoPrimarioNum !== null;
 
-  if (!isOpen) return null;
-
   return (
-    <div
-      className="fixed inset-0 z-[60] flex items-center justify-center bg-black/20 p-4 backdrop-blur-sm"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="orden-procesamiento-modal-title"
-      onClick={onClose}
+    <FormularioPlantilla
+      isOpen={isOpen}
+      onClose={onClose}
+      titulo="Nueva orden de procesamiento"
+      subtitulo="Insumo → resultado"
+      titleId="orden-procesamiento-modal-title"
+      maxWidthClass="max-w-lg"
+      zIndexClass="z-[60]"
+      footer={
+        <FormularioPlantillaAcciones
+          formId="orden-procesamiento-form"
+          onCancel={onClose}
+          submitLabel="Confirmar y enviar a bodega"
+          loading={saving}
+          submitDisabled={
+            primariosOrdenados.length === 0 || secundariosOrdenados.length === 0 || !puedeConfirmar
+          }
+        />
+      }
     >
-      <div
-        className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-[12px] border border-gray-100 bg-white p-6 shadow-xl"
-        onClick={(e) => e.stopPropagation()}
+      <form
+        id="orden-procesamiento-form"
+        onSubmit={(e) => void handleSubmit(e)}
+        className={`${FORMULARIO_CREACION_BODY} flex flex-col gap-5`}
       >
-        <div className="mb-4 flex items-center justify-between">
-          <h2 id="orden-procesamiento-modal-title" className="text-lg font-semibold text-gray-900">
-            Nueva orden de procesamiento
-          </h2>
-          <button type="button" onClick={onClose} className="text-gray-400 hover:text-gray-600" aria-label="Cerrar">
-            <HiOutlineXMark size={24} />
-          </button>
-        </div>
-
-        <form onSubmit={(e) => void handleSubmit(e)} className="flex flex-col gap-5">
           <div>
-            <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-gray-500">Fecha</label>
+            <label className={FORMULARIO_CREACION_LABEL}>Fecha</label>
             <input
               type="date"
               value={fecha}
               onChange={(e) => setFecha(e.target.value)}
-              className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm"
+              className={FORMULARIO_CREACION_INPUT}
               required
             />
           </div>
 
           {bodegasConCodigo.length > 0 ? (
             <p className="text-xs text-gray-500">
-              Inventario:{" "}
+              Mapa:{" "}
               <span className="font-medium text-gray-800">
                 {String(bodegasConCodigo.find((w) => w.id === bodegaWarehouseId)?.name ?? "").trim() ||
                   bodegasConCodigo.find((w) => w.id === bodegaWarehouseId)?.codeCuenta ||
@@ -446,42 +484,40 @@ export function OrdenProcesamientoFormModal({
             </p>
           ) : (
             <p className="rounded-lg border border-amber-100 bg-amber-50/80 px-3 py-2 text-xs text-amber-900">
-              Sin bodega interna en la cuenta. Destino:{" "}
+              Sin bodega.{" "}
               <span className="font-mono font-semibold">{fallbackCodeCuenta || "—"}</span>
             </p>
           )}
 
           <div>
-            <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-gray-500">
+            <label className={FORMULARIO_CREACION_LABEL}>
               Insumo
             </label>
             {primariosCatalogo.length === 0 ? (
               <p className="rounded-lg border border-amber-100 bg-amber-50 px-3 py-2 text-sm text-amber-900">
-                No hay productos primarios en el catálogo. Creá ítems cuyo tipo no sea «Secundario».
+                Sin primarios cat.
               </p>
             ) : !clientIdFirestore.trim() ? (
               <p className="rounded-lg border border-amber-100 bg-amber-50 px-3 py-2 text-sm text-amber-900">
-                Falta el cliente de la sesión para cruzar inventario con el mapa.
+                Sin cliente sesión.
               </p>
             ) : !warehouseFirestoreId ? (
               <p className="rounded-lg border border-amber-100 bg-amber-50 px-3 py-2 text-sm text-amber-900">
-                Sin bodega interna vinculada no se puede leer el mapa ni listar primarios con stock.
+                Sin bodega interna.
               </p>
             ) : mapaBodegaLoading ? (
               <p className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2 text-sm text-slate-700">
-                Consultando inventario en bodega…
+                Consultando…
               </p>
             ) : primariosOrdenados.length === 0 ? (
               <p className="rounded-lg border border-amber-100 bg-amber-50 px-3 py-2 text-sm text-amber-900">
-                No hay primarios con <strong>stock en esta bodega</strong> para tu cuenta{" "}
-                <strong>y</strong> con al menos un <strong>secundario</strong> creado en catálogo (Incluido primario).
-                Revisá nombres en mapa vs. título del producto y que exista el derivado.
+                Sin primario válido.
               </p>
             ) : (
               <select
                 value={primarioId}
                 onChange={(e) => setPrimarioId(e.target.value)}
-                className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm"
+                className={FORMULARIO_CREACION_SELECT}
               >
                 {primariosOrdenados.map((p) => (
                   <option key={p.id} value={p.id}>
@@ -493,7 +529,7 @@ export function OrdenProcesamientoFormModal({
             {primario ? (
               <p className="mt-1 text-xs text-gray-500">
                 {mapaBodegaLoading ? (
-                  "Leyendo inventario…"
+                  "Leyendo…"
                 ) : warehouseFirestoreId ? (
                   <>
                     Stock:{" "}
@@ -511,30 +547,29 @@ export function OrdenProcesamientoFormModal({
                     ) : null}
                   </>
                 ) : (
-                  "Sin bodega para leer inventario"
+                  "Sin bodega lectura."
                 )}
               </p>
             ) : null}
           </div>
 
           <div>
-            <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-gray-500">
+            <label className={FORMULARIO_CREACION_LABEL}>
               Resultado
             </label>
             {!primarioId ? (
               <p className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2 text-sm text-slate-600">
-                Elegí primero un primario con stock en bodega.
+                Elegí primario.
               </p>
             ) : secundariosOrdenados.length === 0 ? (
               <p className="rounded-lg border border-amber-100 bg-amber-50 px-3 py-2 text-sm text-amber-900">
-                No hay secundarios vinculados a este primario. En <strong>Catálogo → Crear secundario</strong> elegí
-                este producto en «Incluido primario».
+                Sin secundarios.
               </p>
             ) : (
               <select
                 value={secundarioId}
                 onChange={(e) => setSecundarioId(e.target.value)}
-                className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm"
+                className={FORMULARIO_CREACION_SELECT}
               >
                 {secundariosOrdenados.map((p) => (
                   <option key={p.id} value={p.id}>
@@ -543,6 +578,14 @@ export function OrdenProcesamientoFormModal({
                 ))}
               </select>
             )}
+            {secundario ? (
+              <p className="mt-2 text-xs text-gray-600">
+                Precio:{" "}
+                <span className="font-semibold tabular-nums text-gray-900">
+                  {formatoPrecioCatalogo(secundario)}
+                </span>
+              </p>
+            ) : null}
           </div>
 
           <div className="rounded-lg border border-gray-200 bg-gray-50/50 px-4 py-3">
@@ -588,13 +631,11 @@ export function OrdenProcesamientoFormModal({
               )}
             </div>
             {!warehouseFirestoreId ? (
-              <p className="mt-2 text-sm text-amber-900">Necesitás una bodega interna en la cuenta.</p>
+              <p className="mt-2 text-sm text-amber-900">Sin bodega interna.</p>
             ) : mapaBodegaLoading ? (
               <p className="mt-2 text-sm text-gray-500">Cargando…</p>
             ) : maxCantidad <= 0 ? (
-              <p className="mt-2 text-sm text-amber-900">
-                Sin stock de este insumo en el mapa o sin datos en las cajas.
-              </p>
+              <p className="mt-2 text-sm text-amber-900">Sin stock mapa.</p>
             ) : (
               <div className="mt-3 flex items-center gap-3">
                 <input
@@ -607,7 +648,7 @@ export function OrdenProcesamientoFormModal({
                     const v = Math.round(Number(e.target.value));
                     setCantidadElegida(v);
                   }}
-                  className="min-w-0 flex-1 accent-sky-600"
+                  className="min-w-0 flex-1 accent-[#2D5A3F]"
                 />
                 <span className="w-24 shrink-0 text-right text-lg font-bold tabular-nums text-gray-900">
                   {Math.round(cantidadElegida).toLocaleString("es-CO")}
@@ -616,46 +657,65 @@ export function OrdenProcesamientoFormModal({
             )}
           </div>
 
-          <div className="rounded-lg border border-gray-200 bg-white px-4 py-3">
-            <p className="text-xs font-bold uppercase tracking-wide text-gray-600">Estimado</p>
-            {estimado !== null && estimado !== undefined && Number.isFinite(estimado) ? (
-              <div className="mt-2 flex flex-wrap items-end gap-x-3 gap-y-1">
-                <p className="text-2xl font-bold tabular-nums text-gray-900">
-                  {estimado.toLocaleString("es-CO", { maximumFractionDigits: 0 })}
-                </p>
-                {perdidaPctDelCatalogo > 0 ? (
-                  <span className="text-xs text-gray-500">
-                    Merma {Math.round(perdidaPctDelCatalogo).toLocaleString("es-CO")}%
-                  </span>
-                ) : null}
-              </div>
+          <div className="rounded-[12px] border border-gray-200 bg-gray-50/80 px-4 py-3">
+            <p className={FORMULARIO_CREACION_LABEL}>Estimado</p>
+            {desgloseEstimado ? (
+              <ul className="mt-3 space-y-2.5 text-sm text-gray-800">
+                <li className="flex items-start gap-2.5">
+                  <HiArrowRight className="mt-0.5 h-4 w-4 shrink-0 text-[#2D5A3F]" aria-hidden />
+                  <div>
+                    <span className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                      Ud. netas
+                    </span>
+                    <p className="text-lg font-bold tabular-nums text-gray-900">
+                      {desgloseEstimado.uInt.toLocaleString("es-CO")}{" "}
+                      <span className="text-sm font-semibold text-gray-600">
+                        ({etiquetaUnidadVisualizacion(secundario?.unidadVisualizacion)})
+                      </span>
+                    </p>
+                  </div>
+                </li>
+                <li className="flex items-start gap-2.5">
+                  <HiArrowRight className="mt-0.5 h-4 w-4 shrink-0 text-[#2D5A3F]" aria-hidden />
+                  <div>
+                    <span className="text-xs font-semibold uppercase tracking-wide text-gray-500">Sobrante</span>
+                    <p className="font-bold tabular-nums text-gray-900">
+                      {desgloseEstimado.sobranteKg.toLocaleString("es-CO", { maximumFractionDigits: 3 })} kg
+                    </p>
+                    <p className="text-base leading-snug text-gray-500">Fracción sobrante.</p>
+                  </div>
+                </li>
+                <li className="flex items-start gap-2.5">
+                  <HiArrowRight className="mt-0.5 h-4 w-4 shrink-0 text-[#2D5A3F]" aria-hidden />
+                  <div>
+                    <span className="text-xs font-semibold uppercase tracking-wide text-gray-500">Merma</span>
+                    {desgloseEstimado.mermaUnidades !== null && desgloseEstimado.mermaKg !== null ? (
+                      <p className="font-semibold tabular-nums text-gray-900">
+                        ≈{" "}
+                        {desgloseEstimado.mermaUnidades.toLocaleString("es-CO", {
+                          maximumFractionDigits: 4,
+                        })}{" "}
+                        u. · ≈{" "}
+                        {desgloseEstimado.mermaKg.toLocaleString("es-CO", { maximumFractionDigits: 3 })} kg
+                        {perdidaPctDelCatalogo > 0 ? (
+                          <span className="ml-1 text-xs font-normal text-gray-500">
+                            ({Math.round(perdidaPctDelCatalogo).toLocaleString("es-CO")}% cat.)
+                          </span>
+                        ) : null}
+                      </p>
+                    ) : (
+                      <p className="text-sm text-gray-600">—</p>
+                    )}
+                  </div>
+                </li>
+              </ul>
             ) : (
-              <p className="mt-2 text-sm text-amber-900">
-                Indicá la conversión ({unidadPrim === "peso" ? "por kg" : "por ud."}).
-              </p>
+              <p className="mt-2 text-sm text-amber-900">Indicá conversión.</p>
             )}
           </div>
 
-          {error ? <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p> : null}
-
-          <div className="flex gap-2 pt-2">
-            <button
-              type="button"
-              onClick={onClose}
-              className="flex-1 rounded-lg border border-gray-200 py-2.5 text-sm font-semibold text-gray-700 hover:bg-gray-50"
-            >
-              Cancelar
-            </button>
-            <button
-              type="submit"
-              disabled={saving || primariosOrdenados.length === 0 || secundariosOrdenados.length === 0 || !puedeConfirmar}
-              className="flex-1 rounded-lg bg-sky-600 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-sky-700 disabled:opacity-60"
-            >
-              {saving ? "Guardando…" : "Confirmar y enviar a bodega"}
-            </button>
-          </div>
+          {error ? <p className="rounded-lg bg-red-50 px-3 py-2 text-base text-red-700">{error}</p> : null}
         </form>
-      </div>
-    </div>
+    </FormularioPlantilla>
   );
 }

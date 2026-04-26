@@ -1,6 +1,14 @@
 "use client";
 
-import type { Box } from "@/app/interfaces/bodega";
+import { useState, type ReactNode } from "react";
+import type { Box, Client } from "@/app/interfaces/bodega";
+import {
+  BODEGA_SLOT_BODY_CLASS,
+  BODEGA_SLOT_INNER_FIXED_CLASS,
+  BODEGA_SLOT_SHELL_CLASS,
+  BODEGA_SLOT_SHELL_PADDING,
+} from "@/app/lib/bodegaSlotUniform";
+import { buildCajaDetalleFromBox, CajaDetalleModal } from "@/app/components/bodega/CajaDetalleModal";
 import { FiBox } from "react-icons/fi";
 
 const TONE: Record<
@@ -8,91 +16,152 @@ const TONE: Record<
   { card: string; icon: string; pill: string; pillWarn?: string }
 > = {
   entrada: {
-    card: "bg-emerald-100 border-emerald-400 text-slate-900",
+    card: "border-emerald-400 bg-emerald-50/95 text-slate-900 shadow-sm",
     icon: "text-emerald-600",
     pill: "bg-emerald-600 text-white",
     pillWarn: "bg-red-500 text-white",
   },
   salida: {
-    card: "bg-pink-100 border-pink-300 text-slate-900",
-    icon: "text-pink-500",
-    pill: "bg-pink-600 text-white",
+    card: "border-pink-400 bg-pink-50 shadow-sm text-slate-900",
+    icon: "text-pink-600",
+    pill: "bg-pink-500 text-white",
+    pillWarn: "bg-red-500 text-white",
   },
-};
-
-export type BodegaZonaCajaCardProps = {
-  box: Pick<Box, "position" | "autoId" | "name" | "temperature">;
-  variant: "entrada" | "salida";
-  /** Resalta temperatura fuera de rango (p. ej. ingreso &gt; umbral). */
-  alertaTemperaturaAlta?: boolean;
-  className?: string;
-  /** Si se define, la tarjeta es un botón (p. ej. abrir modal de detalle). */
-  onOpen?: () => void;
 };
 
 const interactiveRing: Record<"entrada" | "salida", string> = {
   entrada:
-    "cursor-pointer hover:ring-2 hover:ring-emerald-400/70 hover:ring-offset-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-1 active:scale-[0.98]",
+    "cursor-pointer hover:ring-2 hover:ring-emerald-400/80 hover:ring-offset-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-1 active:scale-[0.98]",
   salida:
-    "cursor-pointer hover:ring-2 hover:ring-pink-400/70 hover:ring-offset-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-pink-500 focus-visible:ring-offset-1 active:scale-[0.98]",
+    "cursor-pointer hover:ring-2 hover:ring-pink-400/85 hover:ring-offset-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-pink-500 focus-visible:ring-offset-1 active:scale-[0.98]",
+};
+
+export type BodegaZonaCajaCardProps = {
+  box: Box;
+  variant: "entrada" | "salida";
+  /** Si se define, reemplaza el número mostrado arriba a la izquierda (p. ej. índice 1–4 en la fila). */
+  cornerLabel?: string | number;
+  /** Resalta temperatura fuera de rango (p. ej. ingreso &gt; umbral). */
+  alertaTemperaturaAlta?: boolean;
+  className?: string;
+  /** Para nombre de cliente en el modal de detalle. */
+  clients?: Client[];
+  /** OC/Venta u otra trazabilidad bajo el bloque principal del modal. */
+  detalleChildren?: ReactNode;
+  /** Opcional: al hacer clic en la tarjeta, antes de abrir el detalle (p. ej. sincronizar select de salida). */
+  onCardClick?: () => void;
 };
 
 /**
- * Misma huella que `SlotCard` del mapa de bodega: posición, ícono, nombre, id, pastilla de °C.
- * Colores: verde (entrada) / rosa (salida).
+ * Misma huella y layout que `SlotCard` / mapa / procesamiento: contenedor 140px, tarjeta blanca interior.
+ * Clic en la tarjeta abre el detalle de la caja (sin icono aparte).
  */
 export default function BodegaZonaCajaCard({
   box,
   variant,
+  cornerLabel,
   alertaTemperaturaAlta = false,
   className = "",
-  onOpen,
+  clients = [],
+  detalleChildren,
+  onCardClick,
 }: BodegaZonaCajaCardProps) {
+  const [detalleOpen, setDetalleOpen] = useState(false);
   const tone = TONE[variant];
   const pillClass =
     alertaTemperaturaAlta && tone.pillWarn ? tone.pillWarn : tone.pill;
 
-  const shellClass = `relative flex w-full flex-col items-center justify-center rounded-3xl border p-2 sm:p-4 transition ${tone.card} ${onOpen ? interactiveRing[variant] : ""} ${className}`;
+  const rounded = "rounded-xl";
+  const showDetalle = Boolean(box.autoId?.trim());
+  const interactive = showDetalle || Boolean(onCardClick);
+  const shellClass = `relative flex flex-col ${BODEGA_SLOT_SHELL_CLASS} border transition ${rounded} ${BODEGA_SLOT_SHELL_PADDING} ${tone.card} ${interactive ? interactiveRing[variant] : ""} ${className}`;
+
+  const corner = cornerLabel != null ? cornerLabel : box.position;
+
+  const innerBorder =
+    variant === "salida" ? "border-pink-200/95" : "border-emerald-200/95";
+
+  const cornerText =
+    variant === "salida" ? "text-pink-900" : "text-emerald-800";
+
+  const detalleProps = buildCajaDetalleFromBox(box, clients);
+
+  const handleActivate = () => {
+    onCardClick?.();
+    if (showDetalle) setDetalleOpen(true);
+  };
 
   const inner = (
     <>
-      <span className="absolute left-1 top-1 rounded-full px-1 py-0.5 text-[9px] font-semibold text-slate-600">
-        {box.position}
-      </span>
-      <div className="mb-1">
-        <FiBox className={`h-4 w-4 sm:h-6 sm:w-6 ${tone.icon}`} aria-hidden />
-      </div>
-      <div className="w-full truncate text-center font-semibold text-[clamp(0.65rem,1vw,0.85rem)]">
-        {box.name || "Sin nombre"}
-      </div>
-      <div className="mt-1 w-full truncate text-center text-[clamp(0.7rem,1.5vw,0.85rem)]">
-        {box.autoId}
-      </div>
-      <div
-        className={`mt-2 inline-block rounded-full px-1.5 py-0.5 text-[clamp(0.7rem,1.5vw,0.85rem)] font-medium sm:px-3 ${pillClass}`}
+      <span
+        className={`absolute left-2 top-2 z-10 text-xs font-normal tabular-nums ${cornerText}`}
       >
-        {typeof box.temperature === "number" ? `${box.temperature} °C` : "Sin temperatura"}
+        {corner}
+      </span>
+      <div className={BODEGA_SLOT_BODY_CLASS}>
+        <div className={`${BODEGA_SLOT_INNER_FIXED_CLASS} ${innerBorder}`}>
+          <div className="flex min-h-0 min-w-0 flex-1 gap-2 overflow-hidden">
+            <FiBox
+              className={`mt-0.5 h-4 w-4 shrink-0 sm:h-[18px] sm:w-[18px] ${tone.icon}`}
+              aria-hidden
+            />
+            <div className="min-w-0 flex-1">
+              <div className="truncate font-semibold leading-tight text-slate-800 text-base">
+                {box.name || "Sin nombre"}
+              </div>
+              <div className="mt-0.5 truncate leading-tight text-slate-500 text-base">
+                {box.autoId}
+              </div>
+            </div>
+          </div>
+          <div className="mt-2 flex shrink-0 justify-center">
+            <span
+              className={`inline-block max-w-full truncate rounded-full px-2 py-0.5 text-base font-medium ${pillClass}`}
+            >
+              {typeof box.temperature === "number" ? `${box.temperature} °C` : "Sin temperatura"}
+            </span>
+          </div>
+        </div>
       </div>
     </>
   );
 
-  if (onOpen) {
-    return (
-      <button
-        type="button"
-        onClick={onOpen}
+  return (
+    <>
+      <div
         className={shellClass}
-        style={{ minHeight: 90 }}
-        aria-label={`Ver detalle de la caja ${box.autoId || box.position}`}
+        onClick={interactive ? handleActivate : undefined}
+        role={interactive ? "button" : undefined}
+        tabIndex={interactive ? 0 : undefined}
+        onKeyDown={
+          interactive
+            ? (e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  handleActivate();
+                }
+              }
+            : undefined
+        }
+        aria-label={
+          showDetalle
+            ? `Ver detalles de la caja ${box.autoId || box.position}`
+            : onCardClick
+              ? "Seleccionar caja"
+              : undefined
+        }
       >
         {inner}
-      </button>
-    );
-  }
-
-  return (
-    <div className={shellClass} style={{ minHeight: 90 }}>
-      {inner}
-    </div>
+      </div>
+      {showDetalle ? (
+        <CajaDetalleModal
+          open={detalleOpen}
+          onClose={() => setDetalleOpen(false)}
+          {...detalleProps}
+        >
+          {detalleChildren}
+        </CajaDetalleModal>
+      ) : null}
+    </>
   );
 }

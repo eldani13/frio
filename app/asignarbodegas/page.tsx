@@ -47,7 +47,7 @@ export default function AsignarBodegasPage({ estado }: { estado: string }) {
     <div className="p-8 max-w-4xl mx-auto">
       <header className="mb-8 flex flex-col gap-4 sm:flex-row sm:justify-between sm:items-center">
         <div>
-          <h1 className="text-3xl font-bold text-slate-900">Infraestructura</h1>
+          <h1 className="app-title">Infraestructura</h1>
           <p className="text-slate-500 text-sm">
             Bodegas <b>{tipoLabel}</b> vinculadas a tu cuenta:{" "}
             <b>{bodegasDeEsteTipo.length}</b>
@@ -71,12 +71,12 @@ export default function AsignarBodegasPage({ estado }: { estado: string }) {
             <div key={bodega.id} className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
               <div className="flex justify-between items-start">
                 <div>
-                  <span className={`text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded ${
+                  <span className={`text-base font-bold uppercase tracking-widest px-2 py-1 rounded ${
                     bodega.status === 'interna' ? 'bg-blue-50 text-blue-600' : 'bg-purple-50 text-purple-600'
                   }`}>
                     Bodega {bodega.status}
                   </span>
-                  <h2 className="text-2xl font-bold text-slate-800 mt-2">{bodega.name}</h2>
+                  <h2 className="app-title mt-2">{bodega.name}</h2>
                 </div>
                 <span className="text-xs font-medium text-slate-400">ID: {bodega.id.slice(0,6)}</span>
               </div>

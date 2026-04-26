@@ -12,7 +12,7 @@ export default function MoveForm({
 }: MoveFormProps) {
   return (
     <div className="rounded-2xl bg-white p-6 shadow-sm">
-      <h2 className="text-lg font-semibold text-slate-900">
+      <h2 className="app-title">
         Mover objeto de posición
       </h2>
       <div className="mt-4 grid gap-3">

@@ -1,11 +1,13 @@
-import * as XLSX from 'xlsx';
+import * as XLSX from "xlsx";
+import type { ChangeEvent } from "react";
+import { HiOutlineArrowDownTray } from "react-icons/hi2";
 
 interface ImportExcelProps {
   onDataLoaded: (data: Record<string, unknown>[]) => void;
 }
 
 export const ImportExcel = ({ onDataLoaded }: ImportExcelProps) => {
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileUpload = (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -51,14 +53,10 @@ export const ImportExcel = ({ onDataLoaded }: ImportExcelProps) => {
   };
 
   return (
-    <label className="cursor-pointer bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-3 rounded-[14px] font-bold text-[14px] border border-gray-300 transition-all flex items-center gap-2">
-      <span>📥 Importar Excel</span>
-      <input 
-        type="file" 
-        accept=".xlsx, .xls" 
-        className="hidden" 
-        onChange={handleFileUpload} 
-      />
+    <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-600 shadow-none transition hover:border-slate-300 hover:bg-slate-50">
+      <HiOutlineArrowDownTray className="h-3.5 w-3.5 shrink-0 opacity-70" aria-hidden />
+      <span>Importar Excel</span>
+      <input type="file" accept=".xlsx, .xls" className="hidden" onChange={handleFileUpload} />
     </label>
   );
 };

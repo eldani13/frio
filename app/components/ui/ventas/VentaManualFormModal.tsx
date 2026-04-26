@@ -1,11 +1,26 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
-import { HiOutlinePlus, HiOutlineTrash, HiOutlineXMark } from "react-icons/hi2";
+import { HiOutlinePlus, HiOutlineTrash } from "react-icons/hi2";
+import {
+  FORMULARIO_CREACION_BODY,
+  FORMULARIO_CREACION_GRID,
+  FORMULARIO_CREACION_INPUT,
+  FORMULARIO_CREACION_LABEL,
+  FORMULARIO_CREACION_SELECT,
+  FormularioPlantilla,
+  FormularioPlantillaAcciones,
+} from "@/app/components/ui/FormularioPlantilla";
+import type { Slot } from "@/app/interfaces/bodega";
 import type { Catalogo } from "@/app/types/catalogo";
 import type { Comprador } from "@/app/types/comprador";
 import { ORDEN_COMPRA_ESTADOS } from "@/app/types/ordenCompra";
 import type { VentaEnCursoLineItem } from "@/app/types/ventaCuenta";
+import { esCatalogoSecundario } from "@/lib/catalogoProcesamiento";
+import {
+  stockPrimarioDesdeSlotsPreferirKgCuandoExisten,
+  stockTeoricoUnidadesSecundarioDesdeSlots,
+} from "@/lib/stockPrimarioBodega";
 
 type DraftLine = VentaEnCursoLineItem;
 
@@ -15,6 +30,9 @@ export interface VentaManualDraft {
   fecha: string;
   estado: string;
   lineItems: VentaEnCursoLineItem[];
+  /** Bodega interna donde aplica la venta (stock del mapa). */
+  origenWarehouseId?: string;
+  origenWarehouseNombre?: string;
 }
 
 interface Props {
@@ -23,6 +41,19 @@ interface Props {
   productos: Catalogo[];
   compradores: Comprador[];
   onCreate: (draft: VentaManualDraft) => void | Promise<void>;
+  /**
+   * Con `clientIdFirestore` + `slots`, entran primarios y secundarios con stock en mapa **o** `inventoryQty` en catálogo.
+   * Sin `clientIdFirestore`, solo `inventoryQty` del catálogo.
+   */
+  clientIdFirestore?: string;
+  slots?: Slot[];
+  /** Si es true, solo entran ítems con stock en `slots` (p. ej. mapas de bodegas internas); no usa `inventoryQty` del catálogo. */
+  soloStockMapaBodegasInternas?: boolean;
+  /** Lectura en curso del mapa (deshabilita el selector hasta tener datos). */
+  cargandoStockMapa?: boolean;
+  /** Bodegas internas elegibles; con {@link slotsPorBodegaInterna} filtra productos por la bodega seleccionada. */
+  bodegasInternasVenta?: { id: string; name: string }[];
+  slotsPorBodegaInterna?: Record<string, Slot[]>;
 }
 
 function etiquetaComprador(c: Comprador): string {
@@ -31,10 +62,70 @@ function etiquetaComprador(c: Comprador): string {
   return code ? `${n} · ${code}` : n;
 }
 
-export function VentaManualFormModal({ isOpen, onClose, productos, compradores, onCreate }: Props) {
+function catalogoTieneStockInventario(p: Catalogo): boolean {
+  const q = Number(p.inventoryQty);
+  return Number.isFinite(q) && q > 0;
+}
+
+/** Stock en mapa de bodega o cantidad de inventario del catálogo (sirve para primario solo con `inventoryQty`). */
+function catalogoTieneStockParaVentaManual(
+  p: Catalogo,
+  clientIdFirestore: string,
+  slots: Slot[],
+  catalogosConId: Catalogo[],
+): boolean {
+  if (catalogoTieneStockInventario(p)) return true;
+  const cid = clientIdFirestore.trim();
+  if (!cid) return false;
+  if (esCatalogoSecundario(p)) {
+    const pid = String(p.includedPrimarioCatalogoId ?? "").trim();
+    const prim = catalogosConId.find(
+      (x) => String(x.id ?? "").trim() === pid && !esCatalogoSecundario(x),
+    );
+    const n = stockTeoricoUnidadesSecundarioDesdeSlots(slots, cid, p, prim);
+    return Number.isFinite(n) && n > 0;
+  }
+  const { total } = stockPrimarioDesdeSlotsPreferirKgCuandoExisten(slots, cid, p);
+  return Number.isFinite(total) && total > 0;
+}
+
+function catalogoTieneStockSoloMapa(
+  p: Catalogo,
+  clientIdFirestore: string,
+  slots: Slot[],
+  catalogosConId: Catalogo[],
+): boolean {
+  const cid = clientIdFirestore.trim();
+  if (!cid) return false;
+  if (esCatalogoSecundario(p)) {
+    const pid = String(p.includedPrimarioCatalogoId ?? "").trim();
+    const prim = catalogosConId.find(
+      (x) => String(x.id ?? "").trim() === pid && !esCatalogoSecundario(x),
+    );
+    const n = stockTeoricoUnidadesSecundarioDesdeSlots(slots, cid, p, prim);
+    return Number.isFinite(n) && n > 0;
+  }
+  const { total } = stockPrimarioDesdeSlotsPreferirKgCuandoExisten(slots, cid, p);
+  return Number.isFinite(total) && total > 0;
+}
+
+export function VentaManualFormModal({
+  isOpen,
+  onClose,
+  productos,
+  compradores,
+  onCreate,
+  clientIdFirestore = "",
+  slots = [],
+  soloStockMapaBodegasInternas = false,
+  cargandoStockMapa = false,
+  bodegasInternasVenta,
+  slotsPorBodegaInterna,
+}: Props) {
   const [fecha, setFecha] = useState("");
   const [estado, setEstado] = useState<string>("Iniciado");
   const [compradorId, setCompradorId] = useState("");
+  const [bodegaVentaId, setBodegaVentaId] = useState("");
   const [lines, setLines] = useState<DraftLine[]>([]);
   const [pickProductId, setPickProductId] = useState("");
   const [pickCantidad, setPickCantidad] = useState("");
@@ -54,17 +145,54 @@ export function VentaManualFormModal({ isOpen, onClose, productos, compradores, 
     [compradoresConId],
   );
 
+  const usaStockPorBodega =
+    Boolean(soloStockMapaBodegasInternas) &&
+    Boolean(bodegasInternasVenta?.length) &&
+    Object.keys(slotsPorBodegaInterna ?? {}).length > 0;
+
+  const slotsParaFiltro = useMemo(() => {
+    if (!usaStockPorBodega || !slotsPorBodegaInterna) return slots;
+    const wid = bodegaVentaId.trim();
+    if (!wid) return [];
+    return slotsPorBodegaInterna[wid] ?? [];
+  }, [usaStockPorBodega, slotsPorBodegaInterna, bodegaVentaId, slots]);
+
+  const productosParaSelector = useMemo(() => {
+    const cid = clientIdFirestore.trim();
+    const conId = productos.filter((p): p is Catalogo & { id: string } => Boolean(p.id?.trim()));
+    const elegibles = conId.filter((p) => {
+      if (!cid) {
+        if (soloStockMapaBodegasInternas) return false;
+        return catalogoTieneStockInventario(p);
+      }
+      if (soloStockMapaBodegasInternas) return catalogoTieneStockSoloMapa(p, cid, slotsParaFiltro, conId);
+      return catalogoTieneStockParaVentaManual(p, cid, slotsParaFiltro, conId);
+    });
+    const prim = elegibles.filter((p) => !esCatalogoSecundario(p));
+    const sec = elegibles.filter((p) => esCatalogoSecundario(p));
+    return [...prim, ...sec].sort((a, b) => (a.title || "").localeCompare(b.title || "", "es", { sensitivity: "base" }));
+  }, [productos, clientIdFirestore, slotsParaFiltro, soloStockMapaBodegasInternas]);
+
   useEffect(() => {
     if (!isOpen) return;
     setFecha(new Date().toISOString().slice(0, 10));
     setEstado("Iniciado");
     setCompradorId("");
+    setBodegaVentaId("");
     setLines([]);
     setPickProductId("");
     setPickCantidad("");
     setError(null);
     setSaving(false);
   }, [isOpen]);
+
+  useEffect(() => {
+    if (!isOpen || !soloStockMapaBodegasInternas || !bodegasInternasVenta?.length) return;
+    setBodegaVentaId((cur) => {
+      if (cur && bodegasInternasVenta.some((b) => b.id === cur)) return cur;
+      return bodegasInternasVenta[0]?.id ?? "";
+    });
+  }, [isOpen, soloStockMapaBodegasInternas, bodegasInternasVenta]);
 
   useEffect(() => {
     if (!isOpen || compradoresOrdenados.length === 0) return;
@@ -74,11 +202,16 @@ export function VentaManualFormModal({ isOpen, onClose, productos, compradores, 
     });
   }, [isOpen, compradoresOrdenados]);
 
-  if (!isOpen) return null;
+  useEffect(() => {
+    if (!isOpen) return;
+    setPickProductId((cur) =>
+      cur && productosParaSelector.some((p) => p.id === cur) ? cur : "",
+    );
+  }, [isOpen, productosParaSelector]);
 
   const addLine = () => {
     setError(null);
-    const p = productos.find((x) => x.id === pickProductId);
+    const p = productosParaSelector.find((x) => x.id === pickProductId);
     if (!p?.id) {
       setError("Seleccioná un producto del catálogo.");
       return;
@@ -114,7 +247,12 @@ export function VentaManualFormModal({ isOpen, onClose, productos, compradores, 
       setError("Agregá al menos una línea con producto y cantidad.");
       return;
     }
+    if (usaStockPorBodega && !bodegaVentaId.trim()) {
+      setError("Seleccioná la bodega interna donde se realiza la venta.");
+      return;
+    }
     const nombre = (comp.name || "").trim() || "Sin nombre";
+    const bodegaSel = bodegasInternasVenta?.find((b) => b.id === bodegaVentaId.trim());
     setSaving(true);
     try {
       await Promise.resolve(
@@ -124,6 +262,12 @@ export function VentaManualFormModal({ isOpen, onClose, productos, compradores, 
           fecha,
           estado,
           lineItems: lines,
+          ...(usaStockPorBodega && bodegaVentaId.trim()
+            ? {
+                origenWarehouseId: bodegaVentaId.trim(),
+                origenWarehouseNombre: (bodegaSel?.name ?? bodegaVentaId).trim(),
+              }
+            : {}),
         }),
       );
       onClose();
@@ -136,47 +280,32 @@ export function VentaManualFormModal({ isOpen, onClose, productos, compradores, 
   };
 
   return (
-    <div
-      className="fixed inset-0 z-[60] flex items-center justify-center bg-black/20 p-4 backdrop-blur-sm"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="venta-manual-modal-title"
-      onClick={onClose}
+    <FormularioPlantilla
+      isOpen={isOpen}
+      onClose={onClose}
+      titulo="Nueva venta manual"
+      subtitulo="Venta · comprador"
+      titleId="venta-manual-modal-title"
+      maxWidthClass="max-w-lg"
+      zIndexClass="z-[60]"
+      footer={
+        <FormularioPlantillaAcciones
+          formId="venta-manual-form"
+          onCancel={onClose}
+          submitLabel="Guardar venta"
+          loading={saving}
+        />
+      }
     >
-      <div
-        className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-[12px] border border-gray-100 bg-white p-6 shadow-xl"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="mb-4 flex items-center justify-between">
-          <h2 id="venta-manual-modal-title" className="text-lg font-semibold text-gray-900">
-            Nueva venta manual
-          </h2>
-          <button
-            type="button"
-            onClick={onClose}
-            className="text-gray-400 hover:text-gray-600"
-            aria-label="Cerrar"
-          >
-            <HiOutlineXMark size={24} />
-          </button>
-        </div>
-
-        <p className="mb-4 text-xs text-[#6B7280]">
-          Elegí un <strong>comprador</strong> de los que dio de alta el administrador de la cuenta (sección{" "}
-          <strong>Compradores</strong> en Asignación y creación), luego <strong>productos del catálogo</strong> en{" "}
-          <strong>unidades</strong>, <strong>fecha</strong> y <strong>estado</strong>.
-        </p>
+      <form id="venta-manual-form" onSubmit={(e) => void handleSubmit(e)} className={`${FORMULARIO_CREACION_BODY} space-y-4`}>
+        <p className="text-base text-gray-500">Comprador + ítems.</p>
 
         {error ? (
-          <p className="mb-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>
+          <p className="rounded-lg bg-red-50 px-3 py-2 text-base text-red-700">{error}</p>
         ) : null}
 
-        <form onSubmit={(e) => void handleSubmit(e)} className="space-y-4">
           <div>
-            <label
-              htmlFor="venta-comprador"
-              className="mb-1 block text-[11px] font-bold uppercase text-gray-500"
-            >
+            <label htmlFor="venta-comprador" className={FORMULARIO_CREACION_LABEL}>
               Comprador
             </label>
             <select
@@ -185,10 +314,10 @@ export function VentaManualFormModal({ isOpen, onClose, productos, compradores, 
               onChange={(e) => setCompradorId(e.target.value)}
               required
               disabled={compradoresOrdenados.length === 0}
-              className="w-full rounded-[8px] border border-gray-200 px-4 py-2 text-sm focus:border-[#A8D5BA] focus:outline-none disabled:bg-slate-50 disabled:text-slate-500"
+              className={`${FORMULARIO_CREACION_SELECT} disabled:bg-slate-50 disabled:text-slate-500`}
             >
               {compradoresOrdenados.length === 0 ? (
-                <option value="">No hay compradores para esta cuenta</option>
+                <option value="">Sin compradores.</option>
               ) : (
                 compradoresOrdenados.map((c) => (
                   <option key={c.id} value={c.id}>
@@ -199,12 +328,38 @@ export function VentaManualFormModal({ isOpen, onClose, productos, compradores, 
             </select>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          {bodegasInternasVenta && bodegasInternasVenta.length > 0 ? (
             <div>
-              <label
-                htmlFor="venta-fecha"
-                className="mb-1 block text-[11px] font-bold uppercase text-gray-500"
+              <label htmlFor="venta-bodega-origen" className={FORMULARIO_CREACION_LABEL}>
+                Bodega (venta)
+              </label>
+              <select
+                id="venta-bodega-origen"
+                value={bodegaVentaId}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  setBodegaVentaId(v);
+                  setLines([]);
+                  setPickProductId("");
+                  setPickCantidad("");
+                }}
+                required
+                disabled={cargandoStockMapa}
+                className={`${FORMULARIO_CREACION_SELECT} disabled:bg-slate-50 disabled:text-slate-500`}
               >
+                {bodegasInternasVenta.map((b) => (
+                  <option key={b.id} value={b.id}>
+                    {b.name}
+                  </option>
+                ))}
+              </select>
+              <p className="mt-1 text-base text-gray-500">Stock = mapa bodega.</p>
+            </div>
+          ) : null}
+
+          <div className={`${FORMULARIO_CREACION_GRID} md:grid-cols-2`}>
+            <div>
+              <label htmlFor="venta-fecha" className={FORMULARIO_CREACION_LABEL}>
                 Fecha
               </label>
               <input
@@ -213,21 +368,18 @@ export function VentaManualFormModal({ isOpen, onClose, productos, compradores, 
                 value={fecha}
                 onChange={(e) => setFecha(e.target.value)}
                 required
-                className="w-full rounded-[8px] border border-gray-200 px-4 py-2 text-sm focus:border-[#A8D5BA] focus:outline-none"
+                className={FORMULARIO_CREACION_INPUT}
               />
             </div>
             <div>
-              <label
-                htmlFor="venta-estado"
-                className="mb-1 block text-[11px] font-bold uppercase text-gray-500"
-              >
+              <label htmlFor="venta-estado" className={FORMULARIO_CREACION_LABEL}>
                 Estado
               </label>
               <select
                 id="venta-estado"
                 value={estado}
                 onChange={(e) => setEstado(e.target.value)}
-                className="w-full rounded-[8px] border border-gray-200 px-4 py-2 text-sm focus:border-[#A8D5BA] focus:outline-none"
+                className={FORMULARIO_CREACION_SELECT}
               >
                 {ORDEN_COMPRA_ESTADOS.map((opt) => (
                   <option key={opt} value={opt}>
@@ -238,8 +390,8 @@ export function VentaManualFormModal({ isOpen, onClose, productos, compradores, 
             </div>
           </div>
 
-          <div className="rounded-lg border border-dashed border-emerald-200/80 bg-emerald-50/40 p-3">
-            <p className="mb-2 text-[11px] font-bold uppercase text-gray-500">Productos del catálogo</p>
+          <div className="rounded-lg border border-dashed border-[#A8D5BA]/60 bg-[#f8faf8] p-3">
+            <p className={`${FORMULARIO_CREACION_LABEL} mb-2`}>Líneas cat.</p>
             <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-end">
               <div className="min-w-0 flex-1 sm:min-w-[200px]">
                 <label className="sr-only" htmlFor="venta-catalogo">
@@ -249,24 +401,30 @@ export function VentaManualFormModal({ isOpen, onClose, productos, compradores, 
                   id="venta-catalogo"
                   value={pickProductId}
                   onChange={(e) => setPickProductId(e.target.value)}
-                  className="w-full rounded-[8px] border border-gray-200 bg-white px-3 py-2 text-sm focus:border-[#A8D5BA] focus:outline-none"
+                  disabled={cargandoStockMapa || productosParaSelector.length === 0}
+                  className={`${FORMULARIO_CREACION_SELECT} disabled:bg-slate-50 disabled:text-slate-500`}
                 >
-                  <option value="">Elegí producto del catálogo…</option>
-                  {productos
-                    .filter((c) => Boolean(c.id?.trim()))
-                    .map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.title}
-                        {c.sku ? ` · SKU ${c.sku}` : ""}
-                      </option>
-                    ))}
+                  <option value="">
+                    {cargandoStockMapa
+                      ? "Cargando…"
+                      : productosParaSelector.length === 0
+                        ? soloStockMapaBodegasInternas
+                          ? usaStockPorBodega
+                            ? "Sin stock bodega."
+                            : "Sin stock internas."
+                          : "Sin stock / inv."
+                        : "Elegí producto…"}
+                  </option>
+                  {productosParaSelector.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.title}
+                      {c.sku ? ` · SKU ${c.sku}` : ""}
+                    </option>
+                  ))}
                 </select>
               </div>
               <div className="w-full sm:w-28">
-                <label
-                  className="mb-0.5 block text-[10px] font-bold uppercase text-gray-500 sm:sr-only"
-                  htmlFor="venta-cantidad"
-                >
+                <label className={`${FORMULARIO_CREACION_LABEL} mb-0.5 sm:sr-only`} htmlFor="venta-cantidad">
                   Cantidad
                 </label>
                 <input
@@ -276,21 +434,31 @@ export function VentaManualFormModal({ isOpen, onClose, productos, compradores, 
                   value={pickCantidad}
                   onChange={(e) => setPickCantidad(e.target.value)}
                   placeholder="Ej. 12"
-                  className="w-full rounded-[8px] border border-gray-200 bg-white px-3 py-2 text-sm focus:border-[#A8D5BA] focus:outline-none"
+                  className={FORMULARIO_CREACION_INPUT}
                 />
               </div>
               <button
                 type="button"
                 onClick={addLine}
-                className="inline-flex items-center justify-center gap-1 rounded-[8px] bg-[#0f172a] px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800"
+                disabled={cargandoStockMapa}
+                className="inline-flex items-center justify-center gap-1 rounded-[12px] bg-[#0f172a] px-4 py-3 text-base font-semibold text-white shadow-sm transition hover:bg-slate-800 disabled:opacity-50"
               >
                 <HiOutlinePlus className="h-4 w-4" />
                 Agregar
               </button>
             </div>
 
+            {productosParaSelector.length === 0 && !cargandoStockMapa ? (
+              <p className="mt-2 text-center text-xs text-amber-800/90">
+                {soloStockMapaBodegasInternas
+                  ? usaStockPorBodega
+                    ? "Sin stock en mapa."
+                    : "Sin stock bodegas."
+                  : "Sin stock ni inv."}
+              </p>
+            ) : null}
             {lines.length === 0 ? (
-              <p className="mt-3 text-center text-xs text-gray-500">Todavía no hay líneas en esta venta.</p>
+              <p className="mt-3 text-center text-xs text-gray-500">Sin líneas.</p>
             ) : (
               <ul className="mt-3 space-y-2">
                 {lines.map((ln, i) => (
@@ -316,24 +484,7 @@ export function VentaManualFormModal({ isOpen, onClose, productos, compradores, 
             )}
           </div>
 
-          <div className="flex justify-end gap-3 pt-2">
-            <button
-              type="button"
-              onClick={onClose}
-              className="rounded-[8px] px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-100"
-            >
-              Cancelar
-            </button>
-            <button
-              type="submit"
-              disabled={saving}
-              className="rounded-[8px] bg-[#A8D5BA] px-5 py-2 text-sm font-semibold text-[#2D5A3F] transition hover:bg-[#97c4a9] active:scale-[0.98] disabled:opacity-50"
-            >
-              {saving ? "Guardando…" : "Guardar venta"}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+      </form>
+    </FormularioPlantilla>
   );
 }
