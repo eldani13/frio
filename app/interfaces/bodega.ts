@@ -176,6 +176,11 @@ export type DispatchedHistoryEntry = {
 	box: Box;
 	atMs: number;
 	fromSalidaPosition: number;
+	truckId?: string;
+	truckCode?: string;
+	truckPlate?: string;
+	truckBrand?: string;
+	truckModel?: string;
 };
 
 export type HistoryState = {

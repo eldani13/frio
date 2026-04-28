@@ -13,6 +13,8 @@ import { TransporteViajesPanel } from "./BodegaDashboard/TransporteViajesPanel";
 import { OrdenCompraService } from "@/app/services/ordenCompraService";
 import { OrdenVentaService } from "@/app/services/ordenVentaService";
 import { ViajeVentaTransporteService } from "@/app/services/viajeVentaTransporteService";
+import { TruckService } from "@/app/services/camionService";
+import type { Camion } from "@/app/types/camion";
 import type { VentaPendienteCartonaje } from "@/app/types/ventaCuenta";
 import { SolicitudProcesamientoService } from "@/app/services/solicitudProcesamientoService";
 import type { SolicitudProcesamiento } from "@/app/types/solicitudProcesamiento";
@@ -2263,34 +2265,6 @@ export default function BodegaDashboard() {
       });
     });
 
-    /**
-     * Producto ya en casillero (asignado a entrada/salida) pendiente de traslado o despacho → alerta.
-     * No duplicamos si ya hay alerta por temperatura alta en esa caja.
-     */
-    inboundBoxes.forEach((box) => {
-      if (!boxCasilleroConCaja(box)) return;
-      if (boxTemperaturaAltaIngresoSalida(box)) return;
-      items.entrada.push({
-        id: `alerta-entrada-pendiente-${box.position}-${String(box.autoId ?? "").trim() || "sin-id"}`,
-        title: `Entrada pendiente · casillero ${box.position}`,
-        description: `Caja ${String(box.name ?? "").trim() || "—"} · ${String(box.autoId ?? "").trim() || "—"} · producto en ingreso pendiente de traslado o gestión.`,
-        meta: String(box.client ?? "").trim()
-          ? `Cliente · ${String(box.client).trim()}`
-          : undefined,
-      });
-    });
-    outboundBoxes.forEach((box) => {
-      if (!boxCasilleroConCaja(box)) return;
-      if (boxTemperaturaAltaIngresoSalida(box)) return;
-      items.salida.push({
-        id: `alerta-salida-pendiente-${box.position}-${String(box.autoId ?? "").trim() || "sin-id"}`,
-        title: `Salida pendiente · casillero ${box.position}`,
-        description: `Caja ${String(box.name ?? "").trim() || "—"} · ${String(box.autoId ?? "").trim() || "—"} · producto en salida pendiente de despacho o gestión.`,
-        meta: String(box.client ?? "").trim()
-          ? `Cliente · ${String(box.client).trim()}`
-          : undefined,
-      });
-    });
 
     overdueOrders.forEach((order) => {
       const zone: ZoneKey =
@@ -2307,35 +2281,8 @@ export default function BodegaDashboard() {
       });
     });
 
-    /** Jefe: reportes ya delegados al operario siguen como «alerta» hasta que se cierren. */
-    if (session?.role === "jefe") {
-      for (const alert of alerts) {
-        if (!alert.id.startsWith(ALERT_REPORT_PREFIX)) continue;
-        if (!assignedAlertIds.has(alert.id)) continue;
-        const zk = zoneKeyForAlertItem(alert, orders);
-        if (!zk) continue;
-        items[zk].push({
-          id: `jefe-alerta-asignada-${alert.id}`,
-          title: alert.title || "Reporte de fallo",
-          description: alert.description,
-          meta: alert.meta ?? "Asignada al operario · pendiente de gestión",
-        });
-      }
-    }
-
     return items;
-  }, [
-    assignedAlertIds,
-    alerts,
-    bodegaHighSlots,
-    inboundBoxes,
-    inboundHighBoxes,
-    outboundBoxes,
-    outboundHighBoxes,
-    overdueOrders,
-    orders,
-    session?.role,
-  ]);
+  }, [bodegaHighSlots, inboundHighBoxes, outboundHighBoxes, overdueOrders, orders]);
 
   const zoneTaskItems = useMemo(() => {
     const byZone: Record<ZoneKey, DetailItem[]> = {
@@ -2351,33 +2298,8 @@ export default function BodegaDashboard() {
           ? "salida"
           : "bodega";
 
-    if (session?.role === "jefe") {
-      orders.forEach((order) => {
-        if (orderIsOverdue(order, alertClock)) return;
-        const zone = zoneForOrder(order);
-        byZone[zone].push({
-          id: `tarea-${zone}-${order.id}`,
-          title: "Tarea pendiente",
-          description: formatOrderDetails(order),
-          meta: `Solicitado por ${order.createdBy} · ${order.createdAt}`,
-        });
-      });
-      for (const alert of alerts) {
-        if (!alert.id.startsWith(ALERT_REPORT_PREFIX)) continue;
-        if (assignedAlertIds.has(alert.id)) continue;
-        const zk = zoneKeyForAlertItem(alert, orders);
-        if (!zk) continue;
-        byZone[zk].push({
-          id: `jefe-tarea-report-${alert.id}`,
-          title: alert.title || "Reporte de fallo",
-          description: alert.description,
-          meta: alert.meta ?? "Pendiente: asignar al operario",
-        });
-      }
-      return byZone;
-    }
-
     orders.forEach((order) => {
+      if (orderIsOverdue(order, alertClock)) return;
       const zone = zoneForOrder(order);
       byZone[zone].push({
         id: `tarea-${zone}-${order.id}`,
@@ -2388,7 +2310,7 @@ export default function BodegaDashboard() {
     });
 
     return byZone;
-  }, [alertClock, alerts, assignedAlertIds, orders, session?.role]);
+  }, [alertClock, orders]);
 
   const renderStatusButtons = (zone: ZoneKey) => {
     const alertCount = zoneAlertItems[zone].length;
@@ -2412,12 +2334,12 @@ export default function BodegaDashboard() {
           className={alertInactive ? BODEGA_ZONE_STATUS_PILL_INACTIVE_CLASS : BODEGA_ZONE_STATUS_PILL_ACTIVE_CLASS}
           title={
             jefeStatusCopy
-              ? "Demoras, temperatura alta y reportes ya asignados al operario (seguimiento)."
+              ? "Temperatura alta y tareas demoradas en esta zona."
               : undefined
           }
           aria-label={
             jefeStatusCopy
-              ? `Alertas y seguimiento en ${zoneLabels[zone]}: demoras, temperatura, reportes delegados`
+              ? `Alertas en ${zoneLabels[zone]}: temperatura y tareas demoradas`
               : `Ver alertas en ${zoneLabels[zone]}`
           }
         >
@@ -2435,12 +2357,12 @@ export default function BodegaDashboard() {
           className={taskInactive ? BODEGA_ZONE_STATUS_PILL_INACTIVE_CLASS : BODEGA_ZONE_STATUS_PILL_ACTIVE_CLASS}
           title={
             jefeStatusCopy
-              ? "Órdenes en curso (sin demora) y reportes pendientes de asignar al operario."
+              ? "Entradas pendientes (sin demora) en esta zona."
               : undefined
           }
           aria-label={
             jefeStatusCopy
-              ? `Tareas pendientes en ${zoneLabels[zone]}: órdenes activas y reportes sin asignar`
+              ? `Tareas pendientes en ${zoneLabels[zone]}: entradas en curso`
               : `Ver tareas en ${zoneLabels[zone]}`
           }
         >
@@ -3336,7 +3258,7 @@ export default function BodegaDashboard() {
 
   /** Custodio: todas las cajas en salida de una OV → una sola acción; venta «Transporte» + viaje para el rol transporte. */
   const handleDespachoPaqueteOrdenVenta = useCallback(
-    async (orden: VentaPendienteCartonaje) => {
+    async (orden: VentaPendienteCartonaje, truck: Camion | null) => {
       if (role !== "custodio") {
         setMessage("Solo el custodio puede despachar paquetes.");
         return;
@@ -3345,6 +3267,10 @@ export default function BodegaDashboard() {
       const ventaId = String(orden.id ?? "").trim();
       if (!clientId || !ventaId) {
         setMessage("Datos de venta incompletos.");
+        return;
+      }
+      if (!truck?.id) {
+        setMessage("Selecciona un camión disponible para el despacho.");
         return;
       }
       const boxes = outboundBoxes.filter(
@@ -3366,13 +3292,24 @@ export default function BodegaDashboard() {
           box,
           atMs: baseAt,
           fromSalidaPosition: box.position,
+          truckId: truck.id,
+          truckCode: truck.code,
+          truckPlate: truck.plate,
+          truckBrand: truck.brand,
+          truckModel: truck.model,
         });
       });
       setOutboundBoxes(nextOutbound);
       setDispatchedBoxes(nextDispatched);
       try {
         await OrdenVentaService.updateEstado(clientId, ventaId, "Transporte");
-        await ViajeVentaTransporteService.crearDesdeVenta(clientId, ventaId, orden.lineItems ?? []);
+        await ViajeVentaTransporteService.crearDesdeVenta(
+          clientId,
+          ventaId,
+          orden.lineItems ?? [],
+          truck,
+        );
+        await TruckService.update(clientId, truck.id, { isAvailable: false });
       } catch (e: unknown) {
         console.error("[despacho paquete venta]", e);
         setMessage(
@@ -3396,7 +3333,7 @@ export default function BodegaDashboard() {
         llamadasJefe,
       });
       setMessage(
-        `Paquete ${orden.numero}: ${boxes.length} caja(s) despachada(s). La venta pasó a «Transporte» y el transportista verá el viaje en su panel.`,
+        `Paquete ${orden.numero}: ${boxes.length} caja(s) despachada(s). Camión ${truck.plate} asignado. La venta pasó a «Transporte» y el transportista verá el viaje en su panel.`,
       );
     },
     [
@@ -4300,16 +4237,24 @@ export default function BodegaDashboard() {
     setMessage(`No se encontro el id ${id}.`);
   };
 
-  const handleDispatchBox = (position: number) => {
+  const handleDispatchBox = async (
+    position: number,
+    truck: Camion | null,
+    truckClientId: string,
+  ): Promise<boolean> => {
     if (role !== "custodio") {
       setMessage("Solo el custodio puede enviar cajas.");
-      return;
+      return false;
+    }
+    if (!truck?.id) {
+      setMessage("Selecciona un camión disponible para el envío.");
+      return false;
     }
 
     const box = outboundBoxes.find((item) => item.position === position);
     if (!box) {
       setMessage("La caja ya no esta en salida.");
-      return;
+      return false;
     }
 
     setOutboundBoxes((prev) => prev.filter((item) => item.position !== position));
@@ -4319,8 +4264,31 @@ export default function BodegaDashboard() {
       box,
       atMs: Date.now(),
       fromSalidaPosition: position,
+      truckId: truck.id,
+      truckCode: truck.code,
+      truckPlate: truck.plate,
+      truckBrand: truck.brand,
+      truckModel: truck.model,
     });
-    setMessage(`Caja en salida ${position} enviada.`);
+    try {
+      const safeClientId = String(truckClientId ?? "").trim();
+      if (!safeClientId) {
+        throw new Error("No se pudo determinar el cliente del camión.");
+      }
+      await TruckService.update(safeClientId, truck.id, {
+        isAvailable: false,
+      });
+    } catch (e: unknown) {
+      console.error("[despacho manual]", e);
+      setMessage(
+        e instanceof Error
+          ? e.message
+          : "La caja se envio, pero no se pudo actualizar el estado del camion.",
+      );
+      return false;
+    }
+    setMessage(`Caja en salida ${position} enviada. Camion ${truck.plate} asignado.`);
+    return true;
   };
 
   const createReturnOrder = useCallback(
@@ -5036,6 +5004,7 @@ export default function BodegaDashboard() {
                 onClientChange={setClientFilterId}
                 warehouseId={warehouseId}
                 isBodegaInterna={!isExternalWarehouse}
+                warehouseCodeCuenta={(currentWarehouse?.codeCuenta ?? "").toString()}
                 onIngresoDesdeOrdenCompra={handleIngresoDesdeOrdenCompra}
                 onIngresoDesdeOrdenVenta={handleIngresoDesdeOrdenVenta}
                 onDespachoPaqueteOrdenVenta={handleDespachoPaqueteOrdenVenta}
@@ -5473,8 +5442,8 @@ export default function BodegaDashboard() {
             subtitle={
               session?.role === "jefe"
                 ? statusModal.kind === "alertas"
-                  ? "Temperatura alta, órdenes demoradas y reportes ya delegados al operario (pendientes de cierre)."
-                  : "Órdenes en curso sin demora y reportes de fallo que aún no asignaste al operario."
+                  ? "Temperatura alta y tareas asignadas con demora en esta zona."
+                  : "Entradas pendientes en esta zona (sin demora)."
                 : statusModal.kind === "alertas"
                   ? "Detalles de alertas activas en esta zona."
                   : "Tareas pendientes relacionadas con esta zona."

@@ -1,8 +1,10 @@
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useMemo, useState, useEffect } from "react";
 import { FiBox, FiAlertCircle } from "react-icons/fi";
 import { HiArrowRightOnRectangle } from "react-icons/hi2";
 import { IoCloseOutline } from "react-icons/io5";
 import type { Box, Client, Slot, BodegaOrder } from "../../interfaces/bodega";
+import { TruckService } from "@/app/services/camionService";
+import type { Camion } from "@/app/types/camion";
 import {
   OcOrdenIngresoPanel,
   type IngresoDesdeOrdenCompraPayload,
@@ -50,7 +52,11 @@ type Props = {
   setIngresoClientId: (v: string) => void;
   createReturnOrder: (box: Box, targetPosition: number) => string | null;
   sortByPosition: <T extends { position: number }>(items: T[]) => T[];
-  handleDispatchBox: (position: number) => void;
+  handleDispatchBox: (
+    position: number,
+    truck: Camion | null,
+    truckClientId: string,
+  ) => Promise<boolean>;
   availableBodegaTargets: number[];
   isCliente?: boolean;
   clientFilterId?: string;
@@ -58,10 +64,11 @@ type Props = {
   clientsForCatalog: Client[];
   warehouseId: string;
   isBodegaInterna: boolean;
+  warehouseCodeCuenta?: string;
   onIngresoDesdeOrdenCompra: (payload: IngresoDesdeOrdenCompraPayload) => Promise<void>;
   onIngresoDesdeOrdenVenta: (payload: IngresoDesdeOrdenVentaPayload) => Promise<void>;
   /** Custodio: despachar todas las cajas en salida de una OV en un solo envío (estado → Transporte + viaje). */
-  onDespachoPaqueteOrdenVenta?: (orden: VentaPendienteCartonaje) => Promise<void>;
+  onDespachoPaqueteOrdenVenta?: (orden: VentaPendienteCartonaje, truck: Camion | null) => Promise<void>;
 };
 
 export default function IngresosSection(props: Props) {
@@ -83,6 +90,7 @@ export default function IngresosSection(props: Props) {
     clientsForCatalog,
     warehouseId,
     isBodegaInterna,
+    warehouseCodeCuenta,
     onIngresoDesdeOrdenCompra,
     onIngresoDesdeOrdenVenta,
     onDespachoPaqueteOrdenVenta,
@@ -104,6 +112,14 @@ export default function IngresosSection(props: Props) {
   /** OV cuyas cajas en salida se enviarán juntas desde esta columna. */
   const [paqueteDespacho, setPaqueteDespacho] = useState<VentaPendienteCartonaje | null>(null);
   const [enviandoPaquete, setEnviandoPaquete] = useState(false);
+  const [packageTrucks, setPackageTrucks] = useState<Camion[]>([]);
+  const [packageTruckId, setPackageTruckId] = useState("");
+  const [packageTrucksLoading, setPackageTrucksLoading] = useState(false);
+  const [packageTrucksError, setPackageTrucksError] = useState<string | null>(null);
+  const [manualTrucks, setManualTrucks] = useState<Camion[]>([]);
+  const [manualTruckId, setManualTruckId] = useState("");
+  const [manualTrucksLoading, setManualTrucksLoading] = useState(false);
+  const [manualTrucksError, setManualTrucksError] = useState<string | null>(null);
 
   const outboundFiltered = useMemo(
     () =>
@@ -112,6 +128,15 @@ export default function IngresosSection(props: Props) {
       ),
     [outboundBoxes, salidaFilterValue, clientsForCatalog],
   );
+
+  const selectedBox = useMemo(() => {
+    if (!selectedBoxId) return outboundFiltered[0];
+    return (
+      outboundFiltered.find(
+        (box) => (box.autoId ?? `pos-${box.position}`) === selectedBoxId,
+      ) || outboundFiltered[0]
+    );
+  }, [outboundFiltered, selectedBoxId]);
 
   const sortedInboundIng = useMemo(
     () => sortByPosition([...inboundBoxes]),
@@ -153,11 +178,142 @@ export default function IngresosSection(props: Props) {
 
   const [reviewModal, setReviewModal] = useState<Box | null>(null);
   const [tempError, setTempError] = useState<string | null>(null);
+  const [manualTruckError, setManualTruckError] = useState<string | null>(null);
   const [tempConfirmModal, setTempConfirmModal] = useState<{
     box: Box;
     finalTemp: string;
   } | null>(null);
   const [tempConfirmError, setTempConfirmError] = useState<string | null>(null);
+
+  const truckLabel = useCallback((truck: Camion) => {
+    const plate = String(truck.plate ?? "").trim();
+    const brand = String(truck.brand ?? "").trim();
+    const model = String(truck.model ?? "").trim();
+    const code = String(truck.code ?? "").trim();
+    const parts = [code, plate, [brand, model].filter(Boolean).join(" ")].filter(Boolean);
+    return parts.join(" · ") || "Camion";
+  }, []);
+
+  const resolveClientId = useCallback(
+    (raw: string) => {
+      const needle = String(raw ?? "").trim();
+      if (!needle) return "";
+      const byId = clientsForCatalog.find((c) => c.id === needle);
+      if (byId) return byId.id;
+      const byName = clientsForCatalog.find(
+        (c) => c.name.trim().toLowerCase() === needle.toLowerCase(),
+      );
+      return byName?.id ?? needle;
+    },
+    [clientsForCatalog],
+  );
+
+  const packageClientId = useMemo(
+    () => String(paqueteDespacho?.idClienteDueno ?? "").trim(),
+    [paqueteDespacho],
+  );
+  const packageCodeCuenta = useMemo(() => {
+    const direct = String(paqueteDespacho?.codeCuenta ?? "").trim();
+    if (direct) return direct;
+    if (packageClientId) {
+      return String(
+        clientsForCatalog.find((c) => c.id === packageClientId)?.code ?? "",
+      ).trim();
+    }
+    return String(warehouseCodeCuenta ?? "").trim();
+  }, [paqueteDespacho, packageClientId, clientsForCatalog, warehouseCodeCuenta]);
+
+  const manualClientId = useMemo(() => {
+    const byVenta = String(selectedBox?.ordenVentaClienteId ?? "").trim();
+    if (byVenta) return byVenta;
+    if (salidaFilterValue) return String(salidaFilterValue).trim();
+    const raw = String(selectedBox?.client ?? "").trim();
+    return resolveClientId(raw);
+  }, [selectedBox, salidaFilterValue, resolveClientId]);
+
+  const manualCodeCuenta = useMemo(() => {
+    if (manualClientId) {
+      const byClient = clientsForCatalog.find((c) => c.id === manualClientId)?.code;
+      if (byClient) return String(byClient).trim();
+    }
+    return String(warehouseCodeCuenta ?? "").trim();
+  }, [manualClientId, clientsForCatalog, warehouseCodeCuenta]);
+
+  const selectedPackageTruck = useMemo(
+    () => packageTrucks.find((t) => t.id === packageTruckId) ?? null,
+    [packageTrucks, packageTruckId],
+  );
+  const selectedManualTruck = useMemo(
+    () => manualTrucks.find((t) => t.id === manualTruckId) ?? null,
+    [manualTrucks, manualTruckId],
+  );
+
+  useEffect(() => {
+    if (!packageClientId || !packageCodeCuenta) {
+      setPackageTrucks([]);
+      setPackageTruckId("");
+      setPackageTrucksError(null);
+      return;
+    }
+    let cancelled = false;
+    setPackageTrucksLoading(true);
+    setPackageTrucksError(null);
+    void TruckService.getAll(packageClientId, packageCodeCuenta)
+      .then((items) => {
+        if (cancelled) return;
+        const available = items.filter((t) => t.isAvailable);
+        setPackageTrucks(available);
+        setPackageTruckId((prev) =>
+          available.some((t) => t.id === prev) ? prev : "",
+        );
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setPackageTrucks([]);
+        setPackageTruckId("");
+        setPackageTrucksError("No se pudieron cargar los camiones disponibles.");
+      })
+      .finally(() => {
+        if (!cancelled) setPackageTrucksLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [packageClientId, packageCodeCuenta]);
+
+  useEffect(() => {
+    if (!manualClientId || !manualCodeCuenta) {
+      setManualTrucks([]);
+      setManualTruckId("");
+      setManualTrucksError(null);
+      setManualTruckError(null);
+      return;
+    }
+    let cancelled = false;
+    setManualTrucksLoading(true);
+    setManualTrucksError(null);
+    void TruckService.getAll(manualClientId, manualCodeCuenta)
+      .then((items) => {
+        if (cancelled) return;
+        const available = items.filter((t) => t.isAvailable);
+        setManualTrucks(available);
+        setManualTruckId((prev) =>
+          available.some((t) => t.id === prev) ? prev : "",
+        );
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setManualTrucks([]);
+        setManualTruckId("");
+        setManualTrucksError("No se pudieron cargar los camiones disponibles.");
+      })
+      .finally(() => {
+        if (!cancelled) setManualTrucksLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [manualClientId, manualCodeCuenta]);
 
   const getFirstFreeBodegaSlot = () => {
     const free = slots.find((slot) => !slot.autoId || !slot.autoId.trim());
@@ -200,12 +356,6 @@ export default function IngresosSection(props: Props) {
     value: box.autoId ?? `pos-${box.position}`,
     label: box.autoId ? `${box.autoId} · ${box.name ?? "Sin nombre"}` : `Pos ${box.position} · ${box.name ?? "Sin nombre"}`,
   }));
-
-  const selectedBox = selectedBoxId
-    ? outboundFiltered.find(
-        (box) => (box.autoId ?? `pos-${box.position}`) === selectedBoxId,
-      ) || outboundFiltered[0]
-    : outboundFiltered[0];
 
   return (
     <>
@@ -429,17 +579,52 @@ export default function IngresosSection(props: Props) {
                     </ul>
                   </>
                 )}
+                <div className="mt-3 grid gap-2">
+                  <label className="text-sm font-medium text-slate-600">Camion asignado</label>
+                  <select
+                    value={packageTruckId}
+                    onChange={(event) => setPackageTruckId(event.target.value)}
+                    disabled={packageTrucksLoading || packageTrucks.length === 0}
+                    className="w-full rounded-lg border border-pink-300 bg-pink-50/90 px-3 py-2 text-sm text-pink-900"
+                  >
+                    <option value="">
+                      {packageTrucksLoading
+                        ? "Cargando camiones…"
+                        : packageTrucks.length === 0
+                          ? "Sin camiones disponibles"
+                          : "Selecciona un camión"}
+                    </option>
+                    {packageTrucks.map((truck) => (
+                      <option key={truck.id} value={truck.id}>
+                        {truckLabel(truck)}
+                      </option>
+                    ))}
+                  </select>
+                  {packageTrucksError ? (
+                    <p className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-800">
+                      {packageTrucksError}
+                    </p>
+                  ) : null}
+                </div>
                 <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
                   {onDespachoPaqueteOrdenVenta ? (
                     <button
                       type="button"
-                      disabled={enviandoPaquete || cajasPaqueteEnSalida.length === 0}
+                      disabled={
+                        enviandoPaquete ||
+                        cajasPaqueteEnSalida.length === 0 ||
+                        !selectedPackageTruck
+                      }
                       onClick={() => {
                         void (async () => {
                           setEnviandoPaquete(true);
                           try {
-                            await onDespachoPaqueteOrdenVenta(paqueteDespacho);
+                            await onDespachoPaqueteOrdenVenta(paqueteDespacho, selectedPackageTruck);
                             setPaqueteDespacho(null);
+                            setPackageTruckId("");
+                            setPackageTrucks((prev) =>
+                              prev.filter((t) => t.id !== selectedPackageTruck?.id),
+                            );
                           } finally {
                             setEnviandoPaquete(false);
                           }
@@ -517,6 +702,39 @@ export default function IngresosSection(props: Props) {
                     </select>
                   </div>
                 </div>
+                <label className="text-sm font-medium text-slate-600">Camion</label>
+                <select
+                  value={manualTruckId}
+                  onChange={(event) => {
+                    setManualTruckId(event.target.value);
+                    setManualTruckError(null);
+                  }}
+                  disabled={manualTrucksLoading || manualTrucks.length === 0}
+                  className="w-full rounded-lg border border-pink-300 bg-pink-50/90 px-3 py-2 text-sm text-pink-900"
+                >
+                  <option value="">
+                    {manualTrucksLoading
+                      ? "Cargando camiones…"
+                      : manualTrucks.length === 0
+                        ? "Sin camiones disponibles"
+                        : "Selecciona un camión"}
+                  </option>
+                  {manualTrucks.map((truck) => (
+                    <option key={truck.id} value={truck.id}>
+                      {truckLabel(truck)}
+                    </option>
+                  ))}
+                </select>
+                {manualTrucksError ? (
+                  <p className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-800">
+                    {manualTrucksError}
+                  </p>
+                ) : null}
+                {manualTruckError ? (
+                  <p className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-800">
+                    {manualTruckError}
+                  </p>
+                ) : null}
                 <label className="text-sm font-medium text-slate-600">Nombre de la caja</label>
                 <input
                   value={selectedBox?.name ?? ""}
@@ -544,7 +762,11 @@ export default function IngresosSection(props: Props) {
                   type="button"
                   onClick={() => {
                     if (!selectedBox) return;
-                    setTempError(null);
+                    if (!selectedManualTruck || !manualClientId) {
+                      setManualTruckError("Selecciona un camión disponible antes de enviar la caja.");
+                      return;
+                    }
+                    setManualTruckError(null);
                     setReviewModal(selectedBox);
                   }}
                   className="mt-auto flex items-center justify-center gap-2 rounded-lg bg-pink-700 px-4 py-2 text-sm font-semibold text-white transition hover:bg-pink-600"
@@ -643,6 +865,12 @@ export default function IngresosSection(props: Props) {
                 <span className="font-semibold text-slate-600">Cantidad</span>
                 <span className="text-slate-900 font-semibold">
                   {formatQuantityKg(reviewModal.quantityKg)}
+                </span>
+              </div>
+              <div className="flex items-center justify-between gap-3">
+                <span className="font-semibold text-slate-600">Camion</span>
+                <span className="text-slate-900 font-semibold truncate max-w-[55%]">
+                  {selectedManualTruck ? truckLabel(selectedManualTruck) : "Sin camión"}
                 </span>
               </div>
               {tempError ? (
@@ -787,8 +1015,24 @@ export default function IngresosSection(props: Props) {
                   );
                   return;
                 }
+                if (!selectedManualTruck || !manualClientId) {
+                  setTempConfirmError("Selecciona un camión disponible antes de enviar.");
+                  return;
+                }
                 setTempConfirmModal(null);
-                handleDispatchBox(tempConfirmModal.box.position);
+                void (async () => {
+                  const ok = await handleDispatchBox(
+                    tempConfirmModal.box.position,
+                    selectedManualTruck,
+                    manualClientId,
+                  );
+                  if (ok) {
+                    setManualTrucks((prev) =>
+                      prev.filter((t) => t.id !== selectedManualTruck.id),
+                    );
+                    setManualTruckId("");
+                  }
+                })();
               }}
             >
               <label className="text-xs font-medium text-slate-700 flex items-center gap-1">

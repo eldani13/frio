@@ -8,6 +8,7 @@ import type {
   ViajeVentaTransporte,
   ViajeVentaTransporteConContext,
 } from "@/app/types/viajeVentaTransporte";
+import type { Camion } from "@/app/types/camion";
 import {
   addDoc,
   collection,
@@ -160,6 +161,12 @@ function mapViaje(id: string, data: Record<string, unknown>): ViajeVentaTranspor
     estado: (String(data.estado ?? "En curso").trim() as ViajeTransporteEstado) || "En curso",
     lineItemsEsperados,
     createdAt,
+    truckId: String(data.truckId ?? "").trim() || undefined,
+    truckCode: String(data.truckCode ?? "").trim() || undefined,
+    truckPlate: String(data.truckPlate ?? "").trim() || undefined,
+    truckBrand: String(data.truckBrand ?? "").trim() || undefined,
+    truckModel: String(data.truckModel ?? "").trim() || undefined,
+    truckType: String(data.truckType ?? "").trim() || undefined,
     lineItemsEntregados,
     entregaConforme: data.entregaConforme === true ? true : data.entregaConforme === false ? false : undefined,
     evidenciaFotoUrl: String(data.evidenciaFotoUrl ?? "").trim() || undefined,
@@ -198,7 +205,12 @@ export const ViajeVentaTransporteService = {
     );
   },
 
-  async crearDesdeVenta(clientId: string, ventaId: string, lineItems: VentaEnCursoLineItem[]): Promise<void> {
+  async crearDesdeVenta(
+    clientId: string,
+    ventaId: string,
+    lineItems: VentaEnCursoLineItem[],
+    truck?: Camion | null,
+  ): Promise<void> {
     const cid = String(clientId ?? "").trim();
     const vid = String(ventaId ?? "").trim();
     if (!cid || !vid) throw new Error("Faltan ids.");
@@ -210,6 +222,12 @@ export const ViajeVentaTransporteService = {
       numericId: nextId,
       numero: `TV-${String(nextId).padStart(4, "0")}`,
       estado: "En curso" satisfies ViajeTransporteEstado,
+      ...(truck?.id ? { truckId: truck.id } : {}),
+      ...(truck?.code ? { truckCode: String(truck.code) } : {}),
+      ...(truck?.plate ? { truckPlate: String(truck.plate) } : {}),
+      ...(truck?.brand ? { truckBrand: String(truck.brand) } : {}),
+      ...(truck?.model ? { truckModel: String(truck.model) } : {}),
+      ...(truck?.type ? { truckType: String(truck.type) } : {}),
       lineItemsEsperados: lineItems.map((li) => ({
         titleSnapshot: String(li.titleSnapshot ?? ""),
         cantidad: Number(li.cantidad) || 0,
