@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { MdOutlineSevereCold } from "react-icons/md";
+import Image from "next/image";
 
 
 export interface LoginCardProps {
@@ -24,29 +24,33 @@ const LoginCard: React.FC<LoginCardProps> = ({
 }) => {
   const [showPassword, setShowPassword] = useState(false);
   return (
-    <div className="w-full max-w-md rounded-3xl border border-white/60 bg-white/95 p-8 shadow-2xl backdrop-blur-lg">
-      {/* Logo/Icon */}
-      <div className="flex flex-col items-center mb-4">
-        <div className="flex items-center justify-center w-16 h-16 rounded-full bg-slate-900/90 shadow-lg mb-2">
-          <MdOutlineSevereCold size={40} className="text-sky-400" />
-        </div>
-        <p className="text-xs font-bold uppercase tracking-[0.4em] text-slate-400">
-          POLARIA
-        </p>
+    <div className="w-full max-w-md rounded-2xl border border-white/[0.08] bg-white/[0.03] p-10 shadow-none backdrop-blur-md">
+      <div className="mx-auto mb-8 h-px w-14 bg-teal-400/80" aria-hidden />
+      <div className="flex flex-col items-center mb-8">
+        <Image
+          src="/logo.png"
+          alt="Logotipo"
+          width={320}
+          height={112}
+          className="h-16 w-auto max-w-[280px] object-contain"
+          priority
+        />
       </div>
 
       <div className="text-center">
-        <h2 className="app-title">Iniciar sesión</h2>
-        <p className="mt-2 text-base text-slate-600">Accede para gestionar la operación diaria.</p>
+        <h2 className="app-title !text-white text-xl font-semibold tracking-tight">Iniciar sesión</h2>
+        <p className="mt-3 text-sm italic text-white/45 font-serif leading-relaxed">
+          Accede para gestionar la operación diaria.
+        </p>
       </div>
 
       <form
-        className="mt-8 grid gap-5"
+        className="mt-10 grid gap-5"
         onSubmit={e => { e.preventDefault(); onSubmit(); }}
         autoComplete="off"
       >
         <div>
-          <label htmlFor="username" className="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">
+          <label htmlFor="username" className="block text-xs font-semibold uppercase tracking-[0.2em] text-teal-400/90 mb-1.5">
             Usuario
           </label>
           <input
@@ -54,7 +58,7 @@ const LoginCard: React.FC<LoginCardProps> = ({
             type="text"
             value={username}
             onChange={(event) => onUsernameChange(event.target.value)}
-            className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-base text-slate-700 shadow-sm outline-none transition focus:border-sky-400 focus:ring-2 focus:ring-sky-200"
+            className="mt-1 w-full rounded-lg border border-white/10 bg-black/35 px-4 py-3 text-base text-white outline-none transition placeholder:text-white/25 focus:border-teal-400/55 focus:ring-1 focus:ring-teal-400/25"
             placeholder="Usuario"
             autoFocus
             autoComplete="username"
@@ -62,7 +66,7 @@ const LoginCard: React.FC<LoginCardProps> = ({
           />
         </div>
         <div>
-          <label htmlFor="password" className="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">
+          <label htmlFor="password" className="block text-xs font-semibold uppercase tracking-[0.2em] text-teal-400/90 mb-1.5">
             Contraseña
           </label>
           <div className="relative mt-1">
@@ -71,7 +75,7 @@ const LoginCard: React.FC<LoginCardProps> = ({
               type={showPassword ? "text" : "password"}
               value={password}
               onChange={(event) => onPasswordChange(event.target.value)}
-              className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 pr-12 text-base text-slate-700 shadow-sm outline-none transition focus:border-sky-400 focus:ring-2 focus:ring-sky-200"
+              className="w-full rounded-lg border border-white/10 bg-black/35 px-4 py-3 pr-12 text-base text-white outline-none transition placeholder:text-white/25 focus:border-teal-400/55 focus:ring-1 focus:ring-teal-400/25"
               placeholder="Contraseña"
               autoComplete="current-password"
               aria-label="Contraseña"
@@ -80,7 +84,7 @@ const LoginCard: React.FC<LoginCardProps> = ({
               type="button"
               tabIndex={-1}
               aria-label={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
-              className="absolute inset-y-0 right-0 flex items-center justify-center px-3 text-slate-400 hover:text-slate-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-300 rounded-r-xl"
+              className="absolute inset-y-0 right-0 flex items-center justify-center px-3 text-teal-400/50 hover:text-teal-300 focus:outline-none focus-visible:ring-1 focus-visible:ring-teal-400/40 rounded-r-lg"
               onClick={() => setShowPassword((v) => !v)}
             >
               {showPassword ? (
@@ -93,22 +97,22 @@ const LoginCard: React.FC<LoginCardProps> = ({
         </div>
 
         {errorMessage ? (
-          <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm font-semibold text-red-600 animate-shake">
+          <div className="rounded-lg border border-red-500/35 bg-red-950/40 px-3 py-2 text-sm font-semibold text-red-300 animate-shake">
             {errorMessage}
           </div>
         ) : null}
 
         <button
           type="submit"
-          className="w-full rounded-xl bg-linear-to-r from-sky-500 to-slate-900 px-4 py-3 text-base font-bold text-white shadow-lg transition hover:from-sky-600 hover:to-slate-800 active:scale-95 focus:outline-none focus:ring-2 focus:ring-sky-300"
+          className="w-full rounded-lg bg-teal-400 px-4 py-3.5 text-base font-bold tracking-wide text-slate-950 shadow-none transition hover:bg-teal-300 active:scale-[0.99] focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-200/70"
         >
           Entrar
         </button>
       </form>
 
       {quickFillActions && quickFillActions.length > 0 ? (
-        <div className="mt-6 border-t border-slate-200 pt-5">
-          <p className="mb-3 text-center text-xs font-semibold uppercase tracking-wide text-slate-400">
+        <div className="mt-8 border-t border-white/[0.08] pt-6">
+          <p className="mb-3 text-center text-xs font-semibold uppercase tracking-[0.2em] text-teal-500/70">
             Acceso rápido por rol
           </p>
           <div className="flex flex-wrap justify-center gap-2">
@@ -117,7 +121,7 @@ const LoginCard: React.FC<LoginCardProps> = ({
                 key={label}
                 type="button"
                 onClick={onFill}
-                className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:border-sky-300 hover:bg-sky-50 hover:text-slate-900 focus:outline-none focus:ring-2 focus:ring-sky-200"
+                className="rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm font-medium text-white/75 transition hover:border-teal-400/40 hover:bg-white/[0.05] hover:text-white focus:outline-none focus-visible:ring-1 focus-visible:ring-teal-400/35"
               >
                 {label}
               </button>

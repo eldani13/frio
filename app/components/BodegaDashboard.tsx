@@ -94,6 +94,7 @@ import type {
 } from "../interfaces/bodega";
 import RequestsQueue from "./bodega/RequestsQueue";
 import LoginCard from "./bodega/LoginCard";
+import { LoginPolariaBackdrop } from "./bodega/LoginPolariaBackdrop";
 import { kgSobranteParaDevolucionMapa, unidadesSecundarioEnterasParaMapa } from "@/app/lib/sobranteKg";
 import {
   DEFAULT_WAREHOUSE_ID,
@@ -4930,9 +4931,10 @@ export default function BodegaDashboard() {
 
   if (!isHydrated) {
     return (
-      <div className="relative min-h-screen bg-slate-100 px-6 text-slate-900">
+      <div className="relative min-h-screen bg-black px-6 text-white">
+        <LoginPolariaBackdrop />
         <main className="mx-auto flex min-h-screen w-full max-w-6xl flex-col items-center justify-center">
-          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-md" />
+          <div className="w-full max-w-md rounded-2xl border border-white/[0.06] bg-white/[0.03] p-6 backdrop-blur-sm" />
         </main>
       </div>
     );
@@ -4940,8 +4942,8 @@ export default function BodegaDashboard() {
 
   if (!session) {
     return (
-      <div className="relative flex min-h-dvh items-center justify-center bg-slate-100 px-6 text-slate-900">
-        <div className="absolute inset-0 -z-10 bg-[radial-gradient(circle_at_top,#e2e8f0,transparent_60%)]" />
+      <div className="relative flex min-h-dvh items-center justify-center bg-black px-6 text-white">
+        <LoginPolariaBackdrop />
         <main className="mx-auto flex w-full max-w-6xl flex-col items-center justify-center">
           <LoginCard
             username={loginUser}
