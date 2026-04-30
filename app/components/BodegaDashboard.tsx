@@ -110,7 +110,7 @@ import {
 } from "../../lib/coerceBodegaKg";
 import { fetchFridemSlots } from "../../lib/fridemInventory";
 import {
-  getLoginRoleShortcuts,
+  getLoginRoleShortcutGroups,
   loginRoleShortcutsEnabled,
 } from "../../lib/loginRolePresets";
 import { BiTask } from "react-icons/bi";
@@ -4952,15 +4952,18 @@ export default function BodegaDashboard() {
             onPasswordChange={setLoginPassword}
             onSubmit={handleLogin}
             errorMessage={loginError}
-            quickFillActions={
+            quickFillGroups={
               loginRoleShortcutsEnabled
-                ? getLoginRoleShortcuts().map((s) => ({
-                    label: s.label,
-                    onFill: () => {
-                      setLoginUser(s.email);
-                      setLoginPassword(s.password);
-                      setLoginError("");
-                    },
+                ? getLoginRoleShortcutGroups().map((g) => ({
+                    title: g.title,
+                    actions: g.shortcuts.map((s) => ({
+                      label: s.label,
+                      onFill: () => {
+                        setLoginUser(s.email);
+                        setLoginPassword(s.password);
+                        setLoginError("");
+                      },
+                    })),
                   }))
                 : undefined
             }

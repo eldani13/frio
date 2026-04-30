@@ -9,8 +9,8 @@ export interface LoginCardProps {
   onPasswordChange: (value: string) => void;
   onSubmit: () => void;
   errorMessage?: string;
-  /** Botones bajo «Entrar» que rellenan usuario y contraseña (p. ej. atajos de desarrollo). */
-  quickFillActions?: Array<{ label: string; onFill: () => void }>;
+  /** Atajos por sección bajo «Entrar» (p. ej. desarrollo). */
+  quickFillGroups?: Array<{ title: string; actions: Array<{ label: string; onFill: () => void }> }>;
 }
 
 const LoginCard: React.FC<LoginCardProps> = ({
@@ -20,11 +20,11 @@ const LoginCard: React.FC<LoginCardProps> = ({
   onPasswordChange,
   onSubmit,
   errorMessage,
-  quickFillActions,
+  quickFillGroups,
 }) => {
   const [showPassword, setShowPassword] = useState(false);
   return (
-    <div className="w-full max-w-md rounded-2xl border border-white/[0.08] bg-white/[0.03] p-10 shadow-none backdrop-blur-md">
+    <div className="w-full max-w-lg rounded-2xl border border-white/[0.08] bg-white/[0.03] p-10 shadow-none backdrop-blur-md">
       <div className="mx-auto mb-8 h-px w-14 bg-teal-400/80" aria-hidden />
       <div className="flex flex-col items-center mb-8">
         <Image
@@ -110,23 +110,30 @@ const LoginCard: React.FC<LoginCardProps> = ({
         </button>
       </form>
 
-      {quickFillActions && quickFillActions.length > 0 ? (
-        <div className="mt-8 border-t border-white/[0.08] pt-6">
-          <p className="mb-3 text-center text-xs font-semibold uppercase tracking-[0.2em] text-teal-500/70">
+      {quickFillGroups && quickFillGroups.length > 0 ? (
+        <div className="mt-8 space-y-6 border-t border-white/[0.08] pt-6">
+          {/* <p className="text-center text-xs font-semibold uppercase tracking-[0.2em] text-teal-500/70">
             Acceso rápido por rol
-          </p>
-          <div className="flex flex-wrap justify-center gap-2">
-            {quickFillActions.map(({ label, onFill }) => (
-              <button
-                key={label}
-                type="button"
-                onClick={onFill}
-                className="rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm font-medium text-white/75 transition hover:border-teal-400/40 hover:bg-white/[0.05] hover:text-white focus:outline-none focus-visible:ring-1 focus-visible:ring-teal-400/35"
-              >
-                {label}
-              </button>
-            ))}
-          </div>
+          </p> */}
+          {quickFillGroups.map((group) => (
+            <div key={group.title}>
+              <p className="mb-2 text-center text-[11px] font-semibold uppercase tracking-[0.18em] text-white/40">
+                {group.title}
+              </p>
+              <div className="flex flex-wrap justify-center gap-2">
+                {group.actions.map(({ label, onFill }) => (
+                  <button
+                    key={`${group.title}-${label}`}
+                    type="button"
+                    onClick={onFill}
+                    className="rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm font-medium text-white/75 transition hover:border-teal-400/40 hover:bg-white/[0.05] hover:text-white focus:outline-none focus-visible:ring-1 focus-visible:ring-teal-400/35"
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ))}
         </div>
       ) : null}
 
