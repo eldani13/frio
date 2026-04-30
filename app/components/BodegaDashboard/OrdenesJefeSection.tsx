@@ -9,7 +9,6 @@ import {
   FiRepeat,
   FiSearch,
   FiAlertTriangle,
-  FiClipboard,
   FiX,
 } from "react-icons/fi";
 import { HiArrowRightOnRectangle } from "react-icons/hi2";
@@ -28,6 +27,7 @@ import {
   cantidadPrimarioProcesamientoTexto,
   primarioCatalogoPorId,
 } from "@/app/lib/procesamientoDisplay";
+import { almacenProductCodeFromCatalogo } from "@/lib/almacenProductCode";
 import { ProcesamientoOrdenesActivasBodega } from "@/app/components/BodegaDashboard/ProcesamientoOrdenesActivasBodega";
 import { AsignarProcesadorProcesamientoModal } from "@/app/components/BodegaDashboard/AsignarProcesadorProcesamientoModal";
 import BodegaZonaCajaCard from "../bodega/BodegaZonaCajaCard";
@@ -41,170 +41,20 @@ import {
 } from "../bodega/ZonaCuatroSlotsRow";
 import VentasEnCursoMapButton from "../bodega/VentasEnCursoMapButton";
 import { BodegaZonaEstadoModalShell } from "../bodega/BodegaZonaEstadoModalShell";
+import type { JefeModalAccent } from "../bodega/JefeOrderModalShell";
+import {
+  jefeModalAccentClass,
+  jefeNestedShellBorder,
+  JefeModalEmptyHint,
+  JefeModalField,
+  JefeOrderModalShell,
+  jefeBtnGhost,
+} from "../bodega/JefeOrderModalShell";
 import { RiUserReceivedLine } from "react-icons/ri";
 import { temperatureStringFromAnalyzeResponse } from "@/app/lib/imageAnalyzeApi";
+import { swalError, swalWarning } from "@/lib/swal";
 
 const HIGH_TEMP_THRESHOLD = 5;
-
-type JefeModalAccent = "emerald" | "blue" | "orange" | "pink";
-
-const jefeModalAccentClass: Record<
-  JefeModalAccent,
-  {
-    header: string;
-    iconWrap: string;
-    iconColor: string;
-    cardBorder: string;
-    primary: string;
-    primaryHover: string;
-    selectFocus: string;
-  }
-> = {
-  emerald: {
-    header: "from-emerald-50 via-white to-slate-50/30",
-    iconWrap: "bg-emerald-100",
-    iconColor: "text-emerald-600",
-    cardBorder: "border-emerald-100",
-    primary: "bg-emerald-600",
-    primaryHover: "hover:bg-emerald-500",
-    selectFocus: "focus:border-emerald-400 focus:ring-emerald-200/60",
-  },
-  blue: {
-    header: "from-blue-50 via-white to-slate-50/30",
-    iconWrap: "bg-blue-100",
-    iconColor: "text-blue-600",
-    cardBorder: "border-blue-100",
-    primary: "bg-blue-600",
-    primaryHover: "hover:bg-blue-500",
-    selectFocus: "focus:border-blue-400 focus:ring-blue-200/60",
-  },
-  orange: {
-    header: "from-orange-50 via-white to-slate-50/30",
-    iconWrap: "bg-orange-100",
-    iconColor: "text-orange-600",
-    cardBorder: "border-orange-100",
-    primary: "bg-orange-600",
-    primaryHover: "hover:bg-orange-500",
-    selectFocus: "focus:border-orange-400 focus:ring-orange-200/60",
-  },
-  pink: {
-    header: "from-pink-50 via-white to-slate-50/30",
-    iconWrap: "bg-pink-100",
-    iconColor: "text-pink-600",
-    cardBorder: "border-pink-100",
-    primary: "bg-pink-600",
-    primaryHover: "hover:bg-pink-500",
-    selectFocus: "focus:border-pink-400 focus:ring-pink-200/60",
-  },
-};
-
-function JefeOrderModalShell({
-  id,
-  title,
-  description,
-  accent,
-  icon,
-  onClose,
-  children,
-  footer,
-  contentMaxWidthClass = "max-w-lg",
-  bodyMaxHeightClass = "max-h-[min(62vh,480px)]",
-}: {
-  id: string;
-  title: string;
-  description?: string;
-  accent: JefeModalAccent;
-  icon: React.ReactNode;
-  onClose: () => void;
-  children: React.ReactNode;
-  footer: React.ReactNode;
-  /** Ancho del panel (p. ej. tablas anchas: `max-w-4xl`). */
-  contentMaxWidthClass?: string;
-  bodyMaxHeightClass?: string;
-}) {
-  const a = jefeModalAccentClass[accent];
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/45 p-3 backdrop-blur-[2px] sm:p-4"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby={`${id}-title`}
-      onClick={onClose}
-    >
-      <div
-        className={`w-full ${contentMaxWidthClass} overflow-hidden rounded-3xl border bg-white shadow-2xl shadow-slate-900/10 ring-1 ring-black/5 ${a.cardBorder}`}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div
-          className={`relative flex items-start gap-4 border-b border-slate-100/80 bg-linear-to-r px-5 py-5 sm:px-6 ${a.header}`}
-        >
-          <div
-            className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl shadow-inner ${a.iconWrap}`}
-          >
-            <span className={a.iconColor}>{icon}</span>
-          </div>
-          <div className="min-w-0 flex-1 pr-10">
-            <h2
-              id={`${id}-title`}
-              className="app-title"
-            >
-              {title}
-            </h2>
-            {description ? (
-              <p className="mt-1.5 text-sm leading-relaxed text-slate-600">{description}</p>
-            ) : null}
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="absolute right-4 top-4 rounded-xl p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-300"
-            aria-label="Cerrar"
-          >
-            <FiX className="h-5 w-5" strokeWidth={2} />
-          </button>
-        </div>
-        <div className={`${bodyMaxHeightClass} overflow-y-auto px-5 py-5 sm:px-6`}>
-          <div className="flex flex-col gap-5">{children}</div>
-        </div>
-        <div className="border-t border-slate-100 bg-slate-50/90 px-5 py-4 sm:px-6">{footer}</div>
-      </div>
-    </div>
-  );
-}
-
-function JefeModalField({
-  label,
-  icon,
-  hint,
-  children,
-}: {
-  label: string;
-  icon?: React.ReactNode;
-  hint?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="space-y-2">
-      <div className="flex items-center gap-2">
-        {icon ? (
-          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-500">
-            {icon}
-          </span>
-        ) : null}
-        <span className="text-xs font-bold uppercase tracking-wider text-slate-500">{label}</span>
-      </div>
-      {children}
-      {hint ? <p className="text-xs leading-relaxed text-slate-500">{hint}</p> : null}
-    </div>
-  );
-}
-
-const jefeNestedShellBorder: Record<JefeModalAccent, string> = {
-  emerald: "border-emerald-100",
-  blue: "border-blue-100",
-  orange: "border-orange-100",
-  pink: "border-pink-100",
-};
 
 /** Modal secundario encima del modal de orden (z-index mayor). */
 function JefeNestedPickerShell({
@@ -316,15 +166,6 @@ const jefePickerTriggerBtn: Record<JefeModalAccent, string> = {
   pink: "border-slate-200/80 bg-pink-50/95 text-pink-800 hover:bg-pink-100",
 };
 
-function JefeModalEmptyHint({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="flex gap-2.5 rounded-xl border border-amber-200/80 bg-amber-50/90 px-3.5 py-2.5 text-xs leading-snug text-amber-950">
-      <FiAlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" aria-hidden />
-      <div>{children}</div>
-    </div>
-  );
-}
-
 /** Campo tipo «select» sin desplegable: valor de solo lectura + lupa dentro del input para abrir el picker. */
 function JefeOrderPickerTrigger({
   accent,
@@ -390,9 +231,6 @@ const jefeSelectClass =
 
 const jefeReadonlyClass =
   "w-full rounded-xl border border-slate-200/90 bg-slate-50 px-3 py-2.5 text-sm font-medium text-slate-700";
-
-const jefeBtnGhost =
-  "inline-flex w-full items-center justify-center rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-300 sm:w-auto";
 
 // Estado para forzar re-render cuando se asigna una alerta debe ir dentro del componente
 
@@ -722,44 +560,6 @@ export default function OrdenesJefeSection(props: {
     );
   }, [orderModalType, trasladoBodegaOrigenTipo, trasladoProcOpciones]);
 
-  type ZoneKey = "entrada" | "bodega" | "salida";
-  type ModalKind = "alertas" | "tareas";
-
-  type DetailItem = {
-    id: string;
-    title: string;
-    description: string;
-    meta?: string;
-  };
-
-  const [statusModal, setStatusModal] = useState<{
-    zone: ZoneKey;
-    kind: ModalKind;
-  } | null>(null);
-  const zoneLabels: Record<ZoneKey, string> = {
-    entrada: "Entrada",
-    bodega: "Bodega",
-    salida: "Salida",
-  };
-
-  const zoneAlertItems: Record<ZoneKey, DetailItem[]> = useMemo(() => {
-    const items: Record<ZoneKey, DetailItem[]> = {
-      entrada: [],
-      bodega: [],
-      salida: [],
-    };
-    return items;
-  }, []);
-
-  // Dummy placeholder for zoneTaskItems to avoid compile error
-  const zoneTaskItems: Record<ZoneKey, DetailItem[]> = useMemo(() => {
-    return {
-      entrada: [],
-      bodega: [],
-      salida: [],
-    };
-  }, []);
-
   const sortedInboundBoxes = useMemo(
     () => sortByPosition([...inboundBoxes]),
     [inboundBoxes, sortByPosition],
@@ -1046,12 +846,13 @@ export default function OrdenesJefeSection(props: {
                                     (tempInput as HTMLInputElement).value =
                                       tempValue;
                                 } else {
-                                  alert(
+                                  void swalWarning(
+                                    "Sin resultado",
                                     "No se detectó temperatura en la imagen.",
                                   );
                                 }
                               } catch {
-                                alert("Error al analizar la imagen.");
+                                void swalError("Error", "Error al analizar la imagen.");
                               }
                               setEditTempLoading(false);
                               // Quitar feedback visual
@@ -1142,55 +943,6 @@ export default function OrdenesJefeSection(props: {
                   </div>
                 )} */}
               </div>
-              {/* Modal de alertas de temperatura alta - estilo personalizado */}
-              {statusModal ? (
-                <BodegaZonaEstadoModalShell
-                  titleId="jefe-zona-status-modal-title"
-                  label={statusModal.kind === "alertas" ? "Alertas" : "Tareas pendientes"}
-                  title={zoneLabels[statusModal.zone]}
-                  subtitle={
-                    statusModal.kind === "alertas"
-                      ? "Detalles de alertas activas en esta zona."
-                      : "Tareas pendientes relacionadas con esta zona."
-                  }
-                  icon={
-                    statusModal.kind === "alertas" ? (
-                      <FiAlertTriangle className="h-6 w-6 shrink-0" aria-hidden />
-                    ) : (
-                      <FiClipboard className="h-6 w-6 shrink-0" aria-hidden />
-                    )
-                  }
-                  onClose={() => setStatusModal(null)}
-                  zClass="z-50"
-                >
-                  {(statusModal.kind === "alertas"
-                    ? zoneAlertItems[statusModal.zone]
-                    : zoneTaskItems[statusModal.zone]
-                  ).length === 0 ? (
-                    <p className="text-sm leading-relaxed text-slate-600">
-                      No hay <strong className="text-slate-800">elementos</strong> para mostrar en esta zona.
-                    </p>
-                  ) : (
-                    <ul className="grid gap-3">
-                      {(statusModal.kind === "alertas"
-                        ? zoneAlertItems[statusModal.zone]
-                        : zoneTaskItems[statusModal.zone]
-                      ).map((item) => (
-                        <li
-                          key={item.id}
-                          className="rounded-2xl border border-sky-100 bg-linear-to-br from-white to-sky-50/40 p-4 shadow-sm"
-                        >
-                          <p className="font-semibold leading-snug text-slate-900">{item.title}</p>
-                          <p className="mt-1 text-sm leading-relaxed text-slate-600">{item.description}</p>
-                          {item.meta ? (
-                            <p className="mt-2 text-xs font-semibold text-slate-500">{item.meta}</p>
-                          ) : null}
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </BodegaZonaEstadoModalShell>
-              ) : null}
               <div className="flex min-h-0 w-full flex-1 flex-col justify-between gap-3">
                 <div className="flex flex-col gap-2 sm:gap-4">
                   <ZonaCuatroSlotsRow layout="dosPorColumna" slotCount={8}>
@@ -1297,6 +1049,7 @@ export default function OrdenesJefeSection(props: {
                     tareasProcesamientoOperario={tareasProcesamientoOperario}
                     onPushTareaProcesamientoOperario={onPushTareaProcesamientoOperario}
                     productosCatalogo={productosCatalogo}
+                    outboundBoxes={outboundBoxes}
                   />
                 </div>
               </div>
@@ -1391,182 +1144,117 @@ export default function OrdenesJefeSection(props: {
                   )}
                 </BodegaZonaEstadoModalShell>
               ) : null}
-              {showAlertModal && (
-                <div
-                  className="fixed inset-0 z-50 flex items-center justify-center backdrop-blur-sm bg-black/10 animate-fade-in p-2 sm:p-4"
-                  role="dialog"
-                  aria-modal="true"
-                  onClick={() => setShowAlertModal(false)}
+              {showAlertModal ? (
+                <BodegaZonaEstadoModalShell
+                  titleId="jefe-bodega-temp-alerts-modal-title"
+                  label="Alertas"
+                  title="Bodega"
+                  subtitle="Detalles de alertas activas en esta zona."
+                  icon={<FiAlertTriangle className="h-6 w-6 shrink-0 text-slate-700" aria-hidden />}
+                  onClose={() => setShowAlertModal(false)}
+                  zClass="z-50"
                 >
-                  <div
-                    className="relative w-full max-w-lg animate-fade-in-up overflow-hidden rounded-3xl border border-blue-100 bg-white/90 shadow-2xl backdrop-blur-lg sm:max-w-xl"
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    <div className="flex items-start gap-3 px-6 pt-6 pb-4 border-b border-blue-100">
-                      <div className="flex flex-col">
-                        <h3 className="app-title">
-                          Bodega
-                        </h3>
-                        <p className="mt-1 text-xs sm:text-sm text-slate-700 font-medium">
-                          Detalles de alertas activas en esta zona.
-                        </p>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => setShowAlertModal(false)}
-                        className="ml-auto rounded-full border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 bg-white shadow transition hover:bg-blue-100 hover:text-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-400"
-                        title="Cerrar"
-                      >
-                        <svg
-                          xmlns="http://www.w3.org/2000/svg"
-                          className="w-5 h-5 inline-block mr-1 -mt-1 text-blue-500"
-                          fill="none"
-                          viewBox="0 0 24 24"
-                          stroke="currentColor"
+                  {bodegaHighTempAlerts.length === 0 ? (
+                    <div className="-mx-5 border-y border-slate-100 py-12 text-center sm:-mx-6">
+                      <p className="px-2 text-base leading-relaxed text-slate-600">
+                        No hay <strong className="font-semibold text-slate-800">alertas de temperatura</strong> en bodega.
+                      </p>
+                    </div>
+                  ) : (
+                    <ul className="grid gap-3">
+                      {bodegaHighTempAlerts.map((slot) => (
+                        <li
+                          key={slot.position}
+                          className="group relative flex flex-col gap-3 rounded-xl border border-red-200 bg-linear-to-br from-red-50 via-white to-red-100 p-4 shadow-md transition-all duration-200 hover:shadow-lg sm:flex-row sm:items-center sm:justify-between"
                         >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M6 18L18 6M6 6l12 12"
-                          />
-                        </svg>
-                        Cerrar
-                      </button>
-                    </div>
-                    {/* Lista de items */}
-                    <div className="p-6 grid gap-4 max-h-[60vh] overflow-y-auto bg-white">
-                      {bodegaHighTempAlerts.length === 0 ? (
-                        <div className="text-center text-slate-400 py-8">
-                          <svg
-                            className="mx-auto w-12 h-12 text-slate-200"
-                            fill="none"
-                            viewBox="0 0 24 24"
-                            stroke="currentColor"
-                          >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth={2}
-                              d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                            />
-                          </svg>
-                          <p className="mt-2 text-base font-semibold">
-                            No hay alertas de temperatura en bodega.
-                          </p>
-                        </div>
-                      ) : (
-                        bodegaHighTempAlerts.map((slot) => (
-                          <div
-                            key={slot.position}
-                            className="rounded-xl border border-red-200 bg-linear-to-br from-red-50 via-white to-red-100 p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 shadow-md hover:shadow-lg transition-all duration-200 group relative"
-                          >
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-2 mb-1">
-                                <p className="text-base font-semibold text-red-800 truncate">
-                                  {slot.name || "Sin nombre"}
-                                </p>
-                                <span
-                                  className="inline-block animate-pulse bg-red-500 text-white text-base font-bold rounded-full px-2 py-0.5 ml-1 shadow-sm"
-                                  title="Prioridad alta"
-                                >
-                                  ¡ALERTA!
-                                </span>
-                              </div>
-                              <p className="text-xs text-slate-500 mb-1">
-                                Id:{" "}
-                                <span className="font-mono text-red-700">
-                                  {slot.autoId}
-                                </span>{" "}
-                                · Posición:{" "}
-                                <span className="font-mono">
-                                  {slot.position}
-                                </span>
+                          <div className="min-w-0 flex-1">
+                            <div className="mb-1 flex items-center gap-2">
+                              <p className="truncate text-base font-semibold text-red-800">
+                                {slot.name || "Sin nombre"}
                               </p>
-                              <p className="mt-1 text-sm font-semibold text-red-600 flex items-center gap-1">
-                                <svg
-                                  className="w-4 h-4 text-red-400 inline-block"
-                                  fill="none"
-                                  viewBox="0 0 24 24"
-                                  stroke="currentColor"
-                                >
-                                  <path
-                                    strokeLinecap="round"
-                                    strokeLinejoin="round"
-                                    strokeWidth={2}
-                                    d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                                  />
-                                </svg>
-                                Temp: {slot.temperature} °C
-                              </p>
-                            </div>
-                            <div className="flex flex-col items-end gap-2">
-                              <button
-                                type="button"
-                                className={`flex items-center gap-2 rounded-lg bg-linear-to-r from-blue-600 to-cyan-500 px-4 py-2 text-sm font-semibold text-white shadow-lg transition-all duration-150 hover:from-blue-700 hover:to-cyan-600 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:ring-offset-2 active:scale-95 relative ${alertasOperario.some((a) => a.position === slot.position) ? "opacity-60 pointer-events-none" : ""}`}
-                                title={
-                                  alertasOperario.some(
-                                    (a) => a.position === slot.position,
-                                  )
-                                    ? "Ya asignado"
-                                    : "Asignar operario a esta alerta"
-                                }
-                                onMouseDown={(e) =>
-                                  e.currentTarget.classList.add("scale-90")
-                                }
-                                onMouseUp={(e) =>
-                                  e.currentTarget.classList.remove("scale-90")
-                                }
-                                onClick={() => {
-                                  if (
-                                    alertasOperario.some(
-                                      (a) => a.position === slot.position,
-                                    )
-                                  ) {
-                                    return;
-                                  }
-                                  onUpdateAlertasOperario([
-                                    ...alertasOperario,
-                                    {
-                                      position: slot.position,
-                                      name: slot.name,
-                                      autoId: slot.autoId,
-                                      temperature: slot.temperature,
-                                      zone: "bodega",
-                                    },
-                                  ]);
-                                }}
+                              <span
+                                className="ml-1 inline-block animate-pulse rounded-full bg-red-500 px-2 py-0.5 text-base font-bold text-white shadow-sm"
+                                title="Prioridad alta"
                               >
-                                <svg
-                                  xmlns="http://www.w3.org/2000/svg"
-                                  className="w-4 h-4 text-white opacity-90"
-                                  fill="none"
-                                  viewBox="0 0 24 24"
-                                  stroke="currentColor"
-                                >
-                                  <path
-                                    strokeLinecap="round"
-                                    strokeLinejoin="round"
-                                    strokeWidth={2}
-                                    d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
-                                  />
-                                </svg>
-                                <span>
-                                  {alertasOperario.some(
-                                    (a) => a.position === slot.position,
-                                  )
-                                    ? "Asignado"
-                                    : "Asignar operario"}
-                                </span>
-                              </button>
+                                ¡ALERTA!
+                              </span>
                             </div>
+                            <p className="mb-1 text-xs text-slate-500">
+                              Id:{" "}
+                              <span className="font-mono text-red-700">{slot.autoId}</span> · Posición:{" "}
+                              <span className="font-mono">{slot.position}</span>
+                            </p>
+                            <p className="mt-1 flex items-center gap-1 text-sm font-semibold text-red-600">
+                              <svg
+                                className="inline-block h-4 w-4 text-red-400"
+                                fill="none"
+                                viewBox="0 0 24 24"
+                                stroke="currentColor"
+                              >
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  strokeWidth={2}
+                                  d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                                />
+                              </svg>
+                              Temp: {slot.temperature} °C
+                            </p>
                           </div>
-                        ))
-                      )}
-                    </div>
-                  </div>
-                </div>
-              )}
+                          <div className="flex flex-col items-end gap-2">
+                            <button
+                              type="button"
+                              className={`relative flex items-center gap-2 rounded-lg bg-linear-to-r from-blue-600 to-cyan-500 px-4 py-2 text-sm font-semibold text-white shadow-lg transition-all duration-150 hover:from-blue-700 hover:to-cyan-600 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:ring-offset-2 active:scale-95 ${alertasOperario.some((a) => a.position === slot.position) ? "pointer-events-none opacity-60" : ""}`}
+                              title={
+                                alertasOperario.some((a) => a.position === slot.position)
+                                  ? "Ya asignado"
+                                  : "Asignar operario a esta alerta"
+                              }
+                              onMouseDown={(e) => e.currentTarget.classList.add("scale-90")}
+                              onMouseUp={(e) => e.currentTarget.classList.remove("scale-90")}
+                              onClick={() => {
+                                if (alertasOperario.some((a) => a.position === slot.position)) {
+                                  return;
+                                }
+                                onUpdateAlertasOperario([
+                                  ...alertasOperario,
+                                  {
+                                    position: slot.position,
+                                    name: slot.name,
+                                    autoId: slot.autoId,
+                                    temperature: slot.temperature,
+                                    zone: "bodega",
+                                  },
+                                ]);
+                              }}
+                            >
+                              <svg
+                                xmlns="http://www.w3.org/2000/svg"
+                                className="h-4 w-4 text-white opacity-90"
+                                fill="none"
+                                viewBox="0 0 24 24"
+                                stroke="currentColor"
+                              >
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  strokeWidth={2}
+                                  d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
+                                />
+                              </svg>
+                              <span>
+                                {alertasOperario.some((a) => a.position === slot.position)
+                                  ? "Asignado"
+                                  : "Asignar operario"}
+                              </span>
+                            </button>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </BodegaZonaEstadoModalShell>
+              ) : null}
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-2 sm:gap-4 md:grid-cols-3 md:gap-4 lg:grid-cols-4 lg:gap-4">
                 {slots.slice(0, 12).map((slot) => (
                   <SlotCard
@@ -1818,6 +1506,17 @@ export default function OrdenesJefeSection(props: {
                     const opt = trasladoSeleccionado;
                     if (!opt) return;
                     const row = opt.row;
+                    const primCat = primarioCatalogoPorId(productosCatalogo, row.productoPrimarioId);
+                    const secCat = primarioCatalogoPorId(productosCatalogo, row.productoSecundarioId);
+                    const capPrim = almacenProductCodeFromCatalogo(primCat);
+                    const capSec = almacenProductCodeFromCatalogo(secCat);
+                    const procCodes = {
+                      ...(row.productoSecundarioId?.trim()
+                        ? { productoSecundarioId: row.productoSecundarioId.trim() }
+                        : {}),
+                      ...(capPrim ? { catalogoAlmacenCodePrimario: capPrim } : {}),
+                      ...(capSec ? { catalogoAlmacenCodeSecundario: capSec } : {}),
+                    };
                     if (opt.kind === "desperdicio") {
                       const sk = Number(row.sobranteKg) || 0;
                       handleCreateOrder({
@@ -1842,6 +1541,7 @@ export default function OrdenesJefeSection(props: {
                                 : undefined,
                           rolDevolucion: "desperdicio",
                           sobranteKg: sk,
+                          ...procCodes,
                         },
                       });
                       return;
@@ -1870,6 +1570,7 @@ export default function OrdenesJefeSection(props: {
                               ? null
                               : undefined,
                         rolDevolucion: "procesado",
+                        ...procCodes,
                       },
                     });
                   }

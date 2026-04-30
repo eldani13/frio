@@ -7,6 +7,7 @@ import {
   where,
   orderBy,
   limit,
+  onSnapshot,
 } from "firebase/firestore";
 import type { SolicitudCompra, SolicitudLineItem } from "@/app/types/solicitudCompra";
 import { postPedidoProveedorWebhook } from "@/app/services/pedidoProveedorWebhook";
@@ -44,6 +45,27 @@ export const SolicitudCompraService = {
       console.error("SolicitudCompraService.getAll", e);
       return [];
     }
+  },
+
+  subscribeByCodeCuenta(
+    idCliente: string,
+    codeCuenta: string,
+    onNext: (rows: SolicitudCompra[]) => void,
+    onError?: (e: Error) => void,
+  ): () => void {
+    if (!idCliente?.trim()) {
+      onNext([]);
+      return () => {};
+    }
+    const q = query(col(idCliente), where("codeCuenta", "==", codeCuenta));
+    return onSnapshot(
+      q,
+      (snap) => {
+        const list = snap.docs.map((d) => ({ id: d.id, ...d.data() } as SolicitudCompra));
+        onNext(list.sort((a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0)));
+      },
+      (err) => onError?.(err as Error),
+    );
   },
 
   async create(

@@ -61,33 +61,35 @@ const LoginCard: React.FC<LoginCardProps> = ({
             aria-label="Usuario"
           />
         </div>
-        <div className="relative">
+        <div>
           <label htmlFor="password" className="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">
             Contraseña
           </label>
-          <input
-            id="password"
-            type={showPassword ? "text" : "password"}
-            value={password}
-            onChange={(event) => onPasswordChange(event.target.value)}
-            className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-base text-slate-700 shadow-sm outline-none transition focus:border-sky-400 focus:ring-2 focus:ring-sky-200 pr-12"
-            placeholder="Contraseña"
-            autoComplete="current-password"
-            aria-label="Contraseña"
-          />
-          <button
-            type="button"
-            tabIndex={-1}
-            aria-label={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
-            className="absolute top-8 right-3 text-slate-400 hover:text-slate-700 focus:outline-none"
-            onClick={() => setShowPassword((v) => !v)}
-          >
-            {showPassword ? (
-              <svg width="22" height="22" fill="none" viewBox="0 0 24 24"><path stroke="currentColor" strokeWidth="2" d="M3 12s3.6-7 9-7 9 7 9 7-3.6 7-9 7-9-7-9-7Z"/><circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="2"/><path stroke="currentColor" strokeWidth="2" d="M2 2l20 20"/></svg>
-            ) : (
-              <svg width="22" height="22" fill="none" viewBox="0 0 24 24"><path stroke="currentColor" strokeWidth="2" d="M3 12s3.6-7 9-7 9 7 9 7-3.6 7-9 7-9-7-9-7Z"/><circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="2"/></svg>
-            )}
-          </button>
+          <div className="relative mt-1">
+            <input
+              id="password"
+              type={showPassword ? "text" : "password"}
+              value={password}
+              onChange={(event) => onPasswordChange(event.target.value)}
+              className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 pr-12 text-base text-slate-700 shadow-sm outline-none transition focus:border-sky-400 focus:ring-2 focus:ring-sky-200"
+              placeholder="Contraseña"
+              autoComplete="current-password"
+              aria-label="Contraseña"
+            />
+            <button
+              type="button"
+              tabIndex={-1}
+              aria-label={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
+              className="absolute inset-y-0 right-0 flex items-center justify-center px-3 text-slate-400 hover:text-slate-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-300 rounded-r-xl"
+              onClick={() => setShowPassword((v) => !v)}
+            >
+              {showPassword ? (
+                <svg width="22" height="22" fill="none" viewBox="0 0 24 24"><path stroke="currentColor" strokeWidth="2" d="M3 12s3.6-7 9-7 9 7 9 7-3.6 7-9 7-9-7-9-7Z"/><circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="2"/><path stroke="currentColor" strokeWidth="2" d="M2 2l20 20"/></svg>
+              ) : (
+                <svg width="22" height="22" fill="none" viewBox="0 0 24 24"><path stroke="currentColor" strokeWidth="2" d="M3 12s3.6-7 9-7 9 7 9 7-3.6 7-9 7-9-7-9-7Z"/><circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="2"/></svg>
+              )}
+            </button>
+          </div>
         </div>
 
         {errorMessage ? (

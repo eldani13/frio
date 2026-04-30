@@ -33,11 +33,11 @@ export function BodegaZonaEstadoModalShell({
 }: BodegaZonaEstadoModalShellProps) {
   const footerNode =
     footer ?? (
-      <div className="flex flex-wrap gap-2">
+      <div className="flex flex-wrap justify-start gap-2">
         <button
           type="button"
           onClick={onClose}
-          className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-base font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50"
+          className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-base font-semibold text-slate-900 shadow-sm transition hover:bg-slate-50"
         >
           Cerrar
         </button>

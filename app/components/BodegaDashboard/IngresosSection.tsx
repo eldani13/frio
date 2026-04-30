@@ -21,6 +21,8 @@ import {
   ZONA_ENTRADA_SALIDA_SLOTS,
   ZonaCuatroSlotsRow,
 } from "@/app/components/bodega/ZonaCuatroSlotsRow";
+import { ModalPlantilla } from "@/app/components/ui/ModalPlantilla";
+import { swalConfirm } from "@/lib/swal";
 import type { VentaPendienteCartonaje } from "@/app/types/ventaCuenta";
 
 const HIGH_TEMP_THRESHOLD = 5;
@@ -67,8 +69,8 @@ type Props = {
   warehouseCodeCuenta?: string;
   onIngresoDesdeOrdenCompra: (payload: IngresoDesdeOrdenCompraPayload) => Promise<void>;
   onIngresoDesdeOrdenVenta: (payload: IngresoDesdeOrdenVentaPayload) => Promise<void>;
-  /** Custodio: despachar todas las cajas en salida de una OV en un solo envío (estado → Transporte + viaje). */
-  onDespachoPaqueteOrdenVenta?: (orden: VentaPendienteCartonaje, truck: Camion | null) => Promise<void>;
+  /** Custodio: despachar cajas en salida de una o varias OV del mismo cliente en un solo envío (estado → Transporte + viaje). */
+  onDespachoPaqueteOrdenVenta?: (ordenes: VentaPendienteCartonaje[], truck: Camion | null) => Promise<void>;
 };
 
 export default function IngresosSection(props: Props) {
@@ -109,8 +111,8 @@ export default function IngresosSection(props: Props) {
   const salidaFilterValue = clientFilterId ?? "";
 
   const [selectedBoxId, setSelectedBoxId] = useState<string>("");
-  /** OV cuyas cajas en salida se enviarán juntas desde esta columna. */
-  const [paqueteDespacho, setPaqueteDespacho] = useState<VentaPendienteCartonaje | null>(null);
+  /** OVs cuyas cajas en salida se enviarán juntas (mismo camión) desde esta columna. */
+  const [paqueteDespachoOrdenes, setPaqueteDespachoOrdenes] = useState<VentaPendienteCartonaje[] | null>(null);
   const [enviandoPaquete, setEnviandoPaquete] = useState(false);
   const [packageTrucks, setPackageTrucks] = useState<Camion[]>([]);
   const [packageTruckId, setPackageTruckId] = useState("");
@@ -155,26 +157,35 @@ export default function IngresosSection(props: Props) {
     [sortedOutboundIng],
   );
 
-  const paqueteActivoKey = useMemo(
-    () =>
-      paqueteDespacho
-        ? `${String(paqueteDespacho.idClienteDueno ?? "").trim()}::${String(paqueteDespacho.id ?? "").trim()}`
-        : "",
-    [paqueteDespacho],
-  );
+  const paqueteActivoKey = useMemo(() => {
+    if (!paqueteDespachoOrdenes?.length) return "";
+    return [...paqueteDespachoOrdenes]
+      .map((o) => `${String(o.idClienteDueno ?? "").trim()}::${String(o.id ?? "").trim()}`)
+      .filter((k) => k !== "::")
+      .sort()
+      .join("|");
+  }, [paqueteDespachoOrdenes]);
 
-  /** Misma lógica que el despacho en BodegaDashboard: todas las cajas en salida de la OV (sin filtro de cliente). */
+  /** Misma lógica que el despacho en BodegaDashboard: todas las cajas en salida de las OV del paquete (sin filtro de cliente). */
   const cajasPaqueteEnSalida = useMemo(() => {
-    if (!paqueteDespacho) return [];
-    const cid = String(paqueteDespacho.idClienteDueno ?? "").trim();
-    const vid = String(paqueteDespacho.id ?? "").trim();
-    if (!cid || !vid) return [];
-    return outboundBoxes.filter(
-      (b) =>
-        String(b.ordenVentaId ?? "").trim() === vid &&
-        String(b.ordenVentaClienteId ?? "").trim() === cid,
-    );
-  }, [paqueteDespacho, outboundBoxes]);
+    if (!paqueteDespachoOrdenes?.length) return [];
+    const seen = new Set<string>();
+    const out: Box[] = [];
+    for (const orden of paqueteDespachoOrdenes) {
+      const cid = String(orden.idClienteDueno ?? "").trim();
+      const vid = String(orden.id ?? "").trim();
+      if (!cid || !vid) continue;
+      for (const b of outboundBoxes) {
+        if (String(b.ordenVentaId ?? "").trim() !== vid) continue;
+        if (String(b.ordenVentaClienteId ?? "").trim() !== cid) continue;
+        const dedupe = `${b.position}-${String(b.autoId ?? "").trim()}`;
+        if (seen.has(dedupe)) continue;
+        seen.add(dedupe);
+        out.push(b);
+      }
+    }
+    return out;
+  }, [paqueteDespachoOrdenes, outboundBoxes]);
 
   const [reviewModal, setReviewModal] = useState<Box | null>(null);
   const [tempError, setTempError] = useState<string | null>(null);
@@ -184,6 +195,7 @@ export default function IngresosSection(props: Props) {
     finalTemp: string;
   } | null>(null);
   const [tempConfirmError, setTempConfirmError] = useState<string | null>(null);
+  const [manualEnvioModalOpen, setManualEnvioModalOpen] = useState(false);
 
   const truckLabel = useCallback((truck: Camion) => {
     const plate = String(truck.plate ?? "").trim();
@@ -208,12 +220,20 @@ export default function IngresosSection(props: Props) {
     [clientsForCatalog],
   );
 
-  const packageClientId = useMemo(
-    () => String(paqueteDespacho?.idClienteDueno ?? "").trim(),
-    [paqueteDespacho],
-  );
+  const packageClientId = useMemo(() => {
+    if (!paqueteDespachoOrdenes?.length) return "";
+    const ids = [
+      ...new Set(
+        paqueteDespachoOrdenes.map((o) => String(o.idClienteDueno ?? "").trim()).filter(Boolean),
+      ),
+    ];
+    if (ids.length !== 1) return "";
+    return ids[0] ?? "";
+  }, [paqueteDespachoOrdenes]);
+
   const packageCodeCuenta = useMemo(() => {
-    const direct = String(paqueteDespacho?.codeCuenta ?? "").trim();
+    if (!paqueteDespachoOrdenes?.length) return "";
+    const direct = String(paqueteDespachoOrdenes[0]?.codeCuenta ?? "").trim();
     if (direct) return direct;
     if (packageClientId) {
       return String(
@@ -221,7 +241,7 @@ export default function IngresosSection(props: Props) {
       ).trim();
     }
     return String(warehouseCodeCuenta ?? "").trim();
-  }, [paqueteDespacho, packageClientId, clientsForCatalog, warehouseCodeCuenta]);
+  }, [paqueteDespachoOrdenes, packageClientId, clientsForCatalog, warehouseCodeCuenta]);
 
   const manualClientId = useMemo(() => {
     const byVenta = String(selectedBox?.ordenVentaClienteId ?? "").trim();
@@ -314,6 +334,13 @@ export default function IngresosSection(props: Props) {
       cancelled = true;
     };
   }, [manualClientId, manualCodeCuenta]);
+
+  useEffect(() => {
+    if (!manualEnvioModalOpen) return;
+    if (paqueteDespachoOrdenes?.length || outboundFiltered.length === 0) {
+      setManualEnvioModalOpen(false);
+    }
+  }, [manualEnvioModalOpen, paqueteDespachoOrdenes, outboundFiltered.length]);
 
   const getFirstFreeBodegaSlot = () => {
     const free = slots.find((slot) => !slot.autoId || !slot.autoId.trim());
@@ -528,7 +555,7 @@ export default function IngresosSection(props: Props) {
               </div>
             </div>
             <span className="shrink-0 rounded-full bg-pink-200/80 px-3 py-1 text-xs font-semibold text-pink-900">
-              {paqueteDespacho ? "Paquete" : `${outboundFiltered.length} cajas`}
+              {paqueteDespachoOrdenes?.length ? "Paquete" : `${outboundFiltered.length} cajas`}
             </span>
           </div>
 
@@ -539,26 +566,32 @@ export default function IngresosSection(props: Props) {
                 isBodegaInterna={isBodegaInterna}
                 outboundBoxes={outboundBoxes}
                 paqueteActivoKey={paqueteActivoKey}
-                onArmarPaquete={(orden) => setPaqueteDespacho(orden)}
+                onArmarPaquete={(ordenes) =>
+                  ordenes.length ? setPaqueteDespachoOrdenes(ordenes) : setPaqueteDespachoOrdenes(null)
+                }
                 onRegistrar={onIngresoDesdeOrdenVenta}
                 embedEnOrdenSalida
               />
             ) : null}
 
-            {isBodegaInterna && (paqueteDespacho || outboundFiltered.length > 0) ? (
+            {isBodegaInterna && (paqueteDespachoOrdenes?.length || outboundFiltered.length > 0) ? (
               <div className="shrink-0 border-t border-pink-300/70" aria-hidden />
             ) : null}
 
-            {paqueteDespacho ? (
+            {paqueteDespachoOrdenes?.length ? (
               <div className="rounded-2xl border-2 border-dashed border-pink-400 bg-linear-to-br from-pink-50 to-white p-4 shadow-sm">
                 <p className="text-xs font-bold uppercase tracking-wide text-pink-900">Paquete listo</p>
-                <p className="mt-1 text-sm font-semibold text-slate-900">
-                  {paqueteDespacho.numero}{" "}
-                  <span className="font-normal text-slate-600">· {paqueteDespacho.compradorNombre}</span>
-                </p>
+                <ul className="mt-2 space-y-1 text-sm font-semibold text-slate-900">
+                  {paqueteDespachoOrdenes.map((o) => (
+                    <li key={`${o.idClienteDueno}-${o.id}`}>
+                      {o.numero}{" "}
+                      <span className="font-normal text-slate-600">· {o.compradorNombre}</span>
+                    </li>
+                  ))}
+                </ul>
                 {cajasPaqueteEnSalida.length === 0 ? (
                   <p className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
-                    No hay cajas de esta venta en <strong>zona de salida</strong> (o faltan{" "}
+                    No hay cajas de estas ventas en <strong>zona de salida</strong> (o faltan{" "}
                     <code className="rounded bg-white/80 px-0.5">ordenVentaId</code> /{" "}
                     <code className="rounded bg-white/80 px-0.5">ordenVentaClienteId</code> en las cajas). Revisá{" "}
                     <strong>Zona de salida</strong> y el flujo operario hasta salida.
@@ -566,8 +599,9 @@ export default function IngresosSection(props: Props) {
                 ) : (
                   <>
                     <p className="mt-2 text-base text-slate-600">
-                      Se enviarán <strong>{cajasPaqueteEnSalida.length}</strong> caja(s) en un solo paso; la venta pasa
-                      a <strong>Transporte</strong> y el viaje queda para el rol transporte.
+                      Se enviarán <strong>{cajasPaqueteEnSalida.length}</strong> caja(s) en un solo paso;{" "}
+                      {paqueteDespachoOrdenes.length === 1 ? "la venta pasa" : "las ventas pasan"} a{" "}
+                      <strong>Transporte</strong> y el viaje queda para el rol transporte.
                     </p>
                     <ul className="mt-2 max-h-[min(10rem,30vh)] space-y-1 overflow-y-auto text-xs text-slate-700">
                       {sortByPosition(cajasPaqueteEnSalida).map((b, i) => (
@@ -617,10 +651,12 @@ export default function IngresosSection(props: Props) {
                       }
                       onClick={() => {
                         void (async () => {
+                          const ordenesPkg = paqueteDespachoOrdenes;
+                          if (!ordenesPkg?.length) return;
                           setEnviandoPaquete(true);
                           try {
-                            await onDespachoPaqueteOrdenVenta(paqueteDespacho, selectedPackageTruck);
-                            setPaqueteDespacho(null);
+                            await onDespachoPaqueteOrdenVenta(ordenesPkg, selectedPackageTruck);
+                            setPaqueteDespachoOrdenes(null);
                             setPackageTruckId("");
                             setPackageTrucks((prev) =>
                               prev.filter((t) => t.id !== selectedPackageTruck?.id),
@@ -641,7 +677,7 @@ export default function IngresosSection(props: Props) {
                   <button
                     type="button"
                     disabled={enviandoPaquete}
-                    onClick={() => setPaqueteDespacho(null)}
+                    onClick={() => setPaqueteDespachoOrdenes(null)}
                     className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
                   >
                     Cancelar paquete
@@ -650,133 +686,174 @@ export default function IngresosSection(props: Props) {
               </div>
             ) : null}
 
-            {!paqueteDespacho && outboundFiltered.length > 0 ? (
-              <div className="grid gap-3">
-                <p className="text-xs font-semibold uppercase tracking-wide text-pink-900/90">Envío manual</p>
-                <label className="text-sm font-medium text-slate-600">Orden de posición</label>
-                <input
-                  value={selectedBox?.position ?? ""}
-                  type="number"
-                  readOnly
-                  className="w-full rounded-lg border border-pink-300 bg-pink-50/90 px-3 py-2 text-sm text-pink-900"
-                />
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  <div className="flex flex-col gap-1">
-                    <label className="text-sm font-medium text-slate-600">Cliente</label>
-                    <select
-                      value={salidaFilterValue}
-                      onChange={(event) => handleSalidaClientFilterChange(event.target.value)}
-                      disabled={isCliente && !onClientChange}
-                      className="w-full rounded-lg border border-pink-300 bg-pink-50/90 px-3 py-2 text-sm text-pink-900"
-                    >
-                      <option value="">Todos</option>
-                      {clientsForCatalog.map((c) => (
-                        <option key={c.id} value={c.id}>
-                          {c.name}
-                        </option>
-                      ))}
-                      {salidaFilterValue && !clientsForCatalog.some((c) => c.id === salidaFilterValue) ? (
-                        <option value={salidaFilterValue}>
-                          {`Cliente (id: ${salidaFilterValue.slice(0, 12)}…)`}
-                        </option>
-                      ) : null}
-                    </select>
-                  </div>
-                  <div className="flex flex-col gap-1">
-                    <label className="text-sm font-medium text-slate-600">Caja</label>
-                    <select
-                      value={selectedBoxId}
-                      onChange={(event) => setSelectedBoxId(event.target.value)}
-                      disabled={boxOptions.length === 0}
-                      className="w-full rounded-lg border border-pink-300 bg-pink-50/90 px-3 py-2 text-sm text-pink-900"
-                    >
-                      {boxOptions.length === 0 ? (
-                        <option value="">Sin cajas</option>
-                      ) : (
-                        boxOptions.map((option) => (
-                          <option key={option.value} value={option.value}>
-                            {option.label}
-                          </option>
-                        ))
-                      )}
-                    </select>
-                  </div>
-                </div>
-                <label className="text-sm font-medium text-slate-600">Camion</label>
-                <select
-                  value={manualTruckId}
-                  onChange={(event) => {
-                    setManualTruckId(event.target.value);
-                    setManualTruckError(null);
-                  }}
-                  disabled={manualTrucksLoading || manualTrucks.length === 0}
-                  className="w-full rounded-lg border border-pink-300 bg-pink-50/90 px-3 py-2 text-sm text-pink-900"
-                >
-                  <option value="">
-                    {manualTrucksLoading
-                      ? "Cargando camiones…"
-                      : manualTrucks.length === 0
-                        ? "Sin camiones disponibles"
-                        : "Selecciona un camión"}
-                  </option>
-                  {manualTrucks.map((truck) => (
-                    <option key={truck.id} value={truck.id}>
-                      {truckLabel(truck)}
-                    </option>
-                  ))}
-                </select>
-                {manualTrucksError ? (
-                  <p className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-800">
-                    {manualTrucksError}
-                  </p>
-                ) : null}
-                {manualTruckError ? (
-                  <p className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-800">
-                    {manualTruckError}
-                  </p>
-                ) : null}
-                <label className="text-sm font-medium text-slate-600">Nombre de la caja</label>
-                <input
-                  value={selectedBox?.name ?? ""}
-                  readOnly
-                  className="w-full rounded-lg border border-pink-300 bg-white/90 px-3 py-2 text-sm text-slate-800"
-                />
-                <label className="text-sm font-medium text-slate-600">Temperatura (°C)</label>
-                <input
-                  value={selectedBox?.temperature ?? ""}
-                  type="number"
-                  readOnly
-                  className="w-full rounded-lg border border-pink-300 bg-white/90 px-3 py-2 text-sm text-slate-800"
-                />
-                <label className="text-sm font-medium text-slate-600">Cantidad (kg)</label>
-                <input
-                  value={
-                    selectedBox && typeof selectedBox.quantityKg === "number"
-                      ? String(selectedBox.quantityKg)
-                      : ""
-                  }
-                  readOnly
-                  className="w-full rounded-lg border border-pink-300 bg-white/90 px-3 py-2 text-sm text-slate-800"
-                />
+            {!paqueteDespachoOrdenes?.length && outboundFiltered.length > 0 ? (
+              <>
                 <button
                   type="button"
-                  onClick={() => {
-                    if (!selectedBox) return;
-                    if (!selectedManualTruck || !manualClientId) {
-                      setManualTruckError("Selecciona un camión disponible antes de enviar la caja.");
-                      return;
-                    }
-                    setManualTruckError(null);
-                    setReviewModal(selectedBox);
-                  }}
-                  className="mt-auto flex items-center justify-center gap-2 rounded-lg bg-pink-700 px-4 py-2 text-sm font-semibold text-white transition hover:bg-pink-600"
+                  onClick={() => setManualEnvioModalOpen(true)}
+                  className="flex w-full shrink-0 items-center justify-center gap-2 rounded-xl border border-pink-400 bg-pink-700 px-4 py-3 text-sm font-bold text-white shadow-md transition hover:bg-pink-600"
                 >
-                  <HiArrowRightOnRectangle className="h-4 w-4" aria-hidden /> Enviar caja
+                  <HiArrowRightOnRectangle className="h-5 w-5 shrink-0" aria-hidden />
+                  Envío manual
                 </button>
-              </div>
+
+                <ModalPlantilla
+                  open={manualEnvioModalOpen}
+                  onClose={() => setManualEnvioModalOpen(false)}
+                  titulo="Envío manual"
+                  tituloId="ingresos-envio-manual-titulo"
+                  encabezadoSup={
+                    <span className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">
+                      Orden de salida
+                    </span>
+                  }
+                  subtitulo={
+                    <p className="text-sm text-slate-600">
+                      Elegí cliente, caja y camión; revisá datos antes de enviar.
+                    </p>
+                  }
+                  headerIcon={<HiArrowRightOnRectangle className="h-7 w-7 text-pink-600" aria-hidden />}
+                  maxWidthClass="max-w-lg"
+                  cardMaxHeightClass="max-h-[min(92vh,640px)]"
+                  zIndexClass="z-[85]"
+                  footer={
+                    <button
+                      type="button"
+                      onClick={() => setManualEnvioModalOpen(false)}
+                      className="w-full rounded-full border border-slate-200 bg-white py-3 text-sm font-bold text-slate-900 shadow-sm transition hover:bg-slate-50"
+                    >
+                      Cerrar
+                    </button>
+                  }
+                >
+                  <div className="grid gap-3">
+                    <label className="text-sm font-medium text-slate-600">Orden de posición</label>
+                    <input
+                      value={selectedBox?.position ?? ""}
+                      type="number"
+                      readOnly
+                      className="w-full rounded-lg border border-pink-200 bg-pink-50/80 px-3 py-2 text-sm text-pink-950"
+                    />
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                      <div className="flex flex-col gap-1">
+                        <label className="text-sm font-medium text-slate-600">Cliente</label>
+                        <select
+                          value={salidaFilterValue}
+                          onChange={(event) => handleSalidaClientFilterChange(event.target.value)}
+                          disabled={isCliente && !onClientChange}
+                          className="w-full rounded-lg border border-pink-200 bg-pink-50/80 px-3 py-2 text-sm text-pink-950"
+                        >
+                          <option value="">Todos</option>
+                          {clientsForCatalog.map((c) => (
+                            <option key={c.id} value={c.id}>
+                              {c.name}
+                            </option>
+                          ))}
+                          {salidaFilterValue && !clientsForCatalog.some((c) => c.id === salidaFilterValue) ? (
+                            <option value={salidaFilterValue}>
+                              {`Cliente (id: ${salidaFilterValue.slice(0, 12)}…)`}
+                            </option>
+                          ) : null}
+                        </select>
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <label className="text-sm font-medium text-slate-600">Caja</label>
+                        <select
+                          value={selectedBoxId}
+                          onChange={(event) => setSelectedBoxId(event.target.value)}
+                          disabled={boxOptions.length === 0}
+                          className="w-full rounded-lg border border-pink-200 bg-pink-50/80 px-3 py-2 text-sm text-pink-950"
+                        >
+                          {boxOptions.length === 0 ? (
+                            <option value="">Sin cajas</option>
+                          ) : (
+                            boxOptions.map((option) => (
+                              <option key={option.value} value={option.value}>
+                                {option.label}
+                              </option>
+                            ))
+                          )}
+                        </select>
+                      </div>
+                    </div>
+                    <label className="text-sm font-medium text-slate-600">Camión</label>
+                    <select
+                      value={manualTruckId}
+                      onChange={(event) => {
+                        setManualTruckId(event.target.value);
+                        setManualTruckError(null);
+                      }}
+                      disabled={manualTrucksLoading || manualTrucks.length === 0}
+                      className="w-full rounded-lg border border-pink-200 bg-pink-50/80 px-3 py-2 text-sm text-pink-950"
+                    >
+                      <option value="">
+                        {manualTrucksLoading
+                          ? "Cargando camiones…"
+                          : manualTrucks.length === 0
+                            ? "Sin camiones disponibles"
+                            : "Selecciona un camión"}
+                      </option>
+                      {manualTrucks.map((truck) => (
+                        <option key={truck.id} value={truck.id}>
+                          {truckLabel(truck)}
+                        </option>
+                      ))}
+                    </select>
+                    {manualTrucksError ? (
+                      <p className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-800">
+                        {manualTrucksError}
+                      </p>
+                    ) : null}
+                    {manualTruckError ? (
+                      <p className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-800">
+                        {manualTruckError}
+                      </p>
+                    ) : null}
+                    <label className="text-sm font-medium text-slate-600">Nombre de la caja</label>
+                    <input
+                      value={selectedBox?.name ?? ""}
+                      readOnly
+                      className="w-full rounded-lg border border-pink-200 bg-white px-3 py-2 text-sm text-slate-800"
+                    />
+                    <label className="text-sm font-medium text-slate-600">Temperatura (°C)</label>
+                    <input
+                      value={selectedBox?.temperature ?? ""}
+                      type="number"
+                      readOnly
+                      className="w-full rounded-lg border border-pink-200 bg-white px-3 py-2 text-sm text-slate-800"
+                    />
+                    <label className="text-sm font-medium text-slate-600">Cantidad (kg)</label>
+                    <input
+                      value={
+                        selectedBox && typeof selectedBox.quantityKg === "number"
+                          ? String(selectedBox.quantityKg)
+                          : ""
+                      }
+                      readOnly
+                      className="w-full rounded-lg border border-pink-200 bg-white px-3 py-2 text-sm text-slate-800"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (!selectedBox) return;
+                        if (!selectedManualTruck || !manualClientId) {
+                          setManualTruckError("Selecciona un camión disponible antes de enviar la caja.");
+                          return;
+                        }
+                        setManualTruckError(null);
+                        setManualEnvioModalOpen(false);
+                        setReviewModal(selectedBox);
+                      }}
+                      className="mt-1 flex items-center justify-center gap-2 rounded-xl bg-pink-700 px-4 py-3 text-sm font-bold text-white shadow-md transition hover:bg-pink-600"
+                    >
+                      <HiArrowRightOnRectangle className="h-4 w-4 shrink-0" aria-hidden /> Enviar caja
+                    </button>
+                  </div>
+                </ModalPlantilla>
+              </>
             ) : null}
 
-            {!paqueteDespacho && outboundFiltered.length === 0 ? (
+            {!paqueteDespachoOrdenes?.length && outboundFiltered.length === 0 ? (
               isBodegaInterna ? (
                 <p className="text-center text-base leading-relaxed text-pink-900/75">
                   No hay cajas en salida para envío manual. Arriba podés elegir una venta, armar paquete o registrar por
@@ -1019,17 +1096,19 @@ export default function IngresosSection(props: Props) {
                   setTempConfirmError("Selecciona un camión disponible antes de enviar.");
                   return;
                 }
-                setTempConfirmModal(null);
                 void (async () => {
-                  const ok = await handleDispatchBox(
-                    tempConfirmModal.box.position,
-                    selectedManualTruck,
-                    manualClientId,
+                  const okSwal = await swalConfirm(
+                    "¿Confirmar envío de caja?",
+                    "Se despachará la caja con la temperatura final y el camión seleccionado.",
                   );
+                  if (!okSwal) return;
+                  const box = tempConfirmModal.box;
+                  const truck = selectedManualTruck;
+                  const clientId = manualClientId;
+                  setTempConfirmModal(null);
+                  const ok = await handleDispatchBox(box.position, truck, clientId);
                   if (ok) {
-                    setManualTrucks((prev) =>
-                      prev.filter((t) => t.id !== selectedManualTruck.id),
-                    );
+                    setManualTrucks((prev) => prev.filter((t) => t.id !== truck.id));
                     setManualTruckId("");
                   }
                 })();

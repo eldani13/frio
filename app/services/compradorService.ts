@@ -1,15 +1,16 @@
 import { db } from "@/lib/firebaseClient";
-import { 
-  collection, 
-  addDoc, 
-  getDocs, 
-  deleteDoc, 
-  doc, 
-  updateDoc, 
-  query, 
-  where, 
-  orderBy, 
-  limit 
+import {
+  collection,
+  addDoc,
+  getDocs,
+  deleteDoc,
+  doc,
+  updateDoc,
+  query,
+  where,
+  orderBy,
+  limit,
+  onSnapshot,
 } from "firebase/firestore";
 import { Comprador } from "@/app/types/comprador";
 
@@ -178,6 +179,40 @@ export const CompradorService = {
       console.error("Error en CompradorService.getAll:", error instanceof Error ? error.message : error);
       return [];
     }
+  },
+
+  subscribeByCodeCuenta(
+    idCliente: string,
+    codeCuenta: string,
+    onNext: (rows: Comprador[]) => void,
+    onError?: (e: Error) => void,
+  ): () => void {
+    if (!idCliente?.trim()) {
+      onNext([]);
+      return () => {};
+    }
+    const q = query(getColRef(idCliente), where("codeCuenta", "==", codeCuenta));
+    return onSnapshot(
+      q,
+      (snap) => {
+        void (async () => {
+          try {
+            const list = snap.docs.map(
+              (d) =>
+                ({
+                  id: d.id,
+                  ...d.data(),
+                }) as CompradorConId,
+            );
+            const repaired = await repairCompradoresCodigo(idCliente.trim(), list);
+            onNext([...repaired].sort((a, b) => (Number(b.numericId) || 0) - (Number(a.numericId) || 0)));
+          } catch (e) {
+            onError?.(e as Error);
+          }
+        })();
+      },
+      (err) => onError?.(err as Error),
+    );
   },
 
   /** Crea comprador con correlativo por cliente; persiste codeCuenta. */

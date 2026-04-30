@@ -8,6 +8,7 @@ import type {
   ViajeVentaTransporte,
   ViajeVentaTransporteConContext,
 } from "@/app/types/viajeVentaTransporte";
+import { TruckService } from "@/app/services/camionService";
 import type { Camion } from "@/app/types/camion";
 import {
   addDoc,
@@ -74,6 +75,31 @@ async function allocNextViajeGlobalNumericId(): Promise<number> {
 
 function colViajes(clientId: string, ventaId: string) {
   return collection(db, PARENT, clientId, VENTAS, ventaId, VIAJES);
+}
+
+/** IDs de camiones con al menos un viaje «En curso» en el cliente (fuente de verdad de “en ruta”). */
+async function truckIdsConViajeEnCursoEnCliente(clientId: string): Promise<Set<string>> {
+  const cid = String(clientId ?? "").trim();
+  const out = new Set<string>();
+  if (!cid) return out;
+  const ventasSnap = await getDocs(collection(db, PARENT, cid, VENTAS));
+  for (const vd of ventasSnap.docs) {
+    const q = query(colViajes(cid, vd.id), where("estado", "==", "En curso" satisfies ViajeTransporteEstado));
+    const viajesSnap = await getDocs(q);
+    for (const jd of viajesSnap.docs) {
+      const tid = String((jd.data() as Record<string, unknown>).truckId ?? "").trim();
+      if (tid) out.add(tid);
+    }
+  }
+  return out;
+}
+
+/** True si el cliente tiene algún viaje «En curso» que siga usando ese camión (mismo `truckId`). */
+async function clienteTieneViajeEnCursoParaCamion(clientId: string, truckId: string): Promise<boolean> {
+  const tid = String(truckId ?? "").trim();
+  if (!tid) return false;
+  const busy = await truckIdsConViajeEnCursoEnCliente(clientId);
+  return busy.has(tid);
 }
 
 function catalogoPorLinea(catalogos: Catalogo[], li: VentaEnCursoLineItem): Catalogo | undefined {
@@ -507,8 +533,167 @@ export const ViajeVentaTransporteService = {
     return out;
   },
 
+  /**
+   * Viajes «En curso» de la cuenta, en vivo (misma lógica que `listEnCursoParaCuenta`).
+   */
+  subscribeEnCursoParaCuenta(
+    idCliente: string,
+    codeCuenta: string,
+    onNext: (items: ViajeVentaTransporteConContext[]) => void,
+    onError?: (e: Error) => void,
+  ): () => void {
+    const cid = String(idCliente ?? "").trim();
+    const cc = String(codeCuenta ?? "").trim();
+    if (!cid) {
+      onNext([]);
+      return () => {};
+    }
+
+    const catalogCache = new Map<string, Catalogo[]>();
+    const catalogosFor = async (): Promise<Catalogo[]> => {
+      const key = `${cid}::${cc}`;
+      if (catalogCache.has(key)) return catalogCache.get(key)!;
+      const list = cc ? await CatalogoService.getAll(cid, cc) : [];
+      catalogCache.set(key, list);
+      return list;
+    };
+
+    const ventasData = new Map<string, Record<string, unknown>>();
+    const viajesDocsByVenta = new Map<string, QueryDocumentSnapshot<DocumentData>[]>();
+    const viajeUnsubs = new Map<string, () => void>();
+    let emitGen = 0;
+
+    const buildAndEmit = async () => {
+      const g = ++emitGen;
+      try {
+        const catalogos = await catalogosFor();
+        const out: ViajeVentaTransporteConContext[] = [];
+        for (const [ventaId, docList] of viajesDocsByVenta.entries()) {
+          const vData = ventasData.get(ventaId);
+          if (!vData) continue;
+          const ventaCode = String(vData.codeCuenta ?? "").trim();
+          if (cc && ventaCode && ventaCode !== cc) continue;
+
+          const ventaNumero =
+            String(vData.numero ?? "").trim() || `V-${String(Number(vData.numericId) || 0).padStart(4, "0")}`;
+          const compradorNombre = String(vData.compradorNombre ?? "").trim();
+          const destinoNombre = String(vData.destinoWarehouseNombre ?? "").trim();
+          const ventaFecha = String(vData.fecha ?? "").trim();
+          const ventaEstado = String(vData.estado ?? "").trim();
+
+          for (const jd of docList) {
+            const row = mapViaje(jd.id, jd.data() as Record<string, unknown>);
+            if (row.estado !== "En curso") continue;
+            const kgTotalEstimado = kgTotalDesdeLineas(row.lineItemsEsperados ?? [], catalogos);
+            out.push({
+              ...row,
+              idClienteDueno: cid,
+              ventaId,
+              ventaNumero,
+              kgTotalEstimado,
+              ventaCompradorNombre: compradorNombre || "Sin nombre de comprador",
+              ventaCodeCuenta: ventaCode || undefined,
+              ventaDestinoNombre: destinoNombre || undefined,
+              ventaFecha: ventaFecha || undefined,
+              ventaEstado: ventaEstado || undefined,
+            });
+          }
+        }
+        out.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+        if (g === emitGen) onNext(out);
+      } catch (e) {
+        if (g === emitGen) onError?.(e as Error);
+      }
+    };
+
+    const ensureViajeListener = (ventaId: string) => {
+      if (viajeUnsubs.has(ventaId)) return;
+      const q = query(colViajes(cid, ventaId), where("estado", "==", "En curso" satisfies ViajeTransporteEstado));
+      const unsub = onSnapshot(
+        q,
+        (snap) => {
+          viajesDocsByVenta.set(ventaId, snap.docs);
+          void buildAndEmit();
+        },
+        (e) => onError?.(e as Error),
+      );
+      viajeUnsubs.set(ventaId, unsub);
+    };
+
+    const cleanupVenta = (ventaId: string) => {
+      viajeUnsubs.get(ventaId)?.();
+      viajeUnsubs.delete(ventaId);
+      viajesDocsByVenta.delete(ventaId);
+      ventasData.delete(ventaId);
+    };
+
+    const unsubVentas = onSnapshot(
+      collection(db, PARENT, cid, VENTAS),
+      (ventasSnap) => {
+        const currIds = new Set(ventasSnap.docs.map((d) => d.id));
+        for (const vid of [...ventasData.keys()]) {
+          if (!currIds.has(vid)) cleanupVenta(vid);
+        }
+        for (const vd of ventasSnap.docs) {
+          const vid = vd.id;
+          const vData = vd.data() as Record<string, unknown>;
+          ventasData.set(vid, vData);
+          const ventaCode = String(vData.codeCuenta ?? "").trim();
+          if (cc && ventaCode && ventaCode !== cc) {
+            cleanupVenta(vid);
+            continue;
+          }
+          ensureViajeListener(vid);
+        }
+        void buildAndEmit();
+      },
+      (e) => onError?.(e as Error),
+    );
+
+    return () => {
+      unsubVentas();
+      for (const vid of [...viajeUnsubs.keys()]) {
+        viajeUnsubs.get(vid)?.();
+        viajeUnsubs.delete(vid);
+      }
+      ventasData.clear();
+      viajesDocsByVenta.clear();
+    };
+  },
+
   /** Máximo 10 MB (alineado con reglas de Storage y validación en UI). */
   MAX_EVIDENCIA_BYTES: 10 * 1024 * 1024,
+
+  /**
+   * Alinea `isAvailable` de la flota con viajes «En curso»: si ningún viaje activo usa ese `truckId`,
+   * el camión pasa a disponible (corrige flags desactualizados).
+   */
+  async reconciliarCamionesSegunViajes(clientId: string, trucks: Camion[]): Promise<Camion[]> {
+    const cid = String(clientId ?? "").trim();
+    if (!cid || !trucks.length) return trucks;
+    const busy = await truckIdsConViajeEnCursoEnCliente(cid);
+    const out: Camion[] = [];
+    for (const t of trucks) {
+      const id = String(t.id ?? "").trim();
+      if (!id) {
+        out.push(t);
+        continue;
+      }
+      const wantAvailable = !busy.has(id);
+      const curAvailable = t.isAvailable !== false;
+      if (curAvailable === wantAvailable) {
+        out.push(t);
+        continue;
+      }
+      try {
+        await TruckService.update(cid, id, { isAvailable: wantAvailable });
+        out.push({ ...t, isAvailable: wantAvailable });
+      } catch {
+        out.push(t);
+      }
+    }
+    return out;
+  },
 
   /**
    * Sube la evidencia a Cloudinary (ruta API del servidor) y devuelve la URL HTTPS.
@@ -577,12 +762,20 @@ export const ViajeVentaTransporteService = {
       );
     }
 
+    const refViaje = doc(db, PARENT, cid, VENTAS, vid, VIAJES, jid);
+    const viajeSnapPrev = await getDoc(refViaje);
+    if (!viajeSnapPrev.exists()) throw new Error("Viaje no encontrado.");
+    const viajePrev = viajeSnapPrev.data() as Record<string, unknown>;
+    const estadoViajePrev = String(viajePrev.estado ?? "").trim();
+    if (estadoViajePrev !== "En curso") {
+      throw new Error("Este viaje ya no está en curso o la entrega ya fue registrada.");
+    }
+    const truckIdParaLiberar = String(viajePrev.truckId ?? "").trim();
+
     const estadoVenta = estadoOrdenVentaTrasEntregaTransporte(
       params.lineItemsEntregados,
       params.entregaConforme,
     );
-
-    const refViaje = doc(db, PARENT, cid, VENTAS, vid, VIAJES, jid);
     const foto = String(params.evidenciaFotoUrl ?? "").trim();
     const firma = String(params.firmaDataUrl ?? "").trim();
     const patchViaje: Record<string, unknown> = {
@@ -605,5 +798,16 @@ export const ViajeVentaTransporteService = {
     batch.update(refViaje, patchViaje);
     batch.update(refVenta, { estado: estadoVenta });
     await batch.commit();
+
+    if (truckIdParaLiberar) {
+      try {
+        const aunOcupado = await clienteTieneViajeEnCursoParaCamion(cid, truckIdParaLiberar);
+        if (!aunOcupado) {
+          await TruckService.update(cid, truckIdParaLiberar, { isAvailable: true });
+        }
+      } catch (e) {
+        console.error("[registrarEntrega] liberar camión:", e instanceof Error ? e.message : e);
+      }
+    }
   },
 };

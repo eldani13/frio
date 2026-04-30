@@ -1,6 +1,7 @@
 import { FiArchive } from "react-icons/fi";
 import type { SlotsGridProps } from "../../interfaces/bodega/SlotsGrid";
 import type { Role } from "../../interfaces/bodega";
+import { BODEGA_SLOTS_GRID_ALMACEN_CLASS } from "@/app/lib/bodegaSlotUniform";
 import SlotCard from "./SlotCard";
 
 type ExtendedSlotsGridProps = SlotsGridProps & {
@@ -23,6 +24,7 @@ export default function SlotsGrid({
   onPageChange,
   clients,
   slotCantidadContext,
+  mapaSoloLectura = false,
 }: ExtendedSlotsGridProps) {
   const totalPages = Math.max(1, Math.ceil(slots.length / pageSize));
   const currentPage = Math.min(Math.max(page, 0), totalPages - 1);
@@ -45,7 +47,7 @@ export default function SlotsGrid({
           {titleActions ? <div className="flex shrink-0 items-center">{titleActions}</div> : null}
           {typeof occupiedCount === "number" &&
           typeof totalSlots === "number" &&
-          role !== "administrador" ? (
+          (role !== "administrador" || mapaSoloLectura) ? (
             <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-semibold text-slate-800">
               <FiArchive className="h-4 w-4 text-violet-500" aria-hidden />
               Ocupadas: {occupiedCount} / {totalSlots}
@@ -55,15 +57,16 @@ export default function SlotsGrid({
       </div>
 
       <div className="min-w-0 space-y-3">
-        <div className="grid w-full min-w-0 grid-cols-2 gap-1.5 sm:grid-cols-3 sm:gap-2 md:grid-cols-4 lg:grid-cols-4">
+        <div className={BODEGA_SLOTS_GRID_ALMACEN_CLASS}>
           {visibleSlots.map((slot) => (
             <SlotCard
               key={slot.position}
               slot={slot}
-              isSelected={slot.position === selectedPosition}
+              isSelected={!mapaSoloLectura && slot.position === selectedPosition}
               onSelect={onSelect}
               clients={clients}
               slotCantidadContext={slotCantidadContext}
+              mapaSoloLectura={mapaSoloLectura}
             />
           ))}
         </div>

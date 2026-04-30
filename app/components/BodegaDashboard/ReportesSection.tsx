@@ -290,51 +290,79 @@ const ReportesSection: React.FC<ReportesSectionProps> = ({
       setCompradoresCuenta([]);
       return;
     }
-    let cancelled = false;
     setOrdenesDataLoading(true);
-    const ordenesP = vistaOrdenes
-      ? OrdenCompraService.getAll(idCliente, codeCuenta)
-      : Promise.resolve([] as OrdenCompra[]);
-    const solicitudesP = vistaSolicitudes
-      ? SolicitudCompraService.getAll(idCliente, codeCuenta)
-      : Promise.resolve([] as SolicitudCompra[]);
+    const unsubs: Array<() => void> = [];
+    const markReady = () => setOrdenesDataLoading(false);
+
+    const needCatalogos = vistaOrdenes || vistaSolicitudes || vistaProcesamiento;
     const needProviders = vistaOrdenes || vistaSolicitudes;
-    const needCompradores = vistaVentas;
-    void Promise.all([
-      ordenesP,
-      solicitudesP,
-      CatalogoService.getAll(idCliente, codeCuenta),
-      needProviders
-        ? ProviderService.getAll(idCliente, codeCuenta)
-        : Promise.resolve(null as Provider[] | null),
-      needCompradores
-        ? CompradorService.getAll(idCliente, codeCuenta)
-        : Promise.resolve(null as Comprador[] | null),
-    ])
-      .then(([ordenes, solicitudes, cats, provs, comps]) => {
-        if (cancelled) return;
-        if (vistaOrdenes) setOrdenesCompra(ordenes);
-        else setOrdenesCompra([]);
-        if (vistaSolicitudes) setSolicitudesCompra(solicitudes);
-        else setSolicitudesCompra([]);
-        setCatalogosOrden(cats);
-        if (provs !== null) setProveedoresOrden(provs);
-        if (comps !== null) setCompradoresCuenta(comps);
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setOrdenesCompra([]);
-          setSolicitudesCompra([]);
-          setCatalogosOrden([]);
-          setProveedoresOrden([]);
-          setCompradoresCuenta([]);
-        }
-      })
-      .finally(() => {
-        if (!cancelled) setOrdenesDataLoading(false);
-      });
+
+    if (vistaOrdenes) {
+      unsubs.push(
+        OrdenCompraService.subscribeByCodeCuenta(
+          idCliente,
+          codeCuenta,
+          (ordenes) => {
+            setOrdenesCompra(ordenes);
+            setOrdenDetalle((prev) => {
+              if (!prev?.id) return prev;
+              return ordenes.find((o) => o.id === prev.id) ?? prev;
+            });
+            markReady();
+          },
+          () => markReady(),
+        ),
+      );
+    } else {
+      setOrdenesCompra([]);
+    }
+
+    if (vistaSolicitudes) {
+      unsubs.push(
+        SolicitudCompraService.subscribeByCodeCuenta(idCliente, codeCuenta, (solicitudes) => {
+          setSolicitudesCompra(solicitudes);
+          markReady();
+        }, markReady),
+      );
+    } else {
+      setSolicitudesCompra([]);
+    }
+
+    if (needCatalogos) {
+      unsubs.push(
+        CatalogoService.subscribeByCodeCuenta(idCliente, codeCuenta, (cats) => {
+          setCatalogosOrden(cats);
+          markReady();
+        }, markReady),
+      );
+    } else {
+      setCatalogosOrden([]);
+    }
+
+    if (needProviders) {
+      unsubs.push(
+        ProviderService.subscribeByCodeCuenta(idCliente, codeCuenta, (provs) => {
+          setProveedoresOrden(provs);
+          markReady();
+        }, markReady),
+      );
+    } else {
+      setProveedoresOrden([]);
+    }
+
+    if (vistaVentas) {
+      unsubs.push(
+        CompradorService.subscribeByCodeCuenta(idCliente, codeCuenta, (comps) => {
+          setCompradoresCuenta(comps);
+          markReady();
+        }, markReady),
+      );
+    } else {
+      setCompradoresCuenta([]);
+    }
+
     return () => {
-      cancelled = true;
+      for (const u of unsubs) u();
     };
   }, [isCliente, viewMode, idCliente, codeCuenta]);
 

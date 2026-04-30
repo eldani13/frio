@@ -6,6 +6,7 @@ import {
   serverTimestamp,
   setDoc,
   where,
+  onSnapshot,
 } from "firebase/firestore";
 import { createUserWithEmailAndPassword, signOut } from "firebase/auth";
 import { db, getSecondaryAuth } from "@/lib/firebaseClient";
@@ -78,6 +79,54 @@ export async function listOperadoresCuenta(clientId: string): Promise<OperadorCu
       (b.createdAtMs ?? 0) - (a.createdAtMs ?? 0) || a.name.localeCompare(b.name, "es"),
   );
   return rows;
+}
+
+/** Mismo listado que `listOperadoresCuenta`, actualizado en tiempo real. */
+export function subscribeOperadoresCuenta(
+  clientId: string,
+  onNext: (rows: OperadorCuentaRow[]) => void,
+  onError?: (e: Error) => void,
+): () => void {
+  if (!clientId.trim()) {
+    onNext([]);
+    return () => {};
+  }
+  const q = query(collection(db, "usuarios"), where("clientId", "==", clientId.trim()));
+  return onSnapshot(
+    q,
+    (snapshot) => {
+      const rows: OperadorCuentaRow[] = [];
+      for (const docSnap of snapshot.docs) {
+        const data = docSnap.data() as {
+          name?: string;
+          displayName?: string;
+          role?: string;
+          email?: string;
+          code?: string;
+          createdAt?: { toMillis?: () => number };
+        };
+        if (data.role !== OPERADOR_CUENTAS_ROLE) continue;
+        const createdAtMs =
+          data.createdAt && typeof data.createdAt.toMillis === "function"
+            ? data.createdAt.toMillis()
+            : undefined;
+        rows.push({
+          id: docSnap.id,
+          name: (data.name ?? data.displayName ?? "").toString().trim() || "Sin nombre",
+          email: (data.email ?? "").toString(),
+          code: (data.code ?? "").toString(),
+          createdAtMs,
+          createdAt: createdAtMs ? new Date(createdAtMs).toLocaleString("es-CO") : undefined,
+        });
+      }
+      rows.sort(
+        (a, b) =>
+          (b.createdAtMs ?? 0) - (a.createdAtMs ?? 0) || a.name.localeCompare(b.name, "es"),
+      );
+      onNext(rows);
+    },
+    (err) => onError?.(err as Error),
+  );
 }
 
 export async function createOperadorCuenta(params: {

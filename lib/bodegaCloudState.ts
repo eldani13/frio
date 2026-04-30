@@ -75,6 +75,12 @@ function stripUndefinedDeep(value: unknown): unknown {
 const stateDocRef = (warehouseId: string) =>
   doc(db, "warehouses", warehouseId, "state", "main");
 
+/**
+ * Cola de escrituras por bodega. Sin esto, dos `setDoc` en vuelo pueden terminar en orden inverso
+ * (el payload viejo llega último a Firestore) y `onSnapshot` devuelve estado anterior: la UI «revierte».
+ */
+const warehouseSaveChainById = new Map<string, Promise<void>>();
+
 const historyDocRef = (warehouseId: string) =>
   doc(db, "warehouses", warehouseId, "state", "history");
 
@@ -188,13 +194,23 @@ export function subscribeWarehouseState(
 export async function saveWarehouseState(
   warehouseId: string,
   state: Partial<CloudWarehouseState>,
-) {
+): Promise<void> {
+  const wid = String(warehouseId ?? "").trim() || DEFAULT_WAREHOUSE_ID;
   const cleaned = stripUndefinedDeep(state) as Partial<CloudWarehouseState>;
-  await setDoc(
-    stateDocRef(warehouseId),
-    { ...cleaned, updatedAt: serverTimestamp() },
-    { merge: true },
-  );
+  const ref = stateDocRef(wid);
+  const prev = warehouseSaveChainById.get(wid) ?? Promise.resolve();
+  const next = prev
+    .catch(() => {
+      /* la cadena sigue aunque falle un guardado anterior */
+    })
+    .then(async () => {
+      await setDoc(ref, { ...cleaned, updatedAt: serverTimestamp() }, { merge: true });
+    })
+    .catch((err) => {
+      console.error("[bodegaCloudState] saveWarehouseState", wid, err);
+    });
+  warehouseSaveChainById.set(wid, next);
+  await next;
 }
 
 export async function ensureHistoryState(warehouseId: string) {

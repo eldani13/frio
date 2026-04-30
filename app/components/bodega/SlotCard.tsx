@@ -20,11 +20,12 @@ export default function SlotCard({
   clients = [],
   slotCantidadContext,
   detalleChildren,
+  mapaSoloLectura = false,
 }: SlotCardProps) {
   const [detalleOpen, setDetalleOpen] = useState(false);
   const isOccupied = slot.autoId && slot.autoId.trim() !== "";
   const tone = isOccupied ? occupiedSlotVisualClasses(slot) : null;
-  const showDetalle = Boolean(isOccupied);
+  const showDetalle = Boolean(isOccupied && !mapaSoloLectura);
 
   if (!isOccupied || !tone) {
     return (
@@ -38,18 +39,10 @@ export default function SlotCard({
 
   const detalleProps = buildCajaDetalleFromSlot(slot, clients, slotCantidadContext);
 
-  return (
+  const shellClass = `${BODEGA_SLOT_SHELL_CLASS} relative flex w-full flex-col ${BODEGA_SLOT_ROUNDED} ${BODEGA_SLOT_SHELL_PADDING} transition ${tone.shell} ${isSelected ? "ring-2 ring-sky-400 ring-offset-1" : ""} ${mapaSoloLectura ? "cursor-default" : ""}`;
+
+  const cardInner = (
     <>
-      <div className={`relative ${isSelected ? `${BODEGA_SLOT_ROUNDED} ring-2 ring-sky-400 ring-offset-1` : ""}`}>
-        <button
-          type="button"
-          onClick={() => {
-            onSelect(slot.position);
-            setDetalleOpen(true);
-          }}
-          className={`${BODEGA_SLOT_SHELL_CLASS} relative flex w-full flex-col ${BODEGA_SLOT_ROUNDED} ${BODEGA_SLOT_SHELL_PADDING} transition ${tone.shell} ${isSelected ? "ring-2 ring-sky-400 ring-offset-1" : ""}`}
-          aria-label={`Ver detalles de la caja en posición ${slot.position}`}
-        >
           <span
             className={`absolute left-2 top-2 z-10 text-xs leading-none ${tone.positionLabel}`}
           >
@@ -84,7 +77,33 @@ export default function SlotCard({
               </div>
             </div>
           </div>
+    </>
+  );
+
+  return (
+    <>
+      <div className={`relative ${isSelected ? `${BODEGA_SLOT_ROUNDED} ring-2 ring-sky-400 ring-offset-1` : ""}`}>
+        {mapaSoloLectura ? (
+          <div
+            className={shellClass}
+            role="group"
+            aria-label={`Caja en posición ${slot.position}: ${slot.name || "Sin nombre"}`}
+          >
+            {cardInner}
+          </div>
+        ) : (
+        <button
+          type="button"
+          onClick={() => {
+            onSelect(slot.position);
+            setDetalleOpen(true);
+          }}
+          className={shellClass}
+          aria-label={`Ver detalles de la caja en posición ${slot.position}`}
+        >
+          {cardInner}
         </button>
+        )}
       </div>
       {showDetalle ? (
         <CajaDetalleModal

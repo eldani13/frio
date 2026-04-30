@@ -1,5 +1,5 @@
 "use client";
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { MdBusiness, MdFactory, MdShoppingCart } from "react-icons/md";
 import { HiOutlineArrowRight, HiOutlineTruck } from "react-icons/hi2";
 import { BiPackage, BiArrowBack } from "react-icons/bi";
@@ -50,11 +50,8 @@ function sumRowsKg(
 /** Mismos estados que el listado «Proveedores» en reportes. */
 const ESTADOS_OC_TARJETA_PROVEEDOR = new Set(["iniciado", "en curso", "transporte"]);
 
-/**
- * Órdenes que siguen contando como «inventario en venta» en bodega (stock aún no enviado al flujo de transporte).
- * «Transporte» va solo en la tarjeta Transporte (viajes en curso), no duplicar kg en Ventas.
- */
-const ESTADOS_VENTA_TARJETA = new Set(["iniciado", "en curso"]);
+/** Misma regla que el listado «En inventario venta»: solo ventas cerradas ok o no ok. */
+const ESTADOS_VENTA_TARJETA = new Set(["cerrado(ok)", "cerrado(no ok)"]);
 
 function totalKgDesdeVentasCompradorInventario(ventas: VentaEnCurso[], catalogos: Catalogo[]): number {
   let acc = 0;
@@ -113,30 +110,26 @@ const ReportesSection = () => {
 
   const bodegaTipo = activeModule === "BODEGA_INT" ? "interna" : activeModule === "BODEGA_EXT" ? "externa" : null;
 
-  const loadWarehouses = useCallback(async () => {
-    if (!codeCuenta.trim()) {
-      setWarehouseRows([]);
-      return;
-    }
-    setWarehousesLoading(true);
-    try {
-      const list = await AsignarBodegaService.getWarehousesByCode(codeCuenta);
-      setWarehouseRows(list ?? []);
-    } catch {
-      setWarehouseRows([]);
-    } finally {
-      setWarehousesLoading(false);
-    }
-  }, [codeCuenta]);
-
   const enPasoListadoBodegas =
     (activeModule === "BODEGA_INT" || activeModule === "BODEGA_EXT") && bodegaStep === "list";
 
   useEffect(() => {
-    if (authLoading) return;
-    if (!enPasoListadoBodegas) return;
-    void loadWarehouses();
-  }, [authLoading, enPasoListadoBodegas, loadWarehouses]);
+    if (authLoading || !codeCuenta.trim()) {
+      setWarehouseRows([]);
+      setWarehousesLoading(false);
+      return;
+    }
+    setWarehousesLoading(true);
+    const unsub = AsignarBodegaService.subscribeWarehousesByCode(
+      codeCuenta,
+      (list) => {
+        setWarehouseRows(list ?? []);
+        setWarehousesLoading(false);
+      },
+      () => setWarehousesLoading(false),
+    );
+    return () => unsub();
+  }, [authLoading, codeCuenta]);
 
   // Total Kg en la tarjeta "Bodega externa" de la grilla: suma todas las bodegas externas en paralelo.
   // A los 2 s como máximo dejamos de mostrar placeholder aunque sigan llegando respuestas.
@@ -158,9 +151,8 @@ const ReportesSection = () => {
 
     void (async () => {
       try {
-        const list = await AsignarBodegaService.getWarehousesByCode(codeCuenta);
         if (cancelled) return;
-        const externas = warehousesForTipo(list ?? [], "externa");
+        const externas = warehousesForTipo(warehouseRows, "externa");
         if (externas.length === 0) {
           setExternalTotalKg(0);
           setExternalTotalGridLoading(false);
@@ -196,7 +188,7 @@ const ReportesSection = () => {
       cancelled = true;
       window.clearTimeout(stopLoadingTimer);
     };
-  }, [authLoading, activeModule, codeCuenta]);
+  }, [authLoading, activeModule, codeCuenta, warehouseRows]);
 
   // Total kg tarjeta «Proveedor»: órdenes Iniciado / En curso / Transporte (misma lógica que el listado).
   useEffect(() => {
@@ -207,32 +199,21 @@ const ReportesSection = () => {
       return;
     }
 
-    let cancelled = false;
     setProveedorTotalKg(0);
     setProveedorTotalGridLoading(true);
 
     const stopLoadingTimer = window.setTimeout(() => {
-      if (!cancelled) setProveedorTotalGridLoading(false);
+      setProveedorTotalGridLoading(false);
     }, EXTERNAL_GRID_TOTAL_MAX_WAIT_MS);
 
-    void (async () => {
-      try {
-        const list = await OrdenCompraService.getAll(idCliente, codeCuenta);
-        if (cancelled) return;
-        setProveedorTotalKg(totalKgDesdeOrdenesProveedor(list));
-        setProveedorTotalGridLoading(false);
-        window.clearTimeout(stopLoadingTimer);
-      } catch {
-        if (!cancelled) {
-          setProveedorTotalKg(0);
-          setProveedorTotalGridLoading(false);
-          window.clearTimeout(stopLoadingTimer);
-        }
-      }
-    })();
+    const unsub = OrdenCompraService.subscribeByCodeCuenta(idCliente, codeCuenta, (list) => {
+      setProveedorTotalKg(totalKgDesdeOrdenesProveedor(list));
+      setProveedorTotalGridLoading(false);
+      window.clearTimeout(stopLoadingTimer);
+    });
 
     return () => {
-      cancelled = true;
+      unsub();
       window.clearTimeout(stopLoadingTimer);
     };
   }, [authLoading, activeModule, codeCuenta, idCliente]);
@@ -246,41 +227,30 @@ const ReportesSection = () => {
       return;
     }
 
-    let cancelled = false;
     setTransporteTotalKg(0);
     setTransporteTotalGridLoading(true);
 
     const stopLoadingTimer = window.setTimeout(() => {
-      if (!cancelled) setTransporteTotalGridLoading(false);
+      setTransporteTotalGridLoading(false);
     }, EXTERNAL_GRID_TOTAL_MAX_WAIT_MS);
 
-    void (async () => {
-      try {
-        const viajes = await ViajeVentaTransporteService.listEnCursoParaCuenta(idCliente, codeCuenta);
-        if (cancelled) return;
-        const kg = viajes.reduce((acc, v) => {
-          const k = Number(v.kgTotalEstimado);
-          return acc + (Number.isFinite(k) && k > 0 ? k : 0);
-        }, 0);
-        setTransporteTotalKg(kg);
-        setTransporteTotalGridLoading(false);
-        window.clearTimeout(stopLoadingTimer);
-      } catch {
-        if (!cancelled) {
-          setTransporteTotalKg(0);
-          setTransporteTotalGridLoading(false);
-          window.clearTimeout(stopLoadingTimer);
-        }
-      }
-    })();
+    const unsub = ViajeVentaTransporteService.subscribeEnCursoParaCuenta(idCliente, codeCuenta, (viajes) => {
+      const kg = viajes.reduce((acc, v) => {
+        const k = Number(v.kgTotalEstimado);
+        return acc + (Number.isFinite(k) && k > 0 ? k : 0);
+      }, 0);
+      setTransporteTotalKg(kg);
+      setTransporteTotalGridLoading(false);
+      window.clearTimeout(stopLoadingTimer);
+    });
 
     return () => {
-      cancelled = true;
+      unsub();
       window.clearTimeout(stopLoadingTimer);
     };
   }, [authLoading, activeModule, codeCuenta, idCliente]);
 
-  // Total kg tarjeta «Ventas»: mismas líneas y estados que el listado «En inventario venta» (sin Transporte).
+  // Total kg tarjeta «Ventas»: mismas líneas y estados que el listado «En inventario venta» (cerradas ok / no ok).
   useEffect(() => {
     if (authLoading || activeModule !== null) return;
     if (!codeCuenta.trim() || !idCliente.trim()) {
@@ -289,35 +259,34 @@ const ReportesSection = () => {
       return;
     }
 
-    let cancelled = false;
     setCompradorTotalKg(0);
     setCompradorTotalGridLoading(true);
 
     const stopLoadingTimer = window.setTimeout(() => {
-      if (!cancelled) setCompradorTotalGridLoading(false);
+      setCompradorTotalGridLoading(false);
     }, EXTERNAL_GRID_TOTAL_MAX_WAIT_MS);
 
-    void (async () => {
-      try {
-        const [ventas, cats] = await Promise.all([
-          OrdenVentaService.getAllByCodeCuenta(idCliente, codeCuenta),
-          CatalogoService.getAll(idCliente, codeCuenta),
-        ]);
-        if (cancelled) return;
-        setCompradorTotalKg(totalKgDesdeVentasCompradorInventario(ventas, cats));
-        setCompradorTotalGridLoading(false);
-        window.clearTimeout(stopLoadingTimer);
-      } catch {
-        if (!cancelled) {
-          setCompradorTotalKg(0);
-          setCompradorTotalGridLoading(false);
-          window.clearTimeout(stopLoadingTimer);
-        }
-      }
-    })();
+    const cc = codeCuenta.trim();
+    let ventas: VentaEnCurso[] = [];
+    let cats: Catalogo[] = [];
+    const emit = () => {
+      const ventasCuenta = ventas.filter((v) => String(v.codeCuenta ?? "").trim() === cc);
+      setCompradorTotalKg(totalKgDesdeVentasCompradorInventario(ventasCuenta, cats));
+      setCompradorTotalGridLoading(false);
+      window.clearTimeout(stopLoadingTimer);
+    };
+    const u1 = OrdenVentaService.subscribe(idCliente, (list) => {
+      ventas = list;
+      emit();
+    });
+    const u2 = CatalogoService.subscribeByCodeCuenta(idCliente, codeCuenta, (list) => {
+      cats = list;
+      emit();
+    });
 
     return () => {
-      cancelled = true;
+      u1();
+      u2();
       window.clearTimeout(stopLoadingTimer);
     };
   }, [authLoading, activeModule, codeCuenta, idCliente]);
@@ -344,9 +313,8 @@ const ReportesSection = () => {
 
     void (async () => {
       try {
-        const list = await AsignarBodegaService.getWarehousesByCode(codeCuenta);
         if (cancelled) return;
-        const internas = warehousesForTipo(list ?? [], "interna");
+        const internas = warehousesForTipo(warehouseRows, "interna");
         if (internas.length === 0) {
           setInternalTotalKg(0);
           setInternalTotalGridLoading(false);
@@ -387,7 +355,7 @@ const ReportesSection = () => {
       cancelled = true;
       window.clearTimeout(stopLoadingTimer);
     };
-  }, [authLoading, activeModule, bodegaStep, codeCuenta]);
+  }, [authLoading, activeModule, bodegaStep, codeCuenta, warehouseRows]);
 
   const listTitle =
     activeModule === "BODEGA_INT"
