@@ -1,9 +1,11 @@
 import { FiLogOut, FiMenu, FiPlus, FiX } from "react-icons/fi";
+import { SiWhatsapp } from "react-icons/si";
 import { useState } from "react";
 import type { HeaderProps } from "../../interfaces/bodega/Header";
 import type { Role } from "../../interfaces/bodega";
 import SearchForm from "./SearchForm";
-import {  HiOutlineSquares2X2 } from 'react-icons/hi2';
+import { HiOutlineSquares2X2 } from "react-icons/hi2";
+import { WHATSAPP_CUENTA_SOPORTE_HREF } from "@/lib/whatsappCuentaSoporte";
 
 interface ExtendedHeaderProps extends HeaderProps {
   userDisplayName?: string;
@@ -80,6 +82,17 @@ export default function Header({
 
           {/* RIGHT SECTION */}
           <div className="flex items-center gap-3 flex-nowrap">
+
+            <a
+              href={WHATSAPP_CUENTA_SOPORTE_HREF}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 rounded-lg bg-[#25D366] px-3 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-[#20bd5a] active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#25D366]/50 focus-visible:ring-offset-2"
+              aria-label="Contactar a Mateo IA por WhatsApp"
+            >
+              <SiWhatsapp className="h-5 w-5 shrink-0" aria-hidden />
+              Mateo IA
+            </a>
 
             <div className="h-8 w-px bg-slate-200" />
 
@@ -165,6 +178,17 @@ export default function Header({
               <span className="text-xs text-slate-400 uppercase">Fecha</span>
               <div className="font-semibold">{dateLabel}</div>
             </div>
+
+            <a
+              href={WHATSAPP_CUENTA_SOPORTE_HREF}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex w-full items-center justify-center gap-2 rounded-lg bg-[#25D366] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[#20bd5a]"
+              aria-label="Contactar a Mateo IA por WhatsApp"
+            >
+              <SiWhatsapp className="h-5 w-5 shrink-0" aria-hidden />
+              Mateo IA
+            </a>
 
             {/* Mobile Menu Button */}
             <button
