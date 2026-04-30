@@ -3,8 +3,6 @@
 import React from "react";
 import { HiOutlineArrowLeft, HiOutlineChevronDown, HiOutlinePlus } from "react-icons/hi2";
 import { MdShoppingCart } from "react-icons/md";
-import { SiWhatsapp } from "react-icons/si";
-import { WHATSAPP_CUENTA_SOPORTE_HREF } from "@/lib/whatsappCuentaSoporte";
 import {
   ORDEN_COMPRA_ESTADOS,
   ordenCompraEstadoBadgeClass,
@@ -336,15 +334,6 @@ export function VentasEnCursoOperadorPanel({
             </div>
           </div>
           <div className="flex shrink-0 items-center justify-end gap-2 self-end sm:self-auto">
-            <a
-              href={WHATSAPP_CUENTA_SOPORTE_HREF}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex h-10 w-10 items-center justify-center rounded-[10px] bg-[#25D366] text-white shadow-sm transition hover:bg-[#20bd5a] active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#25D366]/50 focus-visible:ring-offset-2"
-              aria-label="Abrir WhatsApp (+1 555 188-2860)"
-            >
-              <SiWhatsapp className="h-5 w-5" aria-hidden />
-            </a>
             <button
               type="button"
               onClick={() => {
