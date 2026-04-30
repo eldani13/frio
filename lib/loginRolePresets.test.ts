@@ -37,6 +37,6 @@ describe("loginRolePresets", () => {
     expect(mod.loginRoleShortcutsEnabled).toBe(true);
     const rows = mod.getLoginRoleShortcuts();
     expect(rows.find((r) => r.label === "Custodio")?.email).toBe("cust@x.com");
-    expect(rows.find((r) => r.label === "Jefe")?.email).toBe("j@x.com");
+    expect(rows.find((r) => r.label === "Jefe Bodega")?.email).toBe("j@x.com");
   });
 });

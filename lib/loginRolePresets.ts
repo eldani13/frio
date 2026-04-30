@@ -23,16 +23,36 @@ export type LoginPresetKey =
 
 type Credentials = { email: string; password: string };
 
-const ORDER: Array<{ key: LoginPresetKey; label: string }> = [
-  { key: "custodio", label: "Custodio" },
-  { key: "operario", label: "Operario" },
-  { key: "procesador", label: "Procesador" },
-  { key: "jefe", label: "Jefe" },
-  { key: "administrador", label: "Administrador" },
-  { key: "cuenta", label: "Cuenta" },
-  { key: "configurador", label: "Configurador" },
-  { key: "operador", label: "Operador" },
-  { key: "transporte", label: "Transporte" },
+/** Grupos en pantalla de login (orden y etiquetas). */
+const LOGIN_SHORTCUT_GROUPS: Array<{
+  title: string;
+  entries: Array<{ key: LoginPresetKey; label: string }>;
+}> = [
+  {
+    title: "Polaria Interno",
+    entries: [{ key: "configurador", label: "Configurador" }],
+  },
+  {
+    title: "Generador de Carga",
+    entries: [
+      { key: "cuenta", label: "Admin Cuenta" },
+      { key: "operador", label: "Operador Cuenta" },
+    ],
+  },
+  {
+    title: "Bodega Interna",
+    entries: [
+      { key: "administrador", label: "Admin Bodega" },
+      { key: "jefe", label: "Jefe Bodega" },
+      { key: "custodio", label: "Custodio" },
+      { key: "operario", label: "Operador" },
+      { key: "procesador", label: "Procesador" },
+    ],
+  },
+  {
+    title: "Otros",
+    entries: [{ key: "transporte", label: "Transportista" }],
+  },
 ];
 
 /** Credenciales por defecto de los atajos (Firebase Auth). */
@@ -95,15 +115,36 @@ function envCredential(
 export const loginRoleShortcutsEnabled =
   process.env.NEXT_PUBLIC_DISABLE_LOGIN_ROLE_SHORTCUTS !== "1";
 
-export function getLoginRoleShortcuts(): Array<{ label: string; email: string; password: string }> {
+function resolveShortcutCredentials(
+  key: LoginPresetKey,
+  overrides: Partial<Record<LoginPresetKey, Credentials>> | null,
+): Credentials {
+  const base = DEFAULTS[key];
+  const o = overrides?.[key];
+  return {
+    email: o?.email ?? envCredential(key, "email", base.email),
+    password: o?.password ?? envCredential(key, "password", base.password),
+  };
+}
+
+export type LoginRoleShortcutGroup = {
+  title: string;
+  shortcuts: Array<{ label: string; email: string; password: string }>;
+};
+
+/** Atajos agrupados para la tarjeta de login (Polaria / Generador / Bodega / Otros). */
+export function getLoginRoleShortcutGroups(): LoginRoleShortcutGroup[] {
   const overrides = parseEnvOverrides();
-  return ORDER.map(({ key, label }) => {
-    const base = DEFAULTS[key];
-    const o = overrides?.[key];
-    return {
+  return LOGIN_SHORTCUT_GROUPS.map((g) => ({
+    title: g.title,
+    shortcuts: g.entries.map(({ key, label }) => ({
       label,
-      email: o?.email ?? envCredential(key, "email", base.email),
-      password: o?.password ?? envCredential(key, "password", base.password),
-    };
-  });
+      ...resolveShortcutCredentials(key, overrides),
+    })),
+  }));
+}
+
+/** Lista plana en el mismo orden que los grupos (tests y compatibilidad). */
+export function getLoginRoleShortcuts(): Array<{ label: string; email: string; password: string }> {
+  return getLoginRoleShortcutGroups().flatMap((g) => g.shortcuts);
 }
