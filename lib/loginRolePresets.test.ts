@@ -15,9 +15,21 @@ describe("loginRolePresets", () => {
     expect(rows.some((r) => r.label === "Custodio")).toBe(true);
   });
 
+  it("habilita shortcuts en production por defecto", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    const mod = await import("./loginRolePresets");
+    expect(mod.loginRoleShortcutsEnabled).toBe(true);
+  });
+
+  it("desactiva shortcuts si NEXT_PUBLIC_DISABLE_LOGIN_ROLE_SHORTCUTS=1", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("NEXT_PUBLIC_DISABLE_LOGIN_ROLE_SHORTCUTS", "1");
+    const mod = await import("./loginRolePresets");
+    expect(mod.loginRoleShortcutsEnabled).toBe(false);
+  });
+
   it("aplica overrides por JSON/env", async () => {
     vi.stubEnv("NODE_ENV", "production");
-    vi.stubEnv("NEXT_PUBLIC_ENABLE_LOGIN_ROLE_SHORTCUTS", "1");
     vi.stubEnv("NEXT_PUBLIC_LOGIN_CUSTODIO_EMAIL", "cust@x.com");
     vi.stubEnv("NEXT_PUBLIC_BODEGA_DEV_LOGINS", JSON.stringify({ jefe: { email: "j@x.com", password: "abc" } }));
 

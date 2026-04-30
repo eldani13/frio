@@ -6,7 +6,8 @@
  * Opcional: `NEXT_PUBLIC_BODEGA_DEV_LOGINS` — JSON con forma
  * `{ "custodio": { "email": "...", "password": "..." }, ... }`
  *
- * Los botones solo se muestran en desarrollo o si `NEXT_PUBLIC_ENABLE_LOGIN_ROLE_SHORTCUTS=1`.
+ * Los botones se muestran en todos los entornos salvo que definas
+ * `NEXT_PUBLIC_DISABLE_LOGIN_ROLE_SHORTCUTS=1` (p. ej. despliegue muy sensible).
  */
 
 export type LoginPresetKey =
@@ -92,8 +93,7 @@ function envCredential(
 }
 
 export const loginRoleShortcutsEnabled =
-  process.env.NODE_ENV === "development" ||
-  process.env.NEXT_PUBLIC_ENABLE_LOGIN_ROLE_SHORTCUTS === "1";
+  process.env.NEXT_PUBLIC_DISABLE_LOGIN_ROLE_SHORTCUTS !== "1";
 
 export function getLoginRoleShortcuts(): Array<{ label: string; email: string; password: string }> {
   const overrides = parseEnvOverrides();
