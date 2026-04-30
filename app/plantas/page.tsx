@@ -6,6 +6,7 @@ import { PlantaTable } from "@/app/components/ui/plantas/PlantaTable";
 import { PlantaForm } from "@/app/components/ui/plantas/PlantaForm";
 import { HiOutlinePlus, HiOutlineSquares2X2 } from "react-icons/hi2";
 import { useAuth } from "@/app/context/AuthContext";
+import { swalConfirmDelete, swalError } from "@/lib/swal";
 
 export default function PlantasPage() {
   const [plantas, setPlantas] = useState<Planta[]>([]);
@@ -16,16 +17,13 @@ export default function PlantasPage() {
   const codeCuenta = session?.codeCuenta ?? "";
   const idCliente = session?.clientId ?? "";
 
-  const load = async () => {
-    if (!idCliente) {
+  useEffect(() => {
+    if (!idCliente.trim()) {
       setPlantas([]);
       return;
     }
-    setPlantas(await PlantaService.getAll(idCliente, codeCuenta));
-  };
-
-  useEffect(() => {
-    void load();
+    const unsub = PlantaService.subscribeByCodeCuenta(idCliente, codeCuenta, setPlantas);
+    return () => unsub();
   }, [idCliente, codeCuenta]);
 
   const handleSuccess = async (
@@ -38,7 +36,6 @@ export default function PlantasPage() {
       } else {
         await PlantaService.create(data, idCliente, codeCuenta);
       }
-      await load();
     } catch (error) {
       console.error("Error al guardar la planta:", error);
     }
@@ -46,9 +43,12 @@ export default function PlantasPage() {
 
   const handleDelete = async (id: string) => {
     if (!idCliente) return;
-    if (window.confirm("¿Eliminar esta planta definitivamente?")) {
+    const ok = await swalConfirmDelete("¿Eliminar esta planta?", "Se eliminará de forma definitiva.");
+    if (!ok) return;
+    try {
       await PlantaService.delete(idCliente, id);
-      await load();
+    } catch {
+      void swalError("No se pudo eliminar", "Reintentá más tarde.");
     }
   };
 

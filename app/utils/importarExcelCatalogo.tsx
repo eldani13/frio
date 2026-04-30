@@ -1,4 +1,7 @@
+"use client";
+
 import * as XLSX from "xlsx";
+import { swalInfo } from "@/lib/swal";
 import type { ChangeEvent } from "react";
 import { HiOutlineArrowDownTray } from "react-icons/hi2";
 
@@ -39,7 +42,10 @@ export const ImportExcel = ({ onDataLoaded }: ImportExcelProps) => {
       });
 
       if (validatedData.length < rawData.length) {
-        alert(`${rawData.length - validatedData.length} filas omitidas por datos incompletos.`);
+        void swalInfo(
+          "Filas omitidas",
+          `${rawData.length - validatedData.length} filas omitidas por datos incompletos.`,
+        );
       }
 
       onDataLoaded(validatedData);

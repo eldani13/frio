@@ -43,7 +43,7 @@ const DEFAULTS: Record<LoginPresetKey, Credentials> = {
   administrador: { email: "admin@admin.com", password: "admin123" },
   cuenta: { email: "adminmit@mit.com", password: "adminmit123" },
   configurador: { email: "configurador@configurador.com", password: "configurador123" },
-  operador: { email: "luis.cantillo@polaria.tech", password: "123456789" },
+  operador: { email: "operadormit@operadormit.com", password: "123456789" },
   transporte: { email: "transporte@transporte.com", password: "transporte123" },
 };
 

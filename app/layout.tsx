@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
+import "sweetalert2/dist/sweetalert2.min.css";
 // --- IMPORTA TU NUEVO AUTH PROVIDER ---
 import { AuthProvider } from "./context/AuthContext"; 
 import { BodegaHistoryProvider } from "./components/BodegaDashboard/BodegaHistoryContext";

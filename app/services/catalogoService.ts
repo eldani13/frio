@@ -1,4 +1,4 @@
-import { db } from "@/lib/firebaseClient";
+import { auth, db } from "@/lib/firebaseClient";
 import {
   collection,
   addDoc,
@@ -11,9 +11,11 @@ import {
   where, // Agregado para filtrar por cuenta
   orderBy,
   limit,
+  onSnapshot,
 } from "firebase/firestore";
 import { Catalogo } from "@/app/types/catalogo";
 import { coerceNumberImport } from "@/lib/catalogoPrecio";
+import { almacenProductCodeFromNumericId } from "@/lib/almacenProductCode";
 
 const PARENT_COLLECTION = "clientes";
 const SUB_COLLECTION = "productos";
@@ -63,6 +65,7 @@ export const CatalogoService = {
   async getAll(idCliente: string, codeCuenta: string): Promise<Catalogo[]> {
     try {
       if (!idCliente?.trim()) return [];
+      if (!auth.currentUser) return [];
       const q = query(
         getColRef(idCliente),
         where("codeCuenta", "==", codeCuenta)
@@ -74,9 +77,49 @@ export const CatalogoService = {
         ...d.data() 
       } as Catalogo));
     } catch (error: unknown) {
-      console.error("Error en CatalogoService.getAll:", error instanceof Error ? error.message : error);
+      const msg = error instanceof Error ? error.message : String(error);
+      if (/permission|insufficient permissions/i.test(msg)) {
+        console.warn(
+          "CatalogoService.getAll: sin permiso o reglas sin desplegar (Firestore → clientes/…/productos).",
+          msg,
+        );
+      } else {
+        console.error("Error en CatalogoService.getAll:", msg);
+      }
       return [];
     }
+  },
+
+  subscribeByCodeCuenta(
+    idCliente: string,
+    codeCuenta: string,
+    onNext: (rows: Catalogo[]) => void,
+    onError?: (e: Error) => void,
+  ): () => void {
+    if (!idCliente?.trim()) {
+      onNext([]);
+      return () => {};
+    }
+    if (!auth.currentUser) {
+      onNext([]);
+      return () => {};
+    }
+    const q = query(getColRef(idCliente), where("codeCuenta", "==", codeCuenta));
+    return onSnapshot(
+      q,
+      (snap) => {
+        onNext(snap.docs.map((d) => ({ id: d.id, ...d.data() } as Catalogo)));
+      },
+      (err) => {
+        const msg = err instanceof Error ? err.message : String(err);
+        if (/permission|insufficient permissions/i.test(msg)) {
+          console.warn("CatalogoService.subscribeByCodeCuenta: sin permiso.", msg);
+        } else {
+          console.error("CatalogoService.subscribeByCodeCuenta:", msg);
+        }
+        onError?.(err as Error);
+      },
+    );
   },
 
   /** Crea producto con correlativo por cliente; persiste codeCuenta. */
@@ -98,6 +141,7 @@ export const CatalogoService = {
         codeCuenta: codeCuenta, // Vinculación con la cuenta
         numericId: nextId,
         code: this.toBase36(nextId),
+        almacenProductCode: almacenProductCodeFromNumericId(nextId),
         createdAt: Date.now()
       };
 
@@ -115,7 +159,7 @@ export const CatalogoService = {
     try {
       if (!idCliente?.trim()) throw new Error("idCliente requerido");
       const u: Record<string, unknown> = { ...data };
-      for (const k of ["id", "numericId", "code", "createdAt", "codeCuenta"] as const) {
+      for (const k of ["id", "numericId", "code", "createdAt", "codeCuenta", "almacenProductCode"] as const) {
         delete u[k];
       }
 
@@ -155,6 +199,7 @@ export const CatalogoService = {
           codeCuenta,
           numericId: nextId,
           code: this.toBase36(nextId),
+          almacenProductCode: almacenProductCodeFromNumericId(nextId),
           createdAt: Date.now(),
         };
         return addDoc(getColRef(idCliente), newProduct);

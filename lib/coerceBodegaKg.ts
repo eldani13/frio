@@ -59,6 +59,8 @@ const SLOT_TRACE_KEYS = [
   "caducidad",
   "fechaIngreso",
   "llaveUnica",
+  "catalogoProductId",
+  "almacenProductCode",
 ] as const;
 
 /** Campos de trazabilidad opcionales tal como vienen en Firestore (sin transformar). */

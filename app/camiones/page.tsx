@@ -1,11 +1,13 @@
 "use client";
 import { useEffect, useState } from "react";
-import { TruckService } from "@/app/services/camionService"; // Ajusta tu ruta
+import { TruckService } from "@/app/services/camionService";
+import { ViajeVentaTransporteService } from "@/app/services/viajeVentaTransporteService";
 import { Camion } from "@/app/types/camion";
 import { TruckTable } from "@/app/components/ui/camiones/camionTable";
 import { TruckForm } from "@/app/components/ui/camiones/camionForm";
 import { HiOutlinePlus,HiOutlineSquares2X2 } from "react-icons/hi2";
 import { useAuth } from "@/app/context/AuthContext";
+import { swalConfirmDelete, swalError } from "@/lib/swal";
 
 export default function TrucksPage() {
   const [trucks, setTrucks] = useState<Camion[]>([]);
@@ -16,17 +18,15 @@ export default function TrucksPage() {
   const codeCuenta = session?.codeCuenta ?? "";
   const idCliente = session?.clientId ?? "";
 
-  const load = async () => {
-    if (!idCliente) {
+  useEffect(() => {
+    if (!idCliente.trim()) {
       setTrucks([]);
       return;
     }
-    const data = await TruckService.getAll(idCliente, codeCuenta);
-    setTrucks(data);
-  };
-
-  useEffect(() => {
-    void load();
+    const unsub = TruckService.subscribeByCodeCuenta(idCliente, codeCuenta, (data) => {
+      void ViajeVentaTransporteService.reconciliarCamionesSegunViajes(idCliente, data).then(setTrucks);
+    });
+    return () => unsub();
   }, [idCliente, codeCuenta]);
 
   const handleSuccess = async (data: Omit<Camion, 'id' | 'numericId' | 'code' | 'createdAt'>) => {
@@ -37,23 +37,24 @@ export default function TrucksPage() {
       } else {
         await TruckService.create(data, idCliente, codeCuenta);
       }
-      await load();
       setIsModalOpen(false); // Cerramos el modal tras el éxito
     } catch (_error) {
-      alert("Hubo un error al guardar los datos del camión.");
+      void swalError("No se pudo guardar", "Hubo un error al guardar los datos del camión.");
     }
   };
 
   // Lógica de eliminación
   const handleDelete = async (id: string) => {
     if (!idCliente) return;
-    if (window.confirm("¿Estás seguro de eliminar este vehículo? Esta acción no se puede deshacer.")) {
-      try {
-        await TruckService.delete(idCliente, id);
-        await load();
-      } catch (_error) {
-        alert("No se pudo eliminar el camión.");
-      }
+    const ok = await swalConfirmDelete(
+      "¿Eliminar este vehículo?",
+      "Esta acción no se puede deshacer.",
+    );
+    if (!ok) return;
+    try {
+      await TruckService.delete(idCliente, id);
+    } catch (_error) {
+      void swalError("No se pudo eliminar", "No se pudo eliminar el camión.");
     }
   };
 

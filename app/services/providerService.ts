@@ -11,6 +11,7 @@ import {
   where,
   orderBy,
   limit,
+  onSnapshot,
 } from "firebase/firestore";
 import { Provider } from "@/app/types/provider";
 
@@ -110,6 +111,30 @@ export const ProviderService = {
       console.error("Error en update:", error instanceof Error ? error.message : error);
       throw error;
     }
+  },
+
+  /**
+   * Listado en vivo (misma consulta que `getAll`).
+   * @returns función para cancelar la suscripción.
+   */
+  subscribeByCodeCuenta(
+    idCliente: string,
+    codeCuenta: string,
+    onNext: (rows: Provider[]) => void,
+    onError?: (e: Error) => void,
+  ): () => void {
+    if (!idCliente?.trim()) {
+      onNext([]);
+      return () => {};
+    }
+    const q = query(getColRef(idCliente), where("codeCuenta", "==", codeCuenta));
+    return onSnapshot(
+      q,
+      (snap) => {
+        onNext(snap.docs.map((d) => ({ id: d.id, ...d.data() } as Provider)));
+      },
+      (err) => onError?.(err as Error),
+    );
   },
 
   async delete(idCliente: string, id: string) {

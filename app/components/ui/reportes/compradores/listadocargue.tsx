@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/app/context/AuthContext";
 import { CatalogoService } from "@/app/services/catalogoService";
 import { OrdenVentaService } from "@/app/services/ordenVentaService";
@@ -16,15 +16,15 @@ const numberFormatter = new Intl.NumberFormat("es-CO", {
   maximumFractionDigits: 2,
 });
 
-/** Ventas cuyo stock sigue en cuenta «en venta»; «Transporte» se ve en el módulo Transporte, no acá. */
-const ESTADOS_VENTA_INVENTARIO = new Set(["iniciado", "en curso"]);
+/** Solo ventas ya cerradas (custodío / entrega); el resto de estados no se listan acá. */
+const ESTADOS_VENTA_LISTADO = new Set(["cerrado(ok)", "cerrado(no ok)"]);
 
 function normalizeEstado(s: string): string {
   return s.trim().toLowerCase();
 }
 
-function ventaEnInventarioActivo(v: VentaEnCurso): boolean {
-  return ESTADOS_VENTA_INVENTARIO.has(normalizeEstado(v.estado ?? ""));
+function ventaIncluidaEnListado(v: VentaEnCurso): boolean {
+  return ESTADOS_VENTA_LISTADO.has(normalizeEstado(v.estado ?? ""));
 }
 
 function strTrim(v: unknown): string {
@@ -75,7 +75,7 @@ export type FilaVentaInventario = {
 function filasDesdeVentas(ventas: VentaEnCurso[], catalogById: Map<string, Catalogo>, catalogos: Catalogo[]) {
   const out: FilaVentaInventario[] = [];
   for (const v of ventas) {
-    if (!ventaEnInventarioActivo(v)) continue;
+    if (!ventaIncluidaEnListado(v)) continue;
     const oid = v.id ?? "";
     const items = v.lineItems ?? [];
     items.forEach((li, idx) => {
@@ -138,7 +138,7 @@ export default function ListadoCargue() {
     return m;
   }, [catalogos]);
 
-  const reload = useCallback(async () => {
+  useEffect(() => {
     if (!idCliente.trim() || !codeCuenta.trim()) {
       setVentas([]);
       setCatalogos([]);
@@ -147,25 +147,27 @@ export default function ListadoCargue() {
     }
     setLoading(true);
     setError(null);
-    try {
-      const [vList, cats] = await Promise.all([
-        OrdenVentaService.getAllByCodeCuenta(idCliente, codeCuenta),
-        CatalogoService.getAll(idCliente, codeCuenta),
-      ]);
-      setVentas(vList);
+    const cc = codeCuenta.trim();
+    let ventasRaw: VentaEnCurso[] = [];
+    let cats: Catalogo[] = [];
+    const emit = () => {
+      setVentas(ventasRaw.filter((v) => String(v.codeCuenta ?? "").trim() === cc));
       setCatalogos(cats);
-    } catch {
-      setVentas([]);
-      setCatalogos([]);
-      setError("No se pudieron cargar las órdenes de venta.");
-    } finally {
       setLoading(false);
-    }
+    };
+    const u1 = OrdenVentaService.subscribe(idCliente, (list) => {
+      ventasRaw = list;
+      emit();
+    });
+    const u2 = CatalogoService.subscribeByCodeCuenta(idCliente, codeCuenta, (list) => {
+      cats = list;
+      emit();
+    });
+    return () => {
+      u1();
+      u2();
+    };
   }, [idCliente, codeCuenta]);
-
-  useEffect(() => {
-    void reload();
-  }, [reload]);
 
   useEffect(() => {
     setPage(1);
@@ -211,9 +213,8 @@ export default function ListadoCargue() {
       <div className="border-b border-slate-100 bg-[#A8D5BA]/20 p-5">
         <h3 className="app-title uppercase tracking-tight">En inventario venta</h3>
         <p className="mt-1 text-xs text-slate-600">
-          Órdenes de venta en <strong>Iniciado</strong> o <strong>En curso</strong> (excluye{" "}
-          <strong>Transporte</strong>: esa mercancía figura en el módulo Transporte). Misma
-          grilla que <strong>proveedor</strong>. La columna <strong>Proveedor</strong> muestra el nombre del{" "}
+          Solo órdenes de venta en <strong>Cerrado (ok)</strong> o <strong>Cerrado (no ok)</strong>. Misma grilla que{" "}
+          <strong>proveedor</strong>. La columna <strong>Proveedor</strong> muestra el nombre del{" "}
           <strong>comprador</strong> de cada orden.
           {filas.length > 0 ? (
             <span className="tabular-nums">
@@ -283,7 +284,7 @@ export default function ListadoCargue() {
             {showEmpty ? (
               <tr>
                 <td colSpan={12} className="px-4 py-8 text-center text-sm text-slate-500">
-                  No hay líneas de ventas en Iniciado o En curso para esta cuenta.
+                  No hay líneas de ventas cerradas (ok o no ok) para esta cuenta.
                 </td>
               </tr>
             ) : null}

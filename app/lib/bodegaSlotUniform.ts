@@ -26,3 +26,7 @@ export const BODEGA_SLOT_INNER_FIXED_CLASS =
 /** Área del símbolo «+» en casilleros vacíos (sin borde propio: solo carcasa + tarjeta interior discontinua). */
 export const BODEGA_SLOT_EMPTY_PLUS_AREA_CLASS =
   "flex min-h-0 flex-1 items-center justify-center";
+
+/** Misma rejilla que `SlotsGrid` del mapa de almacenamiento (huella por celda). */
+export const BODEGA_SLOTS_GRID_ALMACEN_CLASS =
+  "grid w-full min-w-0 grid-cols-2 gap-1.5 sm:grid-cols-3 sm:gap-2 md:grid-cols-4 lg:grid-cols-4 [&>*]:min-w-0";

@@ -25,6 +25,7 @@ import { etiquetaUnidadVisualizacion } from "@/lib/unidadVisualizacionCatalogo";
 import { formatoPrecioCatalogo } from "@/lib/catalogoPrecio";
 import { subscribeWarehouseState } from "@/lib/bodegaCloudState";
 import { stockPrimarioDesdeSlotsPreferirKgCuandoExisten } from "@/lib/stockPrimarioBodega";
+import { swalConfirm } from "@/lib/swal";
 
 export interface OrdenProcesamientoDraft {
   productoPrimarioId: string;
@@ -383,6 +384,11 @@ export function OrdenProcesamientoFormModal({
         setError("No se pudo aplicar la pérdida al estimado. Revisá los valores.");
         return;
       }
+      const ok = await swalConfirm(
+        "¿Confirmar y enviar a bodega?",
+        "Se creará la orden de procesamiento con el primario, secundario y cantidades indicadas.",
+      );
+      if (!ok) return;
       setSaving(true);
       try {
         await Promise.resolve(

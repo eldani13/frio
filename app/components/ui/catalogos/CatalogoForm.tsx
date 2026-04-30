@@ -19,6 +19,7 @@ import {
 } from "@/lib/catalogoProcesamiento";
 import { UNIDAD_VIS_CATALOGO_OPCIONES } from "@/lib/unidadVisualizacionCatalogo";
 import { precioCatalogoNumerico } from "@/lib/catalogoPrecio";
+import { swalWarning } from "@/lib/swal";
 
 interface CatalogoFormProps {
   isOpen: boolean;
@@ -173,7 +174,8 @@ export const CatalogoForm = ({
     if (tipoSec && primId) {
       const g = Number(String(gramosPorUnidadSecundario).replace(",", ".").trim());
       if (!Number.isFinite(g) || g <= 0) {
-        alert(
+        void swalWarning(
+          "Falta el peso por unidad",
           `Para productos secundarios con primario, indicá los gramos por unidad del secundario (peso neto; base ${REGLA_PRIMARIO_BASE_GRAMOS} g de primario).`,
         );
         return;

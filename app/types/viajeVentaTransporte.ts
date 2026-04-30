@@ -18,6 +18,13 @@ export interface ViajeVentaTransporte {
   /** Copia de líneas de la venta al crear el viaje. */
   lineItemsEsperados: VentaEnCursoLineItem[];
   createdAt: number;
+  /** Camión asignado al envío (si aplica). */
+  truckId?: string;
+  truckCode?: string;
+  truckPlate?: string;
+  truckBrand?: string;
+  truckModel?: string;
+  truckType?: string;
   lineItemsEntregados?: ViajeLineaEntrega[];
   /** true = conforme con lo esperado. */
   entregaConforme?: boolean;

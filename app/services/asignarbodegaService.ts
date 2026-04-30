@@ -1,11 +1,12 @@
 import { db } from "@/lib/firebaseClient";
-import { 
-  collection, 
-  getDocs, 
-  doc, 
-  updateDoc, 
+import {
+  collection,
+  getDocs,
+  doc,
+  updateDoc,
   query,
-  where
+  where,
+  onSnapshot,
 } from "firebase/firestore";
 import { WarehouseMeta } from "@/app/interfaces/bodega";
 
@@ -65,6 +66,37 @@ async getWarehousesByCode(codeCuenta: string): Promise<WarehouseMeta[]> {
     // 4. Siempre devolvemos array vacío en error para no romper el .map() de la UI
     return [];
   }
-}
+},
 
+  /**
+   * Bodegas vinculadas a la cuenta, en vivo (misma consulta que `getWarehousesByCode`).
+   */
+  subscribeWarehousesByCode(
+    codeCuenta: string,
+    onNext: (rows: WarehouseMeta[]) => void,
+    onError?: (e: Error) => void,
+  ): () => void {
+    const cc = String(codeCuenta ?? "").trim();
+    if (!cc) {
+      onNext([]);
+      return () => {};
+    }
+    const colRef = collection(db, WAREHOUSES_COL);
+    const q = query(colRef, where("codeCuenta", "==", cc));
+    return onSnapshot(
+      q,
+      (snap) => {
+        onNext(
+          snap.docs.map(
+            (d) =>
+              ({
+                id: d.id,
+                ...d.data(),
+              }) as WarehouseMeta,
+          ),
+        );
+      },
+      (err) => onError?.(err as Error),
+    );
+  },
 };

@@ -28,6 +28,7 @@ import {
 } from "@/app/lib/desperdicioKgSugerido";
 import { estimadoUnidadesSecundarioTexto } from "@/app/lib/procesamientoDisplay";
 import { PrecioSecundarioCatalogoLive } from "@/app/components/ui/procesamiento/PrecioSecundarioCatalogoLive";
+import { swalConfirm, swalError, swalWarning } from "@/lib/swal";
 
 const TYPE_LABELS: Record<OrderType, string> = {
   a_bodega: "A bodega",
@@ -347,7 +348,8 @@ export default function RequestsQueue(props: RequestsQueueProps) {
       }
       if (estadoReal !== "En curso") {
         const code = firstErr instanceof Error ? firstErr.message : "";
-        window.alert(
+        void swalError(
+          "No se pudo pasar a «En curso»",
           code === "solo_operario_asignado"
             ? "Solo el operario asignado puede pasar la orden a «En curso»."
             : code === "sin_operario_asignado"
@@ -410,7 +412,10 @@ export default function RequestsQueue(props: RequestsQueueProps) {
         );
       }
     } catch {
-      window.alert("No se pudo marcar la orden como pendiente. Revisá la merma (kg) o intentá de nuevo.");
+      void swalError(
+        "No se pudo guardar",
+        "No se pudo marcar la orden como pendiente. Revisá la merma (kg) o intentá de nuevo.",
+      );
     } finally {
       setProcBusyKey(null);
     }
@@ -702,16 +707,23 @@ export default function RequestsQueue(props: RequestsQueueProps) {
                 type="button"
                 className="rounded-xl bg-sky-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-sky-700"
                 onClick={() => {
-                  const raw = String(modalProcTerminadoKg).replace(",", ".").trim();
-                  const kg = Number(raw);
-                  if (!Number.isFinite(kg) || kg < 0) {
-                    window.alert("Ingresá un número de kg mayor o igual a 0.");
-                    return;
-                  }
-                  const t = modalProcTerminadoTarea;
-                  setModalProcTerminadoTarea(null);
-                  setModalProcTerminadoLoading(false);
-                  void ejecutarMarcarProcesamientoTerminado(t, kg);
+                  void (async () => {
+                    const raw = String(modalProcTerminadoKg).replace(",", ".").trim();
+                    const kg = Number(raw);
+                    if (!Number.isFinite(kg) || kg < 0) {
+                      await swalWarning("Validación", "Ingresá un número de kg mayor o igual a 0.");
+                      return;
+                    }
+                    const ok = await swalConfirm(
+                      "¿Confirmar orden como pendiente?",
+                      `Se registrará merma de ${kg} kg. Revisá el valor antes de continuar.`,
+                    );
+                    if (!ok) return;
+                    const t = modalProcTerminadoTarea;
+                    setModalProcTerminadoTarea(null);
+                    setModalProcTerminadoLoading(false);
+                    void ejecutarMarcarProcesamientoTerminado(t, kg);
+                  })();
                 }}
               >
                 Confirmar pendiente
@@ -1767,10 +1779,10 @@ export default function RequestsQueue(props: RequestsQueueProps) {
                       ) {
                         if (tempInput) tempInput.value = tempValue;
                       } else {
-                        alert("No se detecto temperatura en la imagen.");
+                        void swalWarning("Sin resultado", "No se detectó temperatura en la imagen.");
                       }
                     } catch {
-                      alert("Error al analizar la imagen.");
+                      void swalError("Error", "Error al analizar la imagen.");
                     }
                     setEditTempLoading(false);
                     if (tempInput) {

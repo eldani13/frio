@@ -13,6 +13,7 @@ import { formatKgEs } from "@/app/lib/decimalEs";
 import { buildLineasRecepcionDiff } from "@/app/lib/ordenCompraRecepcionDiff";
 import { HiOutlinePlus, HiOutlineSquares2X2 } from "react-icons/hi2";
 import { useAuth } from "@/app/context/AuthContext";
+import { swalConfirmDelete, swalError } from "@/lib/swal";
 
 export default function ProvidersPage() {
   const [providers, setProviders] = useState<Provider[]>([]);
@@ -26,60 +27,50 @@ export default function ProvidersPage() {
   const codeCuenta = session?.codeCuenta ?? "";
   const idCliente = session?.clientId ?? "";
 
-  const load = async () => {
-    if (!idCliente) {
+  useEffect(() => {
+    if (!idCliente.trim()) {
       setProviders([]);
       return;
     }
-    setProviders(await ProviderService.getAll(idCliente, codeCuenta));
-  };
-
-  useEffect(() => {
-    void load();
+    const unsub = ProviderService.subscribeByCodeCuenta(idCliente, codeCuenta, setProviders);
+    return () => unsub();
   }, [idCliente, codeCuenta]);
 
   useEffect(() => {
-    if (!ordenesModalProvider?.id || !idCliente.trim()) {
+    const pid = ordenesModalProvider?.id;
+    if (!pid || !idCliente.trim()) {
       setOrdenesList([]);
+      setOrdenesLoading(false);
       return;
     }
-    let cancelled = false;
     setOrdenesLoading(true);
-    void OrdenCompraService.getByProveedor(idCliente, codeCuenta, ordenesModalProvider.id)
-      .then((list) => {
-        if (cancelled) return;
-        setOrdenesList(
-          list.map((o) => {
-            const { lineasDiff, adicionales, tieneRecepcion } = buildLineasRecepcionDiff(o);
-            return {
-              id: o.id ?? o.numero,
-              ordenCompra: o.numero,
-              estado: o.estado,
-              resumenProductos: (o.lineItems ?? [])
-                .map((li) => {
-                  const medida =
-                    li.pesoKg != null && Number(li.pesoKg) > 0
-                      ? `${formatKgEs(Number(li.pesoKg))} kg`
-                      : `${li.cantidad} u.`;
-                  return `${li.titleSnapshot} · ${medida}`;
-                })
-                .join(" · "),
-              lineasDiff,
-              adicionales,
-              tieneRecepcion,
-            };
-          }),
-        );
-      })
-      .catch(() => {
-        if (!cancelled) setOrdenesList([]);
-      })
-      .finally(() => {
-        if (!cancelled) setOrdenesLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
+    const unsub = OrdenCompraService.subscribeByCodeCuenta(idCliente, codeCuenta, (list) => {
+      const filtered = list.filter((o) => String(o.proveedorId ?? "").trim() === pid);
+      setOrdenesList(
+        filtered.map((o) => {
+          const { lineasDiff, adicionales, tieneRecepcion } = buildLineasRecepcionDiff(o);
+          return {
+            id: o.id ?? o.numero,
+            ordenCompra: o.numero,
+            estado: o.estado,
+            resumenProductos: (o.lineItems ?? [])
+              .map((li) => {
+                const medida =
+                  li.pesoKg != null && Number(li.pesoKg) > 0
+                    ? `${formatKgEs(Number(li.pesoKg))} kg`
+                    : `${li.cantidad} u.`;
+                return `${li.titleSnapshot} · ${medida}`;
+              })
+              .join(" · "),
+            lineasDiff,
+            adicionales,
+            tieneRecepcion,
+          };
+        }),
+      );
+      setOrdenesLoading(false);
+    });
+    return () => unsub();
   }, [ordenesModalProvider?.id, idCliente, codeCuenta]);
 
   const handleSuccess = async (data: {
@@ -99,14 +90,16 @@ export default function ProvidersPage() {
     } else {
       await ProviderService.create(data, idCliente, codeCuenta);
     }
-    await load();
   };
 
   const handleDelete = async (id: string) => {
     if (!idCliente) return;
-    if (window.confirm("¿Eliminar este proveedor definitivamente?")) {
+    const ok = await swalConfirmDelete("¿Eliminar este proveedor?", "Se eliminará de forma definitiva.");
+    if (!ok) return;
+    try {
       await ProviderService.delete(idCliente, id);
-      await load();
+    } catch {
+      void swalError("No se pudo eliminar", "Reintentá o revisá que el proveedor no esté en uso.");
     }
   };
 

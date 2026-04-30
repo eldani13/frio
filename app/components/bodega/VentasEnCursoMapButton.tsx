@@ -1,9 +1,9 @@
 "use client";
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { FiArrowLeft, FiBox, FiCpu, FiPackage, FiX } from "react-icons/fi";
+import { FiArrowLeft, FiBox, FiInfo, FiPackage, FiSend } from "react-icons/fi";
 import { MdPendingActions } from "react-icons/md";
-import type { Client, Role } from "@/app/interfaces/bodega";
+import type { Box, Client, Role } from "@/app/interfaces/bodega";
 import {
   BODEGA_ZONE_STATUS_ICON_ACTIVE_CLASS,
   BODEGA_ZONE_STATUS_ICON_INACTIVE_CLASS,
@@ -12,7 +12,15 @@ import {
   BODEGA_ZONE_STATUS_PILL_ACTIVE_CLASS,
   BODEGA_ZONE_STATUS_PILL_INACTIVE_CLASS,
   clientLabelFromList,
+  OCCUPIED_MAPA_TONE_PRIMARIO,
 } from "@/app/lib/bodegaDisplay";
+import {
+  BODEGA_SLOT_BODY_CLASS,
+  BODEGA_SLOT_ROUNDED,
+  BODEGA_SLOT_SHELL_CLASS,
+  BODEGA_SLOT_SHELL_PADDING,
+  BODEGA_SLOTS_GRID_ALMACEN_CLASS,
+} from "@/app/lib/bodegaSlotUniform";
 import {
   cantidadPrimarioProcesamientoTexto,
   estimadoUnidadesSecundarioTexto,
@@ -21,7 +29,17 @@ import {
 } from "@/app/lib/procesamientoDisplay";
 import { unidadesSecundarioEnterasParaMapa } from "@/app/lib/sobranteKg";
 import { TarjetaOrdenProcesamientoSlotInner } from "@/app/components/BodegaDashboard/ProcesamientoOrdenesActivasBodega";
+import { swalConfirm, swalWarning } from "@/lib/swal";
 import { BodegaDetalleModalFila } from "@/app/components/bodega/CajaDetalleModal";
+import {
+  JefeModalEmptyHint,
+  JefeModalField,
+  JefeOrderModalShell,
+  jefeBtnGhost,
+  jefeModalAccentClass,
+  jefeNestedShellBorder,
+} from "@/app/components/bodega/JefeOrderModalShell";
+import { ModalPlantilla } from "@/app/components/ui/ModalPlantilla";
 import { CatalogoService } from "@/app/services/catalogoService";
 import { OrdenVentaService } from "@/app/services/ordenVentaService";
 import { SolicitudProcesamientoService } from "@/app/services/solicitudProcesamientoService";
@@ -56,9 +74,6 @@ function textoCantidadLinea(li: VentaEnCursoLineItem): string {
   return "—";
 }
 
-const BTN_ASIGNAR_OPERARIO_CLASS =
-  "w-full rounded-lg bg-sky-600 px-3 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-sky-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/50 disabled:opacity-50";
-
 export default function VentasEnCursoMapButton({
   clients,
   warehouseCodeCuenta,
@@ -67,6 +82,7 @@ export default function VentasEnCursoMapButton({
   tareasProcesamientoOperario = [],
   onPushTareaProcesamientoOperario,
   productosCatalogo,
+  outboundBoxes = [],
 }: {
   clients: Client[];
   warehouseCodeCuenta: string;
@@ -75,6 +91,8 @@ export default function VentasEnCursoMapButton({
   tareasProcesamientoOperario?: Array<Record<string, unknown>>;
   onPushTareaProcesamientoOperario?: (tarea: Record<string, unknown>) => void;
   productosCatalogo?: Catalogo[];
+  /** Si ya hay cajas de la venta en zona de salida, no mostrar asignación «almacenamiento → salida». */
+  outboundBoxes?: Box[];
 }) {
   const [open, setOpen] = useState(false);
   const [detalle, setDetalle] = useState<Fila | null>(null);
@@ -290,17 +308,35 @@ export default function VentasEnCursoMapButton({
     );
   }, [detalle, tareasProcesamientoOperario]);
 
+  /** Cajas con trazabilidad OV ya ubicadas en salida: el traslado mapa→salida ya ocurrió. */
+  const ventaCajasYaEnSalida = useMemo(() => {
+    if (!detalle?.id) return false;
+    const vid = String(detalle.id ?? "").trim();
+    const cid = String(detalle.idCliente ?? "").trim();
+    if (!vid || !cid) return false;
+    return outboundBoxes.some((b) => {
+      if (String(b.ordenVentaId ?? "").trim() !== vid) return false;
+      if (String(b.ordenVentaClienteId ?? "").trim() !== cid) return false;
+      return Boolean(String(b.autoId ?? "").trim() || String(b.name ?? "").trim());
+    });
+  }, [detalle, outboundBoxes]);
+
   const handleAsignarSalida = async () => {
     if (!detalle?.id || !onPushTareaProcesamientoOperario) return;
     const op = operariosBodega.find((o) => o.id === operarioAsignarId);
     if (!op?.id) {
-      window.alert("Elegí un operario de bodega.");
+      void swalWarning("Falta operario", "Elegí un operario de bodega.");
       return;
     }
     if (!(detalle.lineItems ?? []).length) {
-      window.alert("La venta no tiene líneas para preparar.");
+      void swalWarning("Sin líneas", "La venta no tiene líneas para preparar.");
       return;
     }
+    const ok = await swalConfirm(
+      "¿Asignar preparación de venta?",
+      `Se enviará la tarea a la cola del operario «${op.name}» para preparar esta venta en salida.`,
+    );
+    if (!ok) return;
     setAsignarSaving(true);
     try {
       const idCliente = detalle.idCliente.trim();
@@ -367,6 +403,38 @@ export default function VentasEnCursoMapButton({
 
   const hayTareasPendientesAlmacen = totalTareasPendientesAlmacen > 0;
 
+  const ventaDetalleTitulo = detalle
+    ? String(detalle.numero ?? "").trim() || detalle.id
+    : "";
+  const ventaDetalleSubtitulo = "Venta en curso: revisá líneas y asignaciones.";
+
+  const listaModalTitulo = "Almacenamiento";
+  const listaModalSubtitulo =
+    "Tareas pendientes de almacenamiento, ventas en curso y órdenes a procesamiento.";
+  const listaModalEncabezadoSup = "Tareas pendientes";
+  const listaModalHeaderIcon = <MdPendingActions className="h-7 w-7 text-slate-800" aria-hidden />;
+
+  const emeraldAccent = jefeModalAccentClass.emerald;
+
+  const solicitudDetalleTitulo =
+    detalleSolicitud != null
+      ? String(detalleSolicitud.numero ?? "").trim() || detalleSolicitud.id
+      : "";
+  const solicitudDetalleSubtitulo =
+    detalleSolicitud != null
+      ? normalizeProcesamientoEstado(detalleSolicitud.estado) === "Iniciado"
+        ? "Retiro en bodega: del mapa hacia procesamiento."
+        : "Orden de procesamiento asociada a esta bodega."
+      : "";
+
+  const modalFooterListado = (
+    <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
+      <button type="button" onClick={cerrarModal} className={jefeBtnGhost}>
+        Cerrar
+      </button>
+    </div>
+  );
+
   return (
     <>
       <button
@@ -393,277 +461,448 @@ export default function VentasEnCursoMapButton({
         </span>
       </button>
 
-      {open ? (
-        <div
-          className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/45 p-3 backdrop-blur-[2px] sm:p-4"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="ventas-en-curso-map-title"
-          onClick={cerrarModal}
+      {open && detalle ? (
+        <JefeOrderModalShell
+          id="venta-en-curso-detalle"
+          title={ventaDetalleTitulo}
+          description={ventaDetalleSubtitulo}
+          accent="emerald"
+          icon={<FiSend className="h-6 w-6" aria-hidden />}
+          onClose={cerrarModal}
+          contentMaxWidthClass="max-w-3xl"
+          bodyMaxHeightClass="max-h-[min(88vh,820px)]"
+          zIndexClass="z-[60]"
+          headerStart={
+            <button
+              type="button"
+              onClick={() => setDetalle(null)}
+              className="flex h-10 w-10 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 shadow-sm transition hover:bg-slate-50"
+              aria-label="Volver al listado"
+            >
+              <FiArrowLeft className="h-5 w-5" />
+            </button>
+          }
+          footer={
+            <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
+              <button type="button" onClick={() => setDetalle(null)} className={jefeBtnGhost}>
+                Volver al listado
+              </button>
+              <button type="button" onClick={cerrarModal} className={jefeBtnGhost}>
+                Cerrar
+              </button>
+            </div>
+          }
         >
-          <div
-            className="flex max-h-[90vh] w-full max-w-3xl flex-col overflow-hidden rounded-3xl border border-sky-200/90 bg-white shadow-2xl shadow-sky-900/10"
-            onClick={(e) => e.stopPropagation()}
+          {error ? (
+            <p className="rounded-lg border border-red-100 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>
+          ) : null}
+
+          <JefeModalField
+            label="Estado"
+            icon={<FiInfo className="h-4 w-4" aria-hidden />}
+            hint="Cuenta, fechas y destino de la venta en esta bodega."
           >
-            <div className="relative shrink-0 border-b border-sky-100 bg-linear-to-r from-sky-50 via-white to-cyan-50/80 px-4 py-4 sm:px-6 sm:py-5">
-              <div className="flex items-start gap-3 sm:gap-4">
-                {detalle || detalleSolicitud ? (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (detalle) setDetalle(null);
-                      else setDetalleSolicitud(null);
-                    }}
-                    className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 shadow-sm transition hover:bg-slate-50"
-                    aria-label="Volver al listado"
+            <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-emerald-100/90 bg-emerald-50/50 px-4 py-3 text-sm">
+              <span
+                className={`rounded-full px-2.5 py-0.5 text-base font-bold uppercase ${ordenCompraEstadoBadgeClass(detalle.estado)}`}
+              >
+                {detalle.estado}
+              </span>
+              <span className="text-slate-600">
+                Cuenta:{" "}
+                <strong className="text-slate-900">{clientLabelFromList(detalle.idCliente, clients)}</strong>
+              </span>
+              {detalle.fecha ? (
+                <span className="text-slate-600">
+                  Fecha: <strong className="text-slate-900">{detalle.fecha}</strong>
+                </span>
+              ) : null}
+              {detalle.destinoWarehouseNombre ? (
+                <span className="w-full text-slate-600 sm:w-auto">
+                  Destino: <strong className="text-slate-900">{detalle.destinoWarehouseNombre}</strong>
+                </span>
+              ) : null}
+            </div>
+          </JefeModalField>
+
+          <JefeModalField
+            label="Productos"
+            icon={<FiPackage className="h-4 w-4" aria-hidden />}
+            hint="Líneas pedidas en esta venta."
+          >
+            {!detalle.lineItems?.length ? (
+              <p className="rounded-xl border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-center text-sm text-slate-500">
+                Esta venta no tiene líneas de producto cargadas.
+              </p>
+            ) : (
+              <ul className="space-y-2">
+                {detalle.lineItems.map((li, idx) => (
+                  <li
+                    key={`${li.catalogoProductId ?? "x"}-${idx}`}
+                    className={`rounded-2xl border bg-linear-to-br from-white to-emerald-50/35 p-4 shadow-sm ${jefeNestedShellBorder.emerald}`}
                   >
-                    <FiArrowLeft className="h-5 w-5" />
-                  </button>
+                    <p className="font-semibold leading-snug text-slate-900">
+                      {li.titleSnapshot?.trim() || "Producto"}
+                    </p>
+                    <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-600">
+                      <span>
+                        <span className="font-medium text-slate-500">Cantidad:</span>{" "}
+                        <strong className="text-slate-800">{textoCantidadLinea(li)}</strong>
+                      </span>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </JefeModalField>
+
+          {esEstadoEnCurso(detalle.estado) && !ventaCajasYaEnSalida ? (
+            <JefeModalField label="Salida a operario" icon={<FiSend className="h-4 w-4" aria-hidden />}>
+              <div className={`rounded-2xl border bg-slate-50/90 px-4 py-3 ${jefeNestedShellBorder.emerald}`}>
+                <p className="text-sm font-bold uppercase tracking-wide text-slate-700">
+                  Tarea pendiente · salida a operario
+                </p>
+                <p className="mt-1 text-xs text-slate-600">
+                  Asigná quién debe llevar del <strong>almacenamiento</strong> a <strong>salida</strong> las cantidades
+                  pedidas en esta venta.
+                </p>
+                {operariosBodega.length === 0 ? (
+                  <p className="mt-2 text-xs text-amber-800">No hay operarios de bodega dados de alta en esta cuenta.</p>
+                ) : tareaSalidaYaExiste ? (
+                  <p className="mt-2 text-xs font-semibold text-emerald-900">
+                    Esta venta ya tiene una tarea de salida en la cola del operario.
+                  </p>
                 ) : (
-                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-sky-100 text-sky-700 shadow-inner">
-                    <MdPendingActions className="h-6 w-6 shrink-0" aria-hidden />
+                  <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-end">
+                    <label className="flex min-w-0 flex-1 flex-col gap-1 text-xs text-slate-600">
+                      <span className="font-semibold text-slate-700">Operario</span>
+                      <select
+                        value={operarioAsignarId}
+                        onChange={(e) => setOperarioAsignarId(e.target.value)}
+                        className={`rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-medium text-slate-900 shadow-sm outline-none transition focus:ring-2 ${emeraldAccent.selectFocus}`}
+                      >
+                        {operariosBodega.map((o) => (
+                          <option key={o.id} value={o.id}>
+                            {o.name}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <button
+                      type="button"
+                      disabled={
+                        asignarSaving ||
+                        !operarioAsignarId ||
+                        !(detalle.lineItems ?? []).length ||
+                        !onPushTareaProcesamientoOperario
+                      }
+                      onClick={() => void handleAsignarSalida()}
+                      className={`shrink-0 rounded-xl px-5 py-2.5 text-sm font-bold text-white shadow-md transition focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/70 disabled:cursor-not-allowed disabled:opacity-50 ${emeraldAccent.primary} ${emeraldAccent.primaryHover}`}
+                    >
+                      {asignarSaving ? "Asignando…" : "Asignar"}
+                    </button>
                   </div>
                 )}
-                <div className="min-w-0 flex-1 pr-10">
-                  <h2
-                    id="ventas-en-curso-map-title"
-                    className="app-title"
-                  >
-                    {detalle ? (
-                      <span className="font-mono">{String(detalle.numero ?? "").trim() || detalle.id}</span>
-                    ) : detalleSolicitud ? (
-                      <span className="font-mono">
-                        {String(detalleSolicitud.numero ?? "").trim() || detalleSolicitud.id}
-                      </span>
-                    ) : (
-                      <>
-                        <span className="block text-base font-semibold uppercase tracking-wide text-sky-800/90">
-                          Tareas pendientes
-                        </span>
-                        <span className="mt-1 block">
-                          Tareas pendientes
-                        </span>
-                      </>
-                    )}
-                  </h2>
-                  <p className="mt-1.5 text-sm leading-relaxed text-slate-600">
-                    {detalle ? (
-                      "Venta en curso: revisá líneas y asignaciones."
-                    ) : detalleSolicitud &&
-                      normalizeProcesamientoEstado(detalleSolicitud.estado) === "Iniciado" ? (
-                      "Retiro en bodega: del mapa hacia procesamiento."
-                    ) : (
-                      "Tareas pendientes de almacenamiento, ventas en curso y órdenes a procesamiento."
-                    )}
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={cerrarModal}
-                  className="absolute right-3 top-3 rounded-xl p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 sm:right-4 sm:top-4"
-                  aria-label="Cerrar"
-                >
-                  <FiX className="h-5 w-5" />
-                </button>
               </div>
+            </JefeModalField>
+          ) : null}
+        </JefeOrderModalShell>
+      ) : null}
+
+      {open && detalleSolicitud ? (
+        <JefeOrderModalShell
+          id="ventas-map-solicitud-proc-detalle"
+          title={solicitudDetalleTitulo}
+          description={solicitudDetalleSubtitulo}
+          accent="emerald"
+          icon={<FiSend className="h-6 w-6" aria-hidden />}
+          onClose={cerrarModal}
+          contentMaxWidthClass="max-w-3xl"
+          bodyMaxHeightClass="max-h-[min(88vh,820px)]"
+          zIndexClass="z-[60]"
+          tituloClassName="font-mono"
+          headerStart={
+            <button
+              type="button"
+              onClick={() => setDetalleSolicitud(null)}
+              className="flex h-10 w-10 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 shadow-sm transition hover:bg-slate-50"
+              aria-label="Volver al listado"
+            >
+              <FiArrowLeft className="h-5 w-5" />
+            </button>
+          }
+          footer={
+            <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
+              <button type="button" onClick={() => setDetalleSolicitud(null)} className={jefeBtnGhost}>
+                Volver al listado
+              </button>
+              <button type="button" onClick={cerrarModal} className={jefeBtnGhost}>
+                Cerrar
+              </button>
             </div>
+          }
+        >
+          {solicitudError ? (
+            <p className="rounded-lg border border-red-100 bg-red-50 px-3 py-2 text-sm text-red-700">{solicitudError}</p>
+          ) : null}
 
-            <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-6 sm:py-5">
-              {error ? (
-                <p className="rounded-lg border border-red-100 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>
+          <JefeModalField
+            label="Estado"
+            icon={<FiInfo className="h-4 w-4" aria-hidden />}
+            hint="Estado de la orden y flujo en esta bodega."
+          >
+            <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-emerald-100/90 bg-emerald-50/50 px-4 py-3 text-sm">
+              <span
+                className={`rounded-full px-2.5 py-0.5 text-base font-bold uppercase ${procesamientoEstadoBadgeClass(detalleSolicitud.estado)}`}
+              >
+                {detalleSolicitud.estado}
+              </span>
+              <span className="text-slate-600">Almacenamiento → procesamiento.</span>
+              {detalleSolicitud.fecha ? (
+                <span className="text-slate-600">
+                  Fecha: <strong className="text-slate-900">{detalleSolicitud.fecha}</strong>
+                </span>
               ) : null}
+            </div>
+          </JefeModalField>
 
-              {detalle ? (
-                <div className="space-y-5">
-                  <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-sky-100 bg-sky-50/60 px-4 py-3 text-sm">
-                    <span
-                      className={`rounded-full px-2.5 py-0.5 text-base font-bold uppercase ${ordenCompraEstadoBadgeClass(detalle.estado)}`}
-                    >
-                      {detalle.estado}
-                    </span>
-                    <span className="text-slate-600">
-                      Cuenta:{" "}
-                      <strong className="text-slate-900">
-                        {clientLabelFromList(detalle.idCliente, clients)}
-                      </strong>
-                    </span>
-                    {detalle.fecha ? (
-                      <span className="text-slate-600">
-                        Fecha: <strong className="text-slate-900">{detalle.fecha}</strong>
-                      </span>
-                    ) : null}
-                    {detalle.destinoWarehouseNombre ? (
-                      <span className="w-full text-slate-600 sm:w-auto">
-                        Destino: <strong className="text-slate-900">{detalle.destinoWarehouseNombre}</strong>
-                      </span>
-                    ) : null}
-                  </div>
-
-                  <div>
-                    <h3 className="app-title mb-3 flex items-center gap-2">
-                      <FiPackage className="h-4 w-4 text-sky-600" aria-hidden />
-                      Productos ({Array.isArray(detalle.lineItems) ? detalle.lineItems.length : 0})
-                    </h3>
-                    {!detalle.lineItems?.length ? (
-                      <p className="rounded-xl border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-center text-sm text-slate-500">
-                        Esta venta no tiene líneas de producto cargadas.
-                      </p>
-                    ) : (
-                      <ul className="space-y-2">
-                        {detalle.lineItems.map((li, idx) => (
-                          <li
-                            key={`${li.catalogoProductId ?? "x"}-${idx}`}
-                            className="rounded-2xl border border-sky-100 bg-linear-to-br from-white to-sky-50/40 p-4 shadow-sm"
-                          >
-                            <p className="font-semibold leading-snug text-slate-900">
-                              {li.titleSnapshot?.trim() || "Producto"}
-                            </p>
-                            <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-600">
-                              <span>
-                                <span className="font-medium text-slate-500">Cantidad:</span>{" "}
-                                <strong className="text-slate-800">{textoCantidadLinea(li)}</strong>
-                              </span>
-                            </div>
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                  </div>
-                </div>
-              ) : detalleSolicitud ? (
-                <div className="space-y-4">
-                  {solicitudError ? (
-                    <p className="rounded-lg border border-red-100 bg-red-50 px-3 py-2 text-sm text-red-700">
-                      {solicitudError}
-                    </p>
-                  ) : null}
-                  <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-sky-100 bg-sky-50/60 px-4 py-3 text-sm">
-                    <FiCpu className="h-4 w-4 shrink-0 text-sky-600" aria-hidden />
-                    <span
-                      className={`rounded-full px-2.5 py-0.5 text-base font-bold uppercase ${procesamientoEstadoBadgeClass(detalleSolicitud.estado)}`}
-                    >
-                      {detalleSolicitud.estado}
-                    </span>
-                    <span className="text-slate-600">Almacenamiento → procesamiento.</span>
-                  </div>
-                  <dl className="space-y-3 text-sm">
-                    {normalizeProcesamientoEstado(detalleSolicitud.estado) === "Iniciado" ? (
-                      <>
+          <JefeModalField
+            label={normalizeProcesamientoEstado(detalleSolicitud.estado) === "Iniciado" ? "Productos" : "Orden"}
+            icon={
+              normalizeProcesamientoEstado(detalleSolicitud.estado) === "Iniciado" ? (
+                <FiPackage className="h-4 w-4" aria-hidden />
+              ) : (
+                <FiBox className="h-4 w-4" aria-hidden />
+              )
+            }
+            hint={
+              normalizeProcesamientoEstado(detalleSolicitud.estado) === "Iniciado"
+                ? "Producto y cantidad a retirar del mapa hacia procesamiento."
+                : "Datos registrados de la solicitud."
+            }
+          >
+            <div
+              className={`rounded-2xl border bg-linear-to-br from-white to-emerald-50/35 p-4 shadow-sm ${jefeNestedShellBorder.emerald}`}
+            >
+              <dl className="space-y-4 text-base">
+                {normalizeProcesamientoEstado(detalleSolicitud.estado) === "Iniciado" ? (
+                  <>
+                    <BodegaDetalleModalFila
+                      label="Producto"
+                      value={(detalleSolicitud.productoPrimarioTitulo || "—").trim() || "—"}
+                    />
+                    {(() => {
+                      const est = detalleSolicitud.estimadoUnidadesSecundario;
+                      if (
+                        est !== undefined &&
+                        est !== null &&
+                        Number.isFinite(Number(est)) &&
+                        unidadesSecundarioEnterasParaMapa(Number(est)) > 0
+                      ) {
+                        const udsMapa = unidadesSecundarioEnterasParaMapa(Number(est));
+                        return <BodegaDetalleModalFila label="Unidades en mapa" value={`${udsMapa} u.`} />;
+                      }
+                      return (
                         <BodegaDetalleModalFila
-                          label="Producto"
-                          value={(detalleSolicitud.productoPrimarioTitulo || "—").trim() || "—"}
-                        />
-                        {(() => {
-                          const est = detalleSolicitud.estimadoUnidadesSecundario;
-                          if (
-                            est !== undefined &&
-                            est !== null &&
-                            Number.isFinite(Number(est)) &&
-                            unidadesSecundarioEnterasParaMapa(Number(est)) > 0
-                          ) {
-                            const udsMapa = unidadesSecundarioEnterasParaMapa(Number(est));
-                            return (
-                              <BodegaDetalleModalFila label="Unidades en mapa" value={`${udsMapa} u.`} />
-                            );
-                          }
-                          return (
-                            <BodegaDetalleModalFila
-                              label="Cantidad"
-                              value={cantidadPrimarioProcesamientoTexto(
-                                detalleSolicitud,
-                                primarioCatalogoPorId(productosCatalogo, detalleSolicitud.productoPrimarioId),
-                              )}
-                            />
-                          );
-                        })()}
-                        {Boolean(
-                          String(detalleSolicitud.operarioBodegaNombre ?? "").trim() ||
-                            String(detalleSolicitud.operarioBodegaUid ?? "").trim(),
-                        ) ? (
-                          <BodegaDetalleModalFila
-                            label="Responsable"
-                            value={
-                              detalleSolicitud.operarioBodegaNombre?.trim() ||
-                              detalleSolicitud.operarioBodegaUid ||
-                              "—"
-                            }
-                          />
-                        ) : null}
-                      </>
-                    ) : (
-                      <>
-                        <BodegaDetalleModalFila
-                          label="Número"
-                          value={<span className="font-mono font-semibold">{detalleSolicitud.numero}</span>}
-                        />
-                        <BodegaDetalleModalFila
-                          label="Cliente"
-                          value={detalleSolicitud.clientName?.trim() || detalleSolicitud.clientId || "—"}
-                        />
-                        <BodegaDetalleModalFila
-                          label="Producto primario"
-                          value={(detalleSolicitud.productoPrimarioTitulo || "—").trim() || "—"}
-                        />
-                        <BodegaDetalleModalFila
-                          label="Cantidad primario"
+                          label="Cantidad"
                           value={cantidadPrimarioProcesamientoTexto(
                             detalleSolicitud,
                             primarioCatalogoPorId(productosCatalogo, detalleSolicitud.productoPrimarioId),
                           )}
                         />
+                      );
+                    })()}
+                    {Boolean(
+                      String(detalleSolicitud.operarioBodegaNombre ?? "").trim() ||
+                        String(detalleSolicitud.operarioBodegaUid ?? "").trim(),
+                    ) ? (
+                      <BodegaDetalleModalFila
+                        label="Responsable"
+                        value={
+                          detalleSolicitud.operarioBodegaNombre?.trim() ||
+                          detalleSolicitud.operarioBodegaUid ||
+                          "—"
+                        }
+                      />
+                    ) : null}
+                  </>
+                ) : (
+                  <>
+                    <BodegaDetalleModalFila
+                      label="Número"
+                      value={<span className="font-mono font-semibold">{detalleSolicitud.numero}</span>}
+                    />
+                    <BodegaDetalleModalFila
+                      label="Cliente"
+                      value={detalleSolicitud.clientName?.trim() || detalleSolicitud.clientId || "—"}
+                    />
+                    <BodegaDetalleModalFila
+                      label="Producto primario"
+                      value={(detalleSolicitud.productoPrimarioTitulo || "—").trim() || "—"}
+                    />
+                    <BodegaDetalleModalFila
+                      label="Cantidad primario"
+                      value={cantidadPrimarioProcesamientoTexto(
+                        detalleSolicitud,
+                        primarioCatalogoPorId(productosCatalogo, detalleSolicitud.productoPrimarioId),
+                      )}
+                    />
+                    <BodegaDetalleModalFila
+                      label="Producto secundario"
+                      value={(detalleSolicitud.productoSecundarioTitulo || "—").trim() || "—"}
+                    />
+                    <BodegaDetalleModalFila
+                      label="Precio secundario (catálogo)"
+                      value={textoPrecioSecundarioCatalogo(productosCatalogo, detalleSolicitud.productoSecundarioId)}
+                    />
+                    {detalleSolicitud.estimadoUnidadesSecundario !== undefined &&
+                    detalleSolicitud.estimadoUnidadesSecundario !== null &&
+                    Number.isFinite(Number(detalleSolicitud.estimadoUnidadesSecundario)) ? (
+                      <>
                         <BodegaDetalleModalFila
-                          label="Producto secundario"
-                          value={(detalleSolicitud.productoSecundarioTitulo || "—").trim() || "—"}
+                          label="Unidades secundario (estimado)"
+                          value={estimadoUnidadesSecundarioTexto(Number(detalleSolicitud.estimadoUnidadesSecundario))}
                         />
-                        <BodegaDetalleModalFila
-                          label="Precio secundario (catálogo)"
-                          value={textoPrecioSecundarioCatalogo(
-                            productosCatalogo,
-                            detalleSolicitud.productoSecundarioId,
-                          )}
-                        />
-                        {detalleSolicitud.estimadoUnidadesSecundario !== undefined &&
-                        detalleSolicitud.estimadoUnidadesSecundario !== null &&
-                        Number.isFinite(Number(detalleSolicitud.estimadoUnidadesSecundario)) ? (
-                          <>
-                            <BodegaDetalleModalFila
-                              label="Unidades secundario (estimado)"
-                              value={estimadoUnidadesSecundarioTexto(
-                                Number(detalleSolicitud.estimadoUnidadesSecundario),
-                              )}
-                            />
-                            {(() => {
-                              const udsMapa = unidadesSecundarioEnterasParaMapa(
-                                Number(detalleSolicitud.estimadoUnidadesSecundario),
-                              );
-                              if (udsMapa <= 0) return null;
-                              return (
-                                <BodegaDetalleModalFila
-                                  label="Unidades en mapa (enteras)"
-                                  value={`${udsMapa} u.`}
-                                />
-                              );
-                            })()}
-                          </>
-                        ) : null}
-                        {Boolean(
-                          String(detalleSolicitud.operarioBodegaNombre ?? "").trim() ||
-                            String(detalleSolicitud.operarioBodegaUid ?? "").trim(),
-                        ) ? (
-                          <BodegaDetalleModalFila
-                            label="Responsable"
-                            value={
-                              detalleSolicitud.operarioBodegaNombre?.trim() ||
-                              detalleSolicitud.operarioBodegaUid ||
-                              "—"
-                            }
-                          />
-                        ) : null}
+                        {(() => {
+                          const udsMapa = unidadesSecundarioEnterasParaMapa(
+                            Number(detalleSolicitud.estimadoUnidadesSecundario),
+                          );
+                          if (udsMapa <= 0) return null;
+                          return (
+                            <BodegaDetalleModalFila label="Unidades en mapa (enteras)" value={`${udsMapa} u.`} />
+                          );
+                        })()}
                       </>
-                    )}
-                  </dl>
+                    ) : null}
+                    {Boolean(
+                      String(detalleSolicitud.operarioBodegaNombre ?? "").trim() ||
+                        String(detalleSolicitud.operarioBodegaUid ?? "").trim(),
+                    ) ? (
+                      <BodegaDetalleModalFila
+                        label="Responsable"
+                        value={
+                          detalleSolicitud.operarioBodegaNombre?.trim() ||
+                          detalleSolicitud.operarioBodegaUid ||
+                          "—"
+                        }
+                      />
+                    ) : null}
+                  </>
+                )}
+              </dl>
+            </div>
+          </JefeModalField>
+
+          {normalizeProcesamientoEstado(detalleSolicitud.estado) === "Iniciado" ? (
+            puedeAsignarSolicitud ? (
+              <JefeModalField
+                label="Retiro en bodega"
+                icon={<FiSend className="h-4 w-4" aria-hidden />}
+                hint="El operario retirará el primario del mapa hacia la zona de procesamiento."
+              >
+                <div className={`rounded-2xl border bg-slate-50/90 px-4 py-3 ${jefeNestedShellBorder.emerald}`}>
+                  <p className="text-sm font-bold uppercase tracking-wide text-slate-700">
+                    Tarea pendiente · retiro en bodega
+                  </p>
+                  <p className="mt-1 text-xs text-slate-600">
+                    Elegí operario y confirmá para mandar la tarea a su cola.
+                  </p>
+                  {(() => {
+                    const yaFs = Boolean(String(detalleSolicitud.operarioBodegaUid ?? "").trim());
+                    const yaCola = tareasProcesamientoOperario.some(
+                      (t) =>
+                        String(t.clientId ?? "") === detalleSolicitud.clientId &&
+                        String(t.solicitudId ?? "") === detalleSolicitud.id,
+                    );
+                    const asignado = yaFs || yaCola;
+                    const puedePulsar =
+                      Boolean(responsableSeleccionadoSolicitud) &&
+                      !asignado &&
+                      !solicitudModalBusy &&
+                      Boolean(onPushTareaProcesamientoOperario);
+                    const variosOperarios = operariosBodega.length > 1;
+                    return (
+                      <>
+                        {operariosBodega.length === 0 ? (
+                          <p className="mt-2 rounded-md border border-amber-100 bg-amber-50 px-2.5 py-1.5 text-sm text-amber-900">
+                            Sin operarios configurados.
+                          </p>
+                        ) : null}
+                        <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-end">
+                          {variosOperarios ? (
+                            <label className="flex min-w-0 flex-1 flex-col gap-1 text-xs text-slate-600">
+                              <span className="font-semibold text-slate-700">Operario</span>
+                              <select
+                                id="ventas-map-proc-asignar-a"
+                                aria-label="Operario"
+                                className={`w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-medium text-slate-900 shadow-sm outline-none transition focus:ring-2 ${emeraldAccent.selectFocus}`}
+                                value={asignadoUidSolicitud}
+                                onChange={(e) => setAsignadoUidSolicitud(e.target.value)}
+                                disabled={asignado || solicitudModalBusy}
+                              >
+                                {operariosBodega.map((o) => (
+                                  <option key={o.id} value={o.id}>
+                                    {(o.name || "Sin nombre").trim()}
+                                    {o.roleLabel ? ` · ${o.roleLabel}` : ""}
+                                  </option>
+                                ))}
+                              </select>
+                            </label>
+                          ) : null}
+                          {operariosBodega.length > 0 ? (
+                            <button
+                              type="button"
+                              title={
+                                asignado
+                                  ? "Ya pasó a la cola del operario o figura responsable en la orden"
+                                  : !responsableSeleccionadoSolicitud
+                                    ? "Sin responsable en el sistema"
+                                    : "Pasar a la cola del operario (retiro desde almacenamiento)"
+                              }
+                              disabled={!puedePulsar}
+                              onClick={() => void asignarOperarioSolicitud()}
+                              className={`shrink-0 rounded-xl px-5 py-2.5 text-sm font-bold text-white shadow-md transition focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/70 disabled:cursor-not-allowed disabled:opacity-50 sm:min-w-[9.5rem] ${variosOperarios ? "" : "w-full"} ${emeraldAccent.primary} ${emeraldAccent.primaryHover}`}
+                            >
+                              {asignado ? "En cola / asignado" : "Asignar"}
+                            </button>
+                          ) : null}
+                        </div>
+                      </>
+                    );
+                  })()}
                 </div>
-              ) : loading ? (
+              </JefeModalField>
+            ) : (
+              <JefeModalEmptyHint>
+                <>
+                  Solo <strong className="font-semibold">jefe</strong> o{" "}
+                  <strong className="font-semibold">administrador</strong> pueden asignar el operario que retira el
+                  primario hacia procesamiento.
+                </>
+              </JefeModalEmptyHint>
+            )
+          ) : null}
+        </JefeOrderModalShell>
+      ) : null}
+
+      <ModalPlantilla
+        open={open && !detalle && !detalleSolicitud}
+        onClose={cerrarModal}
+        titulo={listaModalTitulo}
+        tituloId="ventas-en-curso-map-title"
+        headerIcon={listaModalHeaderIcon}
+        encabezadoSup={listaModalEncabezadoSup}
+        subtitulo={listaModalSubtitulo}
+        maxWidthClass="max-w-3xl"
+        cardMaxHeightClass="max-h-[90vh]"
+        zIndexClass="z-[60]"
+        footer={modalFooterListado}
+      >
+              {error ? (
+                <p className="rounded-lg border border-red-100 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>
+              ) : null}
+
+              {loading ? (
                 <p className="text-sm text-slate-600">Cargando ventas…</p>
               ) : clientIds.length === 0 ? (
                 <p className="text-sm text-slate-600">No hay clientes con este código de cuenta.</p>
@@ -677,53 +916,62 @@ export default function VentasEnCursoMapButton({
                       Ventas en curso
                     </h3>
                     {filas.length === 0 ? (
-                      <p className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/60 px-3 py-6 text-sm text-slate-600">
-                        No hay <strong className="text-slate-800">ventas</strong> en estado{" "}
-                        <strong className="text-slate-800">En curso</strong>.
-                      </p>
+                      <div className="-mx-5 border-y border-slate-100 py-10 text-center text-base leading-relaxed text-slate-600 sm:-mx-6">
+                        No hay <strong className="font-semibold text-slate-800">ventas</strong> en estado{" "}
+                        <strong className="font-semibold text-slate-800">En curso</strong>.
+                      </div>
                     ) : (
-                      <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4">
-                        {filas.map((row) => {
-                          const nLineas = Array.isArray(row.lineItems) ? row.lineItems.length : 0;
+                      <ul className={BODEGA_SLOTS_GRID_ALMACEN_CLASS} role="list">
+                        {filas.map((row, cardIdx) => {
                           const comprador = String(row.compradorNombre ?? "").trim() || "—";
-                          const cuenta = clientLabelFromList(row.idCliente, clients);
                           const num = String(row.numero ?? "").trim() || row.id.slice(0, 8);
+                          const tone = OCCUPIED_MAPA_TONE_PRIMARIO;
+                          const estadoPill =
+                            row.estado.length > 10 ? "En curso" : row.estado;
+                          const subId = [num, row.fecha?.trim()].filter(Boolean).join(" · ");
                           return (
                             <li key={`${row.idCliente}::${row.id}`} className="min-w-0">
                               <button
                                 type="button"
                                 onClick={() => setDetalle(row)}
-                                className="flex w-full min-w-0 flex-col overflow-hidden rounded-3xl border border-sky-200/90 bg-white p-3 text-left shadow-md ring-sky-200/40 transition hover:border-sky-300 hover:shadow-lg hover:ring-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-400"
+                                className={`${BODEGA_SLOT_SHELL_CLASS} relative flex w-full flex-col ${BODEGA_SLOT_ROUNDED} ${BODEGA_SLOT_SHELL_PADDING} transition focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-400/70 focus-visible:ring-offset-1 ${tone.shell}`}
+                                aria-label={`Ver venta ${num}`}
                               >
-                                <div className="flex min-h-[2rem] shrink-0 items-start justify-between gap-2 border-b border-sky-100/90 pb-2">
-                                  <span className="min-w-0 truncate font-mono text-base font-bold uppercase tracking-wide text-slate-800 sm:text-base">
-                                    {num}
-                                  </span>
-                                  <span
-                                    className={`shrink-0 rounded-full px-2 py-0.5 text-base font-bold uppercase leading-tight ${ordenCompraEstadoBadgeClass(row.estado)}`}
-                                  >
-                                    {row.estado.length > 10 ? "En curso" : row.estado}
-                                  </span>
-                                </div>
-                                <div className="flex flex-1 flex-col items-center px-1 pt-3 text-center">
-                                  <FiBox className="h-5 w-5 text-sky-600" aria-hidden />
-                                  <p
-                                    className="mt-2 line-clamp-2 min-h-[2.25rem] w-full text-base font-semibold leading-snug text-slate-900 sm:text-xs"
-                                    title={comprador}
-                                  >
-                                    {comprador}
-                                  </p>
-                                  <p className="mt-1 line-clamp-1 w-full text-base text-slate-500" title={cuenta}>
-                                    {cuenta}
-                                  </p>
-                                </div>
-                                <div className="mt-3 flex shrink-0 flex-col gap-1 border-t border-sky-100/90 pt-2">
-                                  <div className="rounded-full bg-sky-100 px-2 py-1.5 text-center text-base font-semibold text-sky-950">
-                                    {nLineas} {nLineas === 1 ? "línea" : "líneas"}
+                                <span
+                                  className={`absolute left-2 top-2 z-10 text-xs leading-none ${tone.positionLabel}`}
+                                >
+                                  {cardIdx + 1}
+                                </span>
+                                <div className={BODEGA_SLOT_BODY_CLASS}>
+                                  <div className={tone.inner}>
+                                    <div className="flex min-h-0 min-w-0 flex-1 gap-2 overflow-hidden">
+                                      <FiBox
+                                        className={`mt-0.5 h-4 w-4 shrink-0 sm:h-[18px] sm:w-[18px] ${tone.icon}`}
+                                        aria-hidden
+                                      />
+                                      <div className="min-w-0 flex-1">
+                                        <div
+                                          className={`truncate font-semibold leading-tight text-base ${tone.name}`}
+                                          title={comprador}
+                                        >
+                                          {comprador}
+                                        </div>
+                                        <div
+                                          className={`mt-0.5 truncate font-mono leading-tight text-base ${tone.id}`}
+                                          title={subId}
+                                        >
+                                          {subId}
+                                        </div>
+                                      </div>
+                                    </div>
+                                    <div className="mt-2 flex shrink-0 justify-center">
+                                      <span
+                                        className={`inline-block max-w-full truncate rounded-full px-2 py-0.5 text-base font-medium ${tone.pill}`}
+                                      >
+                                        {estadoPill}
+                                      </span>
+                                    </div>
                                   </div>
-                                  {row.fecha ? (
-                                    <div className="text-center text-base font-medium text-slate-500">{row.fecha}</div>
-                                  ) : null}
                                 </div>
                               </button>
                             </li>
@@ -748,192 +996,33 @@ export default function VentasEnCursoMapButton({
                       procesamiento.
                     </p>
                     {filasSoloIniciado.length === 0 ? (
-                      <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/60 px-3 py-6 text-center text-sm text-slate-600">
-                        Ninguna orden en <strong className="text-slate-800">Iniciado</strong>.
+                      <div className="-mx-5 border-y border-slate-100 py-10 text-center text-base leading-relaxed text-slate-600 sm:-mx-6">
+                        Ninguna orden en <strong className="font-semibold text-slate-800">Iniciado</strong>.
                       </div>
                     ) : (
-                      <div
-                        className="grid grid-cols-1 gap-3 sm:grid-cols-2"
+                      <ul
+                        className={BODEGA_SLOTS_GRID_ALMACEN_CLASS}
                         role="list"
                         aria-label="Órdenes de almacenamiento hacia procesamiento"
                       >
-                        {filasSoloIniciado.map((row) => (
-                          <div key={`${row.clientId}::${row.id}`} role="listitem" className="w-full min-w-0">
+                        {filasSoloIniciado.map((row, cardIdx) => (
+                          <li key={`${row.clientId}::${row.id}`} className="min-w-0">
                             <TarjetaOrdenProcesamientoSlotInner
                               row={row}
+                              cornerLabel={cardIdx + 1}
                               onSelect={(r) => {
                                 setSolicitudError(null);
                                 setDetalleSolicitud(r);
                               }}
                             />
-                          </div>
+                          </li>
                         ))}
-                      </div>
+                      </ul>
                     )}
                   </section>
                 </div>
               )}
-            </div>
-
-            <div className="flex shrink-0 flex-col gap-3 border-t border-sky-100 bg-sky-50/50 px-4 py-4 sm:px-6">
-              {detalleSolicitud && normalizeProcesamientoEstado(detalleSolicitud.estado) === "Iniciado" ? (
-                puedeAsignarSolicitud ? (
-                  <div className="rounded-2xl border border-sky-200/80 bg-white px-4 py-3 shadow-sm">
-                    <p className="text-base font-bold uppercase tracking-wide text-sky-800/90">
-                      Tarea pendiente · retiro en bodega
-                    </p>
-                    <p className="mt-1 text-xs text-slate-600">
-                      {normalizeProcesamientoEstado(detalleSolicitud.estado) === "Iniciado" ? (
-                        "Elegí operario y confirmá para mandar la tarea a su cola."
-                      ) : (
-                        <>
-                          Asigná el operario que debe retirar el <strong>primario</strong> del mapa hacia{" "}
-                          <strong>procesamiento</strong>.
-                        </>
-                      )}
-                    </p>
-                    {(() => {
-                      const yaFs = Boolean(String(detalleSolicitud.operarioBodegaUid ?? "").trim());
-                      const yaCola = tareasProcesamientoOperario.some(
-                        (t) =>
-                          String(t.clientId ?? "") === detalleSolicitud.clientId &&
-                          String(t.solicitudId ?? "") === detalleSolicitud.id,
-                      );
-                      const asignado = yaFs || yaCola;
-                      const puedePulsar =
-                        Boolean(responsableSeleccionadoSolicitud) &&
-                        !asignado &&
-                        !solicitudModalBusy &&
-                        Boolean(onPushTareaProcesamientoOperario);
-                      const variosOperarios = operariosBodega.length > 1;
-                      return (
-                        <>
-                          {operariosBodega.length === 0 ? (
-                            <p className="mt-2 rounded-md border border-amber-100 bg-amber-50 px-2.5 py-1.5 text-base text-amber-900">
-                              Sin operarios configurados.
-                            </p>
-                          ) : null}
-                          {variosOperarios ? (
-                            <select
-                              id="ventas-map-proc-asignar-a"
-                              aria-label="Operario"
-                              className="mt-3 w-full rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-sm text-slate-900 focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-400/50"
-                              value={asignadoUidSolicitud}
-                              onChange={(e) => setAsignadoUidSolicitud(e.target.value)}
-                              disabled={asignado || solicitudModalBusy}
-                            >
-                              {operariosBodega.map((o) => (
-                                <option key={o.id} value={o.id}>
-                                  {(o.name || "Sin nombre").trim()}
-                                  {o.roleLabel ? ` · ${o.roleLabel}` : ""}
-                                </option>
-                              ))}
-                            </select>
-                          ) : null}
-                          {operariosBodega.length > 0 ? (
-                            <button
-                              type="button"
-                              title={
-                                asignado
-                                  ? "Ya pasó a la cola del operario o figura responsable en la orden"
-                                  : !responsableSeleccionadoSolicitud
-                                    ? "Sin responsable en el sistema"
-                                    : "Pasar a la cola del operario (retiro desde almacenamiento)"
-                              }
-                              disabled={!puedePulsar}
-                              onClick={() => void asignarOperarioSolicitud()}
-                              className={`mt-3 ${BTN_ASIGNAR_OPERARIO_CLASS}`}
-                            >
-                              {asignado ? "En cola / asignado" : "Asignar a operario"}
-                            </button>
-                          ) : null}
-                        </>
-                      );
-                    })()}
-                  </div>
-                ) : (
-                  <p className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-xs leading-relaxed text-slate-600">
-                    Solo <strong className="text-slate-800">jefe</strong> o{" "}
-                    <strong className="text-slate-800">administrador</strong> pueden asignar el operario que retira el
-                    primario hacia procesamiento.
-                  </p>
-                )
-              ) : null}
-              {detalle && esEstadoEnCurso(detalle.estado) ? (
-                <div className="rounded-2xl border border-sky-200/80 bg-white px-4 py-3 shadow-sm">
-                  <p className="text-base font-bold uppercase tracking-wide text-sky-800/90">
-                    Tarea pendiente · salida a operario
-                  </p>
-                  <p className="mt-1 text-xs text-slate-600">
-                    Asigná quién debe llevar del <strong>almacenamiento</strong> a <strong>salida</strong> las
-                    cantidades pedidas en esta venta.
-                  </p>
-                  {operariosBodega.length === 0 ? (
-                    <p className="mt-2 text-xs text-amber-800">
-                      No hay operarios de bodega dados de alta en esta cuenta.
-                    </p>
-                  ) : tareaSalidaYaExiste ? (
-                    <p className="mt-2 text-xs font-semibold text-sky-900">
-                      Esta venta ya tiene una tarea de salida en la cola del operario.
-                    </p>
-                  ) : (
-                    <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center">
-                      <label className="flex min-w-0 flex-1 flex-col gap-1 text-xs text-slate-600">
-                        <span className="font-semibold text-slate-700">Operario</span>
-                        <select
-                          value={operarioAsignarId}
-                          onChange={(e) => setOperarioAsignarId(e.target.value)}
-                          className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-900"
-                        >
-                          {operariosBodega.map((o) => (
-                            <option key={o.id} value={o.id}>
-                              {o.name}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                      <button
-                        type="button"
-                        disabled={
-                          asignarSaving ||
-                          !operarioAsignarId ||
-                          !(detalle.lineItems ?? []).length ||
-                          !onPushTareaProcesamientoOperario
-                        }
-                        onClick={handleAsignarSalida}
-                        className="shrink-0 rounded-xl bg-linear-to-r from-sky-600 to-cyan-600 px-5 py-2.5 text-sm font-bold text-white shadow-md transition hover:from-sky-700 hover:to-cyan-700 disabled:cursor-not-allowed disabled:opacity-50"
-                      >
-                        {asignarSaving ? "Asignando…" : "Asignar"}
-                      </button>
-                    </div>
-                  )}
-                </div>
-              ) : null}
-              <div className="flex flex-wrap gap-2">
-                {detalle || detalleSolicitud ? (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (detalle) setDetalle(null);
-                      else setDetalleSolicitud(null);
-                    }}
-                    className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50"
-                  >
-                    Volver al listado
-                  </button>
-                ) : null}
-                <button
-                  type="button"
-                  onClick={cerrarModal}
-                  className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50"
-                >
-                  Cerrar
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      ) : null}
+      </ModalPlantilla>
     </>
   );
 }

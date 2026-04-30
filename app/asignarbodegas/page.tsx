@@ -20,23 +20,24 @@ export default function AsignarBodegasPage({ estado }: { estado: string }) {
     [bodegasAsignadas, estado],
   );
 
-  const fetchBodegas = async () => {
-    if (codeCuenta) {
-      setIsFetching(true);
-      try {
-        const list = await AsignarBodegaService.getWarehousesByCode(codeCuenta);
-        setBodegasAsignadas(list ?? []); 
-      } catch (error) {
-        console.error("Error al traer bodegas:", error);
-        setBodegasAsignadas([]);
-      } finally {
-        setIsFetching(false);
-      }
-    }
-  };
-
   useEffect(() => {
-    if (!loading) fetchBodegas();
+    if (loading) return;
+    const cc = codeCuenta.trim();
+    if (!cc) {
+      setBodegasAsignadas([]);
+      setIsFetching(false);
+      return;
+    }
+    setIsFetching(true);
+    const unsub = AsignarBodegaService.subscribeWarehousesByCode(
+      cc,
+      (list) => {
+        setBodegasAsignadas(list ?? []);
+        setIsFetching(false);
+      },
+      () => setIsFetching(false),
+    );
+    return () => unsub();
   }, [codeCuenta, loading]);
 
   if (loading) return <div className="p-8 text-center animate-pulse">Cargando sesión...</div>;
@@ -94,7 +95,7 @@ export default function AsignarBodegasPage({ estado }: { estado: string }) {
       <BodegaAsignarModal 
         isOpen={modalOpen} 
         onClose={() => setModalOpen(false)} 
-        onSuccess={fetchBodegas}
+        onSuccess={async () => {}}
         clientId={clientId} 
         estado={estado}
       /> 

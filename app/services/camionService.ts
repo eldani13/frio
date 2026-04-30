@@ -1,15 +1,16 @@
 import { db } from "@/lib/firebaseClient";
-import { 
-  collection, 
-  addDoc, 
-  getDocs, 
-  deleteDoc, 
-  doc, 
-  updateDoc, 
-  query, 
+import {
+  collection,
+  addDoc,
+  getDocs,
+  deleteDoc,
+  doc,
+  updateDoc,
+  query,
   where, // Agregado para el filtro
   orderBy,
-  limit
+  limit,
+  onSnapshot,
 } from "firebase/firestore";
 import { Camion } from "@/app/types/camion";
 
@@ -49,6 +50,26 @@ export const TruckService = {
       console.error("Error en TruckService.getAll:", error instanceof Error ? error.message : error);
       return [];
     }
+  },
+
+  subscribeByCodeCuenta(
+    idCliente: string,
+    codeCuenta: string,
+    onNext: (rows: Camion[]) => void,
+    onError?: (e: Error) => void,
+  ): () => void {
+    if (!idCliente?.trim()) {
+      onNext([]);
+      return () => {};
+    }
+    const q = query(getColRef(idCliente), where("codeCuenta", "==", codeCuenta));
+    return onSnapshot(
+      q,
+      (snap) => {
+        onNext(snap.docs.map((d) => ({ id: d.id, ...d.data() } as Camion)));
+      },
+      (err) => onError?.(err as Error),
+    );
   },
 
   /** Crea camión con correlativo por cliente; persiste codeCuenta en el documento. */

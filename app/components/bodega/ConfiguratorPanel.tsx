@@ -185,7 +185,7 @@ export default function ConfiguratorPanel({
     cliente: "administrador de cuentas",
     configurador: "configurador",
     operadorCuentas: "operador de cuentas",
-    transporte: "transporte (entregas venta)",
+    transporte: "transporte",
   };
 
   const warehouseNameByAccountCode = useMemo(() => {

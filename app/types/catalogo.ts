@@ -2,6 +2,11 @@ export interface Catalogo {
     id?: string;               // ID de documento en Firebase
     numericId: number;         // Autonumérico
     code: string;              // Base 36
+    /**
+     * Código de correlación con ubicaciones en almacenamiento (mín. 4 dígitos con ceros).
+     * No se muestra en la UI; primarios y secundarios lo reciben al crear/importar.
+     */
+    almacenProductCode?: string;
     createdAt: number;
     
     // Campos del formulario

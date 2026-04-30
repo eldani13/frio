@@ -9,6 +9,7 @@ import { HiOutlinePlus, HiOutlineSquares2X2, HiOutlineMagnifyingGlass } from "re
 import { useAuth } from "@/app/context/AuthContext";
 import { ImportExcel } from "@/app/utils/importarExcelCatalogo";
 import { precioCatalogoNumerico } from "@/lib/catalogoPrecio";
+import { swalConfirmDelete, swalError, swalSuccess } from "@/lib/swal";
 
 export default function CatalogoPage() {
   const [productos, setProductos] = useState<Catalogo[]>([]);
@@ -27,20 +28,23 @@ export default function CatalogoPage() {
   const codeCuenta = session?.codeCuenta ?? "";
   const idCliente = session?.clientId ?? "";
 
-  const load = async () => {
-    setLoading(true);
-    if (!idCliente) {
+  useEffect(() => {
+    if (!idCliente.trim()) {
       setProductos([]);
       setLoading(false);
       return;
     }
-    const data = await CatalogoService.getAll(idCliente, codeCuenta);
-    setProductos(data);
-    setLoading(false);
-  };
-
-  useEffect(() => {
-    void load();
+    setLoading(true);
+    const unsub = CatalogoService.subscribeByCodeCuenta(
+      idCliente,
+      codeCuenta,
+      (data) => {
+        setProductos(data);
+        setLoading(false);
+      },
+      () => setLoading(false),
+    );
+    return () => unsub();
   }, [idCliente, codeCuenta]);
 
   // --- LÓGICA DE PROCESAMIENTO (Memoizada para rendimiento) ---
@@ -106,10 +110,9 @@ export default function CatalogoPage() {
     setLoading(true);
     try {
       await CatalogoService.importMany(data, idCliente, codeCuenta);
-      alert("¡Importación exitosa!");
-      await load();
+      void swalSuccess("Importación exitosa", "Los productos se cargaron en el catálogo.");
     } catch (_error) {
-      alert("Error al importar los datos.");
+      void swalError("Error al importar", "No se pudieron importar los datos. Revisá el archivo e intentá de nuevo.");
     } finally {
       setLoading(false);
     }
@@ -121,26 +124,27 @@ export default function CatalogoPage() {
       if (selectedProducto?.id) {
         await CatalogoService.update(idCliente, selectedProducto.id, data);
       } else {
-        await CatalogoService.create(data as Omit<Catalogo, "id" | "numericId" | "code" | "createdAt" | "codeCuenta">, idCliente, codeCuenta);
+        await CatalogoService.create(data as Omit<Catalogo, "id" | "numericId" | "code" | "almacenProductCode" | "createdAt" | "codeCuenta">, idCliente, codeCuenta);
       }
       setIsModalOpen(false);
-      await load();
     } catch (_error) {
-      alert("Hubo un error al procesar la solicitud.");
+      void swalError("Error", "Hubo un error al procesar la solicitud.");
     }
   };
 
   const handleSecundarioSuccess = async (data: Partial<Catalogo>) => {
     if (!idCliente) throw new Error("sin_cliente");
-    await CatalogoService.create(data as Omit<Catalogo, "id" | "numericId" | "code" | "createdAt" | "codeCuenta">, idCliente, codeCuenta);
-    await load();
+    await CatalogoService.create(data as Omit<Catalogo, "id" | "numericId" | "code" | "almacenProductCode" | "createdAt" | "codeCuenta">, idCliente, codeCuenta);
   };
 
   const handleDelete = async (id: string) => {
     if (!idCliente) return;
-    if (window.confirm("¿Estás seguro de eliminar este producto?")) {
+    const ok = await swalConfirmDelete("¿Eliminar este producto?", "Se quitará del catálogo de forma definitiva.");
+    if (!ok) return;
+    try {
       await CatalogoService.delete(idCliente, id);
-      await load();
+    } catch {
+      void swalError("No se pudo eliminar", "Reintentá o revisá que el producto no esté en uso.");
     }
   };
 

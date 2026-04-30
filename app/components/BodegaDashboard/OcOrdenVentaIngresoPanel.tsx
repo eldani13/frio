@@ -11,12 +11,15 @@ import { formatKgEs, parseDecimalEs } from "@/app/lib/decimalEs";
 import { ordenCompraIngresoLineKey } from "@/app/lib/ordenCompraIngresoLineKey";
 import { CatalogoService } from "@/app/services/catalogoService";
 import type { Catalogo } from "@/app/types/catalogo";
+import { almacenProductCodeFromCatalogo } from "@/lib/almacenProductCode";
+import { swalConfirm } from "@/lib/swal";
 
 export type LineaIngresoDesdeVenta = {
   catalogoProductId: string;
   name: string;
   temperature: number;
   quantityKg: number;
+  almacenProductCode?: string;
 };
 
 export type IngresoDesdeOrdenVentaPayload = {
@@ -52,6 +55,10 @@ function esEstadoEnCurso(estado: string): boolean {
   return estado.trim().toLowerCase() === "en curso";
 }
 
+function ordenVentaKey(o: Pick<VentaPendienteCartonaje, "idClienteDueno" | "id">): string {
+  return `${String(o.idClienteDueno ?? "").trim()}::${String(o.id ?? "").trim()}`;
+}
+
 /** Pares cliente + venta deducidos de cajas en zona de salida con trazabilidad OV. */
 function paresOrdenVentaDesdeSalida(boxes: Box[]): Array<{ cid: string; vid: string }> {
   const seen = new Set<string>();
@@ -73,10 +80,10 @@ type Props = {
   isBodegaInterna: boolean;
   /** Cajas en salida de esta bodega: sirven para detectar ventas «En curso» listas para ingreso. */
   outboundBoxes: Box[];
-  /** Clave `idCliente::idVenta` si ya se armó el paquete para despacho (columna orden de salida). */
+  /** Claves `idCliente::idVenta` ordenadas y unidas con `|` si ya se armó el paquete (una o varias ventas). */
   paqueteActivoKey?: string;
-  /** Armar paquete con todas las líneas de la venta para enviarlo junto en «Orden de salida». */
-  onArmarPaquete?: (orden: VentaPendienteCartonaje) => void;
+  /** Armar paquete: una o varias ventas del mismo camión en «Orden de salida». */
+  onArmarPaquete?: (ordenes: VentaPendienteCartonaje[]) => void;
   onRegistrar: (payload: IngresoDesdeOrdenVentaPayload) => Promise<void> | void;
   /** Ej. `h-full min-h-0 overflow-y-auto` para igualar altura con otro panel en la misma columna. */
   className?: string;
@@ -111,6 +118,8 @@ export function OcOrdenVentaIngresoPanel({
   const [catalogos, setCatalogos] = useState<Catalogo[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  /** En «Orden de salida»: ventas marcadas para un mismo envío al transporte. */
+  const [salidaPaqueteKeys, setSalidaPaqueteKeys] = useState<string[]>([]);
 
   const reload = useCallback(() => {
     if (!warehouseId.trim() || !isBodegaInterna) {
@@ -132,9 +141,14 @@ export function OcOrdenVentaIngresoPanel({
         list.sort((a, b) => (b.numericId || 0) - (a.numericId || 0));
         setOrdenes(list);
         setSelectedKey((prev) => {
-          if (prev && list.some((o) => `${o.idClienteDueno}::${o.id}` === prev)) return prev;
+          if (prev && list.some((o) => ordenVentaKey(o) === prev)) return prev;
           return "";
         });
+        if (embedEnOrdenSalida) {
+          setSalidaPaqueteKeys((prev) =>
+            prev.filter((k) => list.some((o) => ordenVentaKey(o) === k)),
+          );
+        }
       })
       .catch(() => {
         setOrdenes([]);
@@ -143,16 +157,52 @@ export function OcOrdenVentaIngresoPanel({
         );
       })
       .finally(() => setLoading(false));
-  }, [warehouseId, isBodegaInterna, outboundBoxes]);
+  }, [warehouseId, isBodegaInterna, outboundBoxes, embedEnOrdenSalida]);
 
   useEffect(() => {
     reload();
   }, [reload]);
 
+  useEffect(() => {
+    if (!embedEnOrdenSalida) return;
+    if (!paqueteActivoKey) {
+      setSalidaPaqueteKeys([]);
+      return;
+    }
+    const keys = paqueteActivoKey.split("|").filter(Boolean).sort();
+    setSalidaPaqueteKeys(keys);
+  }, [embedEnOrdenSalida, paqueteActivoKey]);
+
   const selected = useMemo(
-    () => ordenes.find((o) => `${o.idClienteDueno}::${o.id}` === selectedKey) ?? null,
+    () => ordenes.find((o) => ordenVentaKey(o) === selectedKey) ?? null,
     [ordenes, selectedKey],
   );
+
+  const ordenesMarcadasPaqueteSalida = useMemo(
+    () => ordenes.filter((o) => salidaPaqueteKeys.includes(ordenVentaKey(o))),
+    [ordenes, salidaPaqueteKeys],
+  );
+
+  const mezclaClientesPaqueteSalida = useMemo(() => {
+    const ids = new Set(
+      ordenesMarcadasPaqueteSalida.map((o) => String(o.idClienteDueno ?? "").trim()).filter(Boolean),
+    );
+    return ids.size > 1;
+  }, [ordenesMarcadasPaqueteSalida]);
+
+  const salidaPaqueteFirma = useMemo(
+    () => [...salidaPaqueteKeys].sort().join("|"),
+    [salidaPaqueteKeys],
+  );
+
+  const paqueteSalidaBloqueado = Boolean(
+    embedEnOrdenSalida && paqueteActivoKey && paqueteActivoKey === salidaPaqueteFirma,
+  );
+
+  const toggleSalidaPaqueteKey = (k: string) => {
+    if (paqueteSalidaBloqueado) return;
+    setSalidaPaqueteKeys((prev) => (prev.includes(k) ? prev.filter((x) => x !== k) : [...prev, k]));
+  };
 
   useEffect(() => {
     if (!selected) {
@@ -212,6 +262,11 @@ export function OcOrdenVentaIngresoPanel({
 
   const handleRegistrar = async () => {
     if (!selected || !canSubmit) return;
+    const ok = await swalConfirm(
+      "¿Registrar salida / ingreso desde ventas?",
+      "Se guardarán temperaturas, pesos recibidos y el vínculo con las ventas seleccionadas.",
+    );
+    if (!ok) return;
     setSubmitError(null);
     setSubmitting(true);
 
@@ -236,11 +291,14 @@ export function OcOrdenVentaIngresoPanel({
           setSubmitting(false);
           return;
         }
+        const catLine = catalogoPorLinea(catalogos, li);
+        const almacenProductCode = almacenProductCodeFromCatalogo(catLine);
         lineas.push({
           catalogoProductId: id,
           name: li.titleSnapshot?.trim() || "Producto",
           temperature,
           quantityKg,
+          ...(almacenProductCode ? { almacenProductCode } : {}),
         });
       } else {
         pesosRecibidosPorLinea[rowKey] = 0;
@@ -279,8 +337,8 @@ export function OcOrdenVentaIngresoPanel({
 
   const sal = embedEnOrdenSalida;
   const shellClass = sal
-    ? "flex w-full min-w-0 flex-col gap-3 rounded-xl border border-pink-200/80 bg-pink-50/50 p-4 sm:p-5"
-    : "flex w-full min-w-0 flex-col gap-4 rounded-2xl border border-emerald-200/95 bg-emerald-50/85 p-4 shadow-lg sm:p-6 lg:p-8";
+    ? "@container flex w-full min-w-0 flex-col gap-3 rounded-xl border border-pink-200/80 bg-pink-50/50 p-4 sm:p-5"
+    : "@container flex w-full min-w-0 flex-col gap-4 rounded-2xl border border-emerald-200/95 bg-emerald-50/85 p-4 shadow-lg sm:p-6 lg:p-8";
 
   return (
     <div className={`${shellClass}${className ? ` ${className}` : ""}`}>
@@ -309,44 +367,151 @@ export function OcOrdenVentaIngresoPanel({
         </div>
       )}
 
-      <div className="flex flex-wrap items-end gap-2">
-        <div className="min-w-[12rem] flex-1">
-          <label className="mb-1 block text-xs font-semibold text-slate-600">Orden de venta</label>
-          <select
-            value={selectedKey}
-            onChange={(e) => setSelectedKey(e.target.value)}
-            className={`w-full rounded-lg border px-3 py-2 text-sm font-medium ${sal ? "border-pink-300 bg-pink-50/90 text-pink-900" : "border-emerald-200 bg-emerald-50/90 text-emerald-900"}`}
-          >
-            <option value="">{loading ? "Cargando…" : "Seleccioná una venta"}</option>
-            {ordenes.map((o) => (
-              <option key={`${o.idClienteDueno}-${o.id}`} value={`${o.idClienteDueno}::${o.id}`}>
-                {o.numero} · {o.codeCuenta ?? o.idClienteDueno} · {o.compradorNombre}
-              </option>
-            ))}
-          </select>
+      {sal ? (
+        <div className="flex min-w-0 flex-col gap-3">
+          <div className="flex flex-wrap items-end justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => reload()}
+              disabled={loading}
+              className="rounded-lg border border-pink-300/90 bg-white/80 px-3 py-2 text-xs font-semibold text-pink-900 hover:bg-pink-100/50 disabled:opacity-50"
+            >
+              Actualizar
+            </button>
+          </div>
+          <fieldset className="min-w-0 space-y-2 border-0 p-0">
+            <legend className="mb-1 block w-full text-xs font-semibold text-slate-600">
+              Ventas para el mismo camión
+            </legend>
+            {ordenes.length === 0 && !loading ? (
+              <p className="text-sm text-slate-500">No hay ventas en curso con cajas en salida.</p>
+            ) : (
+              <ul className="max-h-[min(14rem,40vh)] space-y-2 overflow-y-auto rounded-lg border border-pink-200/80 bg-pink-50/50 px-3 py-2">
+                {ordenes.map((o) => {
+                  const k = ordenVentaKey(o);
+                  return (
+                    <li key={k}>
+                      <label
+                        className={`flex cursor-pointer items-start gap-2 text-sm ${paqueteSalidaBloqueado ? "cursor-default" : ""}`}
+                      >
+                        <input
+                          type="checkbox"
+                          className="mt-1 h-4 w-4 shrink-0 rounded border-pink-300 text-pink-600"
+                          checked={salidaPaqueteKeys.includes(k)}
+                          onChange={() => toggleSalidaPaqueteKey(k)}
+                          disabled={paqueteSalidaBloqueado || loading}
+                        />
+                        <span className="min-w-0 font-medium text-pink-950">
+                          <span className="font-semibold">{o.numero}</span>
+                          <span className="font-normal text-pink-900/80">
+                            {" "}
+                            · {o.codeCuenta ?? o.idClienteDueno} · {o.compradorNombre}
+                          </span>
+                        </span>
+                      </label>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </fieldset>
+          {mezclaClientesPaqueteSalida ? (
+            <p className="text-xs font-medium text-rose-800">
+              Las ventas del mismo envío deben ser de la misma cuenta (mismo cliente).
+            </p>
+          ) : null}
+          <div className="min-w-0">
+            <label className="mb-1 block text-xs font-semibold text-slate-600">
+              Venta para detalle y registro línea a línea
+            </label>
+            <select
+              value={selectedKey}
+              onChange={(e) => setSelectedKey(e.target.value)}
+              className="w-full rounded-lg border border-pink-300 bg-pink-50/90 px-3 py-2 text-sm font-medium text-pink-900"
+            >
+              <option value="">{loading ? "Cargando…" : "Elegí una venta (opcional)"}</option>
+              {ordenes.map((o) => (
+                <option key={ordenVentaKey(o)} value={ordenVentaKey(o)}>
+                  {o.numero} · {o.codeCuenta ?? o.idClienteDueno} · {o.compradorNombre}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
-        <button
-          type="button"
-          onClick={() => reload()}
-          disabled={loading}
-          className={`rounded-lg border bg-white/80 px-3 py-2 text-xs font-semibold disabled:opacity-50 ${sal ? "border-pink-300/90 text-pink-900 hover:bg-pink-100/50" : "border-emerald-200/90 text-emerald-900 hover:bg-emerald-100/50"}`}
-        >
-          Actualizar
-        </button>
-      </div>
+      ) : (
+        <div className="flex flex-wrap items-end gap-2">
+          <div className="min-w-[12rem] flex-1">
+            <label className="mb-1 block text-xs font-semibold text-slate-600">Orden de venta</label>
+            <select
+              value={selectedKey}
+              onChange={(e) => setSelectedKey(e.target.value)}
+              className="w-full rounded-lg border border-emerald-200 bg-emerald-50/90 px-3 py-2 text-sm font-medium text-emerald-900"
+            >
+              <option value="">{loading ? "Cargando…" : "Seleccioná una venta"}</option>
+              {ordenes.map((o) => (
+                <option key={ordenVentaKey(o)} value={ordenVentaKey(o)}>
+                  {o.numero} · {o.codeCuenta ?? o.idClienteDueno} · {o.compradorNombre}
+                </option>
+              ))}
+            </select>
+          </div>
+          <button
+            type="button"
+            onClick={() => reload()}
+            disabled={loading}
+            className="rounded-lg border border-emerald-200/90 bg-white/80 px-3 py-2 text-xs font-semibold text-emerald-900 hover:bg-emerald-100/50 disabled:opacity-50"
+          >
+            Actualizar
+          </button>
+        </div>
+      )}
 
       {loadError ? (
         <p className="rounded-lg border border-rose-100 bg-rose-50 px-3 py-2 text-xs text-rose-800">{loadError}</p>
       ) : null}
 
+      {onArmarPaquete && sal ? (
+        <div className="rounded-2xl border-2 border-dashed border-pink-400 bg-linear-to-br from-pink-50 to-white p-4 shadow-sm">
+          <p className="text-xs font-bold uppercase tracking-wide text-pink-900">Paquete de despacho</p>
+          {salidaPaqueteKeys.length === 0 ? (
+            <p className="mt-2 text-sm text-pink-900/85">
+              Marcá al menos una venta arriba para armar el paquete (mismo camión para todas).
+            </p>
+          ) : (
+            <>
+              <p className="mt-1 text-base leading-relaxed text-pink-900/90">
+                Incluye <strong>todas las líneas</strong> de cada venta marcada. Después usá más abajo «Enviar paquete al
+                transporte» cuando las cajas estén en zona de salida.
+              </p>
+              {paqueteActivoKey === salidaPaqueteFirma ? (
+                <p className="mt-3 rounded-xl border border-pink-200 bg-white px-3 py-2 text-sm font-semibold text-pink-900">
+                  Listo: más abajo pulsá <strong>«Enviar paquete al transporte»</strong>.
+                </p>
+              ) : (
+                <button
+                  type="button"
+                  disabled={mezclaClientesPaqueteSalida}
+                  onClick={() => onArmarPaquete(ordenesMarcadasPaqueteSalida)}
+                  className="mt-3 w-full rounded-xl bg-pink-700 px-4 py-2.5 text-sm font-bold text-white shadow-md transition hover:bg-pink-600 disabled:cursor-not-allowed disabled:bg-slate-400"
+                >
+                  Armar paquete de despacho
+                </button>
+              )}
+            </>
+          )}
+        </div>
+      ) : null}
+
       {!selected ? (
-        <p className="text-sm text-slate-500">
-          {ordenes.length === 0 && !loading
-            ? "No hay ventas en curso con cajas en salida."
-            : sal
-              ? "Seleccioná una venta para armar el paquete o el registro alternativo (acordeón más abajo)."
-              : "Seleccioná una venta para armar el paquete o usar el registro alternativo abajo."}
-        </p>
+        !(sal && ordenes.length === 0 && !loading) ? (
+          <p className="text-sm text-slate-500">
+            {ordenes.length === 0 && !loading
+              ? "No hay ventas en curso con cajas en salida."
+              : sal
+                ? "Elegí una venta en el selector para abrir el registro línea a línea (acordeón más abajo)."
+                : "Seleccioná una venta para armar el paquete o usar el registro alternativo abajo."}
+          </p>
+        ) : null
       ) : (
         <div className="flex flex-col gap-3">
           <p className="text-xs text-slate-600">
@@ -359,38 +524,22 @@ export function OcOrdenVentaIngresoPanel({
             ) : null}
           </p>
 
-          {onArmarPaquete ? (
-            <div
-              className={`rounded-2xl border-2 border-dashed p-4 shadow-sm ${sal ? "border-pink-400 bg-linear-to-br from-pink-50 to-white" : "border-emerald-400 bg-linear-to-br from-emerald-50 to-white"}`}
-            >
-              <p className={`text-xs font-bold uppercase tracking-wide ${sal ? "text-pink-900" : "text-emerald-900"}`}>
-                Paquete de despacho
-              </p>
-              <p className={`mt-1 text-base leading-relaxed ${sal ? "text-pink-900/90" : "text-emerald-800"}`}>
-                Incluye <strong>todas las líneas</strong> de esta venta.
-                {sal
-                  ? " Después usá más abajo «Enviar paquete al transporte» cuando las cajas estén en zona de salida."
-                  : " En la columna «Orden de salida» vas a enviar las cajas de salida vinculadas a este pedido en un solo envío al transporte."}
+          {onArmarPaquete && !sal ? (
+            <div className="rounded-2xl border-2 border-dashed border-emerald-400 bg-linear-to-br from-emerald-50 to-white p-4 shadow-sm">
+              <p className="text-xs font-bold uppercase tracking-wide text-emerald-900">Paquete de despacho</p>
+              <p className="mt-1 text-base leading-relaxed text-emerald-800">
+                Incluye <strong>todas las líneas</strong> de esta venta. En la columna «Orden de salida» vas a enviar las
+                cajas de salida vinculadas a este pedido en un solo envío al transporte.
               </p>
               {paqueteActivoKey === selectedKey ? (
-                <p
-                  className={`mt-3 rounded-xl border bg-white px-3 py-2 text-sm font-semibold ${sal ? "border-pink-200 text-pink-900" : "border-emerald-200 text-emerald-800"}`}
-                >
-                  {sal ? (
-                    <>
-                      Listo: más abajo pulsá <strong>«Enviar paquete al transporte»</strong>.
-                    </>
-                  ) : (
-                    <>
-                      Listo: completá el envío en <strong>Orden de salida</strong> → «Enviar paquete al transporte».
-                    </>
-                  )}
+                <p className="mt-3 rounded-xl border border-emerald-200 bg-white px-3 py-2 text-sm font-semibold text-emerald-800">
+                  Listo: completá el envío en <strong>Orden de salida</strong> → «Enviar paquete al transporte».
                 </p>
               ) : (
                 <button
                   type="button"
-                  onClick={() => onArmarPaquete(selected)}
-                  className={`mt-3 w-full rounded-xl px-4 py-2.5 text-sm font-bold text-white shadow-md transition ${sal ? "bg-pink-700 hover:bg-pink-600" : "bg-emerald-700 hover:bg-emerald-600"}`}
+                  onClick={() => onArmarPaquete([selected])}
+                  className="mt-3 w-full rounded-xl bg-emerald-700 px-4 py-2.5 text-sm font-bold text-white shadow-md transition hover:bg-emerald-600"
                 >
                   Armar paquete de despacho
                 </button>
@@ -443,9 +592,12 @@ export function OcOrdenVentaIngresoPanel({
                     </span>
                   </label>
                   {isChecked ? (
-                    <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                      <label className="flex flex-col gap-1 text-xs font-medium text-slate-600">
-                        Temperatura (°C)
+                    <div className="mt-3 grid grid-cols-1 gap-3 @md:grid-cols-2">
+                      <label className="flex min-w-0 flex-col gap-1.5">
+                        <span className="flex min-h-10 items-end text-xs font-medium leading-snug text-slate-700">
+                          Temperatura{" "}
+                          <span className="font-normal text-slate-500">(°C)</span>
+                        </span>
                         <input
                           type="number"
                           step="any"
@@ -453,19 +605,22 @@ export function OcOrdenVentaIngresoPanel({
                           onChange={(e) =>
                             setTemps((prev) => ({ ...prev, [rowKey]: e.target.value }))
                           }
-                          className={`rounded-lg border bg-white px-2 py-1.5 text-sm ${sal ? "border-pink-200" : "border-emerald-200"}`}
+                          className={`min-h-10 w-full rounded-lg border bg-white px-3 py-2 text-sm tabular-nums ${sal ? "border-pink-200" : "border-emerald-200"}`}
                           placeholder="Ej: -18"
                         />
                       </label>
-                      <label className="flex flex-col gap-1 text-xs font-medium text-slate-600">
-                        Peso recibido (kg)
+                      <label className="flex min-w-0 flex-col gap-1.5">
+                        <span className="flex min-h-10 items-end text-xs font-medium leading-snug text-slate-700">
+                          Peso recibido{" "}
+                          <span className="font-normal text-slate-500">(kg)</span>
+                        </span>
                         <input
                           type="text"
                           inputMode="decimal"
                           value={kgs[rowKey] ?? ""}
                           onChange={(e) => setKgs((prev) => ({ ...prev, [rowKey]: e.target.value }))}
                           placeholder="Ej. 15,6"
-                          className={`rounded-lg border bg-white px-2 py-1.5 text-sm ${sal ? "border-pink-200" : "border-emerald-200"}`}
+                          className={`min-h-10 w-full rounded-lg border bg-white px-3 py-2 text-sm tabular-nums ${sal ? "border-pink-200" : "border-emerald-200"}`}
                         />
                       </label>
                     </div>

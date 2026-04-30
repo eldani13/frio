@@ -50,6 +50,8 @@ export type BodegaZonaCajaCardProps = {
   detalleChildren?: ReactNode;
   /** Opcional: al hacer clic en la tarjeta, antes de abrir el detalle (p. ej. sincronizar select de salida). */
   onCardClick?: () => void;
+  /** Sin clic ni modal (p. ej. administrador en «Estado de bodega»). */
+  soloLectura?: boolean;
 };
 
 /**
@@ -65,6 +67,7 @@ export default function BodegaZonaCajaCard({
   clients = [],
   detalleChildren,
   onCardClick,
+  soloLectura = false,
 }: BodegaZonaCajaCardProps) {
   const [detalleOpen, setDetalleOpen] = useState(false);
   const tone = TONE[variant];
@@ -72,8 +75,8 @@ export default function BodegaZonaCajaCard({
     alertaTemperaturaAlta && tone.pillWarn ? tone.pillWarn : tone.pill;
 
   const rounded = "rounded-xl";
-  const showDetalle = Boolean(box.autoId?.trim());
-  const interactive = showDetalle || Boolean(onCardClick);
+  const showDetalle = Boolean(box.autoId?.trim()) && !soloLectura;
+  const interactive = !soloLectura && (Boolean(box.autoId?.trim()) || Boolean(onCardClick));
   const shellClass = `relative flex flex-col ${BODEGA_SLOT_SHELL_CLASS} border transition ${rounded} ${BODEGA_SLOT_SHELL_PADDING} ${tone.card} ${interactive ? interactiveRing[variant] : ""} ${className}`;
 
   const corner = cornerLabel != null ? cornerLabel : box.position;
