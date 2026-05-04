@@ -11,11 +11,14 @@ import type { VentaEnCurso } from "@/app/types/ventaCuenta";
 import { compareOrdenCompraByCodigoDesc } from "@/lib/ordenCompraSort";
 import type { Catalogo } from "@/app/types/catalogo";
 import type { Comprador } from "@/app/types/comprador";
+import { ModalPlantilla } from "@/app/components/ui/ModalPlantilla";
 import { VentaManualFormModal } from "@/app/components/ui/ventas/VentaManualFormModal";
+import { VentaPdoEntregaSection } from "@/app/components/ui/ventas/VentaPdoEntregaSection";
 import { OrdenVentaService } from "@/app/services/ordenVentaService";
 import { AsignarBodegaService } from "@/app/services/asignarbodegaService";
 import type { Slot, WarehouseMeta } from "@/app/interfaces/bodega";
 import { fetchWarehouseStateOnce } from "@/lib/bodegaCloudState";
+import { swalConfirm, swalError } from "@/lib/swal";
 
 function productosResumen(v: VentaEnCurso): string {
   const items = v.lineItems ?? [];
@@ -241,7 +244,7 @@ export function VentasEnCursoOperadorPanel({
     } catch {
       setVentas((list) => list.map((row) => (row.id === v.id ? { ...row, estado: prev } : row)));
       setDetalle((d) => (d?.id === v.id ? { ...d, estado: prev } : d));
-      window.alert("No se pudo guardar el estado en la base de datos. Reintentá.");
+      void swalError("No se pudo guardar", "No se pudo guardar el estado en la base de datos. Reintentá.");
     }
   };
 
@@ -249,6 +252,13 @@ export function VentasEnCursoOperadorPanel({
     const v = pendienteTransporte;
     if (!v?.id || !whTransporteId.trim()) return;
     const wh = bodegasInternas.find((w) => w.id === whTransporteId.trim());
+    const refVenta = String(v.numero ?? "").trim() || v.id;
+    const destino = (wh?.name ?? whTransporteId).trim();
+    const ok = await swalConfirm(
+      "¿Confirmar envío a bodega interna?",
+      `La venta «${refVenta}» pasará a transporte hacia «${destino}».`,
+    );
+    if (!ok) return;
     setTransporteSaving(true);
     try {
       await OrdenVentaService.marcarEnTransporteInterna(idCliente.trim(), v.id, {
@@ -257,7 +267,10 @@ export function VentasEnCursoOperadorPanel({
       });
       setPendienteTransporte(null);
     } catch (e) {
-      window.alert(e instanceof Error ? e.message : "No se pudo marcar el envío a bodega.");
+      void swalError(
+        "No se pudo marcar el envío",
+        e instanceof Error ? e.message : "No se pudo marcar el envío a bodega.",
+      );
     } finally {
       setTransporteSaving(false);
     }
@@ -267,6 +280,12 @@ export function VentasEnCursoOperadorPanel({
     if (!detalle?.id) return;
     const e = String(detalle.estado ?? "").trim();
     if (e !== "Iniciado") return;
+    const refVenta = String(detalle.numero ?? "").trim() || detalle.id;
+    const ok = await swalConfirm(
+      "¿Pasar la venta a «En curso»?",
+      `La venta «${refVenta}» quedará en curso para preparación y seguimiento.`,
+    );
+    if (!ok) return;
     setIniciarVentaSaving(true);
     try {
       await handleEstado(detalle, "En curso");
@@ -314,19 +333,21 @@ export function VentasEnCursoOperadorPanel({
               </p>
             </div>
           </div>
-          <button
-            type="button"
-            onClick={() => {
-              setDetalle(null);
-              setVentaModalOpen(true);
-            }}
-            disabled={!puedeCrearVenta}
-            aria-label="Nueva venta manual"
-            title="Nueva venta manual"
-            className="inline-flex items-center justify-center gap-2 rounded-[10px] bg-[#A8D5BA] px-5 py-2.5 text-sm font-semibold text-[#2D5A3F] shadow-sm transition hover:bg-[#97c4a9] active:scale-[0.98] disabled:pointer-events-none disabled:opacity-50"
-          >
-            <HiOutlinePlus strokeWidth={2.5} className="h-5 w-5" />
-          </button>
+          <div className="flex shrink-0 items-center justify-end gap-2 self-end sm:self-auto">
+            <button
+              type="button"
+              onClick={() => {
+                setDetalle(null);
+                setVentaModalOpen(true);
+              }}
+              disabled={!puedeCrearVenta}
+              aria-label="Nueva venta manual"
+              title="Nueva venta manual"
+              className="inline-flex h-10 min-w-10 items-center justify-center gap-2 rounded-[10px] bg-[#A8D5BA] px-4 text-sm font-semibold text-[#2D5A3F] shadow-sm transition hover:bg-[#97c4a9] active:scale-[0.98] disabled:pointer-events-none disabled:opacity-50"
+            >
+              <HiOutlinePlus strokeWidth={2.5} className="h-5 w-5" />
+            </button>
+          </div>
         </header>
 
         {!idCliente.trim() ? (
@@ -498,114 +519,40 @@ export function VentasEnCursoOperadorPanel({
       />
 
       {detalle ? (
-        <div
-          className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/50 p-4 backdrop-blur-[2px] sm:items-center"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="venta-detalle-titulo"
-        >
-          <button
-            type="button"
-            className="absolute inset-0 cursor-default"
-            aria-label="Cerrar"
-            onClick={() => setDetalle(null)}
-          />
-          <div className="relative z-10 w-full max-w-md overflow-hidden rounded-3xl border border-slate-200/90 bg-white shadow-2xl sm:max-w-lg">
-            {/* Cabecera tipo documento */}
-            <div className="border-b border-slate-200 bg-linear-to-br from-slate-50 via-white to-emerald-50/30 px-6 pb-5 pt-6">
-              <p className="text-base font-bold uppercase tracking-[0.2em] text-slate-500">Orden de venta</p>
-              <h2
-                id="venta-detalle-titulo"
-                className="mt-1 font-mono text-2xl font-bold tracking-tight text-slate-900"
+        <ModalPlantilla
+          open
+          onClose={() => setDetalle(null)}
+          titulo={numeroVentaMostrado(detalle)}
+          tituloId="venta-detalle-titulo"
+          tituloClassName="font-mono"
+          encabezadoSup={
+            <span className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">Orden de venta</span>
+          }
+          headerIcon={<MdShoppingCart className="h-7 w-7 text-blue-600" aria-hidden />}
+          subtitulo={
+            <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-2 text-sm">
+              <span
+                className={`inline-flex rounded-full px-3 py-1 text-xs font-bold ${ordenCompraEstadoBadgeClass(detalle.estado)}`}
               >
-                {numeroVentaMostrado(detalle)}
-              </h2>
-              <div className="mt-4 flex flex-wrap items-center gap-3 border-t border-slate-200/80 pt-4">
-                <span
-                  className={`inline-flex rounded-full px-3 py-1 text-xs font-bold ${ordenCompraEstadoBadgeClass(detalle.estado)}`}
-                >
-                  {detalle.estado}
-                </span>
-                <span className="text-sm text-slate-600">
-                  <span className="font-medium text-slate-400">Fecha</span>{" "}
-                  <span className="font-semibold text-slate-800">{detalle.fecha}</span>
-                </span>
-              </div>
+                {detalle.estado}
+              </span>
+              <span>
+                <span className="font-medium text-slate-400">Fecha</span>{" "}
+                <span className="font-bold text-slate-900 tabular-nums">{detalle.fecha}</span>
+              </span>
             </div>
-
-            <div className="max-h-[min(55vh,420px)] space-y-0 overflow-y-auto px-6 py-5">
-              {/* Comprador */}
-              <div className="rounded-2xl border border-slate-100 bg-slate-50/80 px-4 py-4">
-                <p className="text-base font-bold uppercase tracking-wider text-slate-500">Comprador</p>
-                <p className="mt-1.5 text-base font-semibold leading-snug text-slate-900">
-                  {detalle.compradorNombre || "—"}
-                </p>
-              </div>
-
-              {detalle.origenWarehouseNombre ? (
-                <p className="mt-4 text-xs text-slate-600">
-                  Bodega de la venta:{" "}
-                  <span className="font-semibold text-slate-800">{detalle.origenWarehouseNombre}</span>
-                </p>
-              ) : null}
-
-              {detalle.destinoWarehouseNombre ? (
-                <p className="mt-4 text-xs text-slate-600">
-                  Bodega destino (transporte):{" "}
-                  <span className="font-semibold text-slate-800">{detalle.destinoWarehouseNombre}</span>
-                </p>
-              ) : null}
-
-              {/* Tabla de productos */}
-              <div className="mt-5">
-                <p className="text-base font-bold uppercase tracking-wider text-slate-500">Productos</p>
-                <div className="mt-2 overflow-hidden rounded-2xl border border-slate-200">
-                  <table className="w-full text-left text-sm">
-                    <thead>
-                      <tr className="border-b border-slate-200 bg-slate-50/90">
-                        <th className="px-4 py-2.5 text-base font-bold uppercase tracking-wide text-slate-500">
-                          Descripción
-                        </th>
-                        <th className="w-20 px-4 py-2.5 text-right text-base font-bold uppercase tracking-wide text-slate-500">
-                          Cant.
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {(detalle.lineItems ?? []).length === 0 ? (
-                        <tr>
-                          <td colSpan={2} className="px-4 py-6 text-center text-sm text-slate-500">
-                            Sin líneas en esta venta.
-                          </td>
-                        </tr>
-                      ) : (
-                        (detalle.lineItems ?? []).map((li, i) => (
-                          <tr
-                            key={`${detalle.id}-${i}`}
-                            className={i % 2 === 0 ? "bg-white" : "bg-slate-50/50"}
-                          >
-                            <td className="px-4 py-3 text-base font-medium leading-snug text-slate-800">
-                              {li.titleSnapshot}
-                            </td>
-                            <td className="px-4 py-3 text-right font-mono text-base tabular-nums text-slate-700">
-                              × {li.cantidad}
-                            </td>
-                          </tr>
-                        ))
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            </div>
-
-            <div className="flex flex-col gap-3 border-t border-slate-100 bg-slate-50/50 px-6 py-5">
+          }
+          maxWidthClass="max-w-lg"
+          cardMaxHeightClass="max-h-[min(92vh,720px)]"
+          zIndexClass="z-50"
+          footer={
+            <div className="flex flex-col gap-3">
               {String(detalle.estado ?? "").trim() === "Iniciado" ? (
                 <button
                   type="button"
                   disabled={iniciarVentaSaving || !(detalle.lineItems ?? []).length}
                   onClick={() => void handleIniciarVenta()}
-                  className="w-full rounded-2xl border-2 border-emerald-400 bg-linear-to-b from-emerald-50 to-emerald-100/80 py-3.5 text-sm font-bold text-emerald-950 shadow-sm transition hover:border-emerald-500 hover:from-emerald-100 hover:to-emerald-100 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="w-full rounded-full border border-emerald-500 bg-white py-3.5 text-sm font-bold text-slate-900 shadow-sm transition hover:border-emerald-600 hover:bg-emerald-50/50 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {iniciarVentaSaving ? "Guardando…" : "Iniciar venta"}
                 </button>
@@ -613,13 +560,80 @@ export function VentasEnCursoOperadorPanel({
               <button
                 type="button"
                 onClick={() => setDetalle(null)}
-                className="w-full rounded-2xl border border-slate-200 bg-white py-3 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50"
+                className="w-full rounded-full border border-slate-200 bg-white py-3 text-sm font-bold text-slate-900 shadow-sm transition hover:bg-slate-50"
               >
                 Cerrar
               </button>
             </div>
+          }
+        >
+          <div className="flex flex-col gap-5">
+            <div className="rounded-xl border border-sky-100/90 bg-sky-50 px-4 py-4 sm:px-5 sm:py-4">
+              <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">Comprador</p>
+              <p className="mt-1.5 text-base font-bold leading-snug text-slate-900">{detalle.compradorNombre || "—"}</p>
+            </div>
+
+            {detalle.origenWarehouseNombre ? (
+              <p className="text-sm text-slate-600">
+                <span className="font-bold text-slate-900">Bodega de la venta:</span>{" "}
+                <span className="text-slate-600">{detalle.origenWarehouseNombre}</span>
+              </p>
+            ) : null}
+
+            {detalle.destinoWarehouseNombre ? (
+              <p className="text-sm text-slate-600">
+                <span className="font-bold text-slate-900">Bodega destino (transporte):</span>{" "}
+                <span className="text-slate-600">{detalle.destinoWarehouseNombre}</span>
+              </p>
+            ) : null}
+
+            <div>
+              <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">Productos</p>
+              <div className="mt-2 overflow-hidden rounded-xl border border-slate-200 bg-white">
+                <table className="w-full text-left text-sm">
+                  <thead>
+                    <tr className="border-b border-slate-100 bg-white">
+                      <th className="px-4 py-2.5 text-[11px] font-bold uppercase tracking-wide text-slate-500 sm:px-5">
+                        Descripción
+                      </th>
+                      <th className="w-[4.5rem] px-4 py-2.5 text-right text-[11px] font-bold uppercase tracking-wide text-slate-500 sm:px-5">
+                        Cant.
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {(detalle.lineItems ?? []).length === 0 ? (
+                      <tr>
+                        <td colSpan={2} className="px-4 py-6 text-center text-sm text-slate-500 sm:px-5">
+                          Sin líneas en esta venta.
+                        </td>
+                      </tr>
+                    ) : (
+                      (detalle.lineItems ?? []).map((li, i) => (
+                        <tr key={`${detalle.id}-${i}`} className="bg-white">
+                          <td className="px-4 py-3 text-sm font-medium leading-snug text-slate-900 sm:px-5 sm:text-base">
+                            {li.titleSnapshot}
+                          </td>
+                          <td className="px-4 py-3 text-right text-sm tabular-nums sm:px-5 sm:text-base">
+                            <span className="text-slate-400">×</span>{" "}
+                            <span className="font-bold text-slate-900">{li.cantidad}</span>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <VentaPdoEntregaSection
+              clientId={idCliente.trim()}
+              ventaId={detalle.id}
+              estadoVenta={detalle.estado}
+              recepcionBodega={detalle.recepcionBodega}
+            />
           </div>
-        </div>
+        </ModalPlantilla>
       ) : null}
 
       {pendienteTransporte ? (

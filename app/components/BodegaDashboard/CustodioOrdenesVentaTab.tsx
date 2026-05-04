@@ -6,6 +6,7 @@ import type { VentaPendienteCartonaje } from "@/app/types/ventaCuenta";
 import type { WarehouseMeta } from "@/app/interfaces/bodega";
 import { MdShoppingBag } from "react-icons/md";
 import { IoCloseOutline } from "react-icons/io5";
+import { VentaPdoEntregaSection } from "@/app/components/ui/ventas/VentaPdoEntregaSection";
 
 type Props = {
   warehousesFallback?: WarehouseMeta[];
@@ -241,17 +242,12 @@ export default function CustodioOrdenesVentaTab({ warehousesFallback = [] }: Pro
                   ))}
                 </ul>
               </div>
-              {detalle.recepcionBodega ? (
-                <div className="rounded-lg border border-emerald-100 bg-emerald-50/50 p-3 text-xs">
-                  <p className="font-semibold text-emerald-900">Recepción en bodega</p>
-                  <p className="mt-1 text-emerald-800">
-                    {detalle.recepcionBodega.sinDiferencias ? "Sin diferencias" : "Con diferencias"} · cerrada{" "}
-                    {detalle.recepcionBodega.cerradaAt
-                      ? new Date(detalle.recepcionBodega.cerradaAt).toLocaleString("es-CO")
-                      : "—"}
-                  </p>
-                </div>
-              ) : null}
+              <VentaPdoEntregaSection
+                clientId={detalle.idClienteDueno}
+                ventaId={detalle.id}
+                estadoVenta={detalle.estado}
+                recepcionBodega={detalle.recepcionBodega}
+              />
             </div>
           </div>
         </div>

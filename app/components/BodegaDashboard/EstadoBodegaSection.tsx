@@ -104,6 +104,9 @@ export default function EstadoBodegaSection(props: Props) {
     productosCatalogo,
   } = props;
 
+  /** Administrador: solo supervisión del mapa, sin seleccionar casilleros ni abrir flujos de orden. */
+  const mapaSoloLectura = role === "administrador";
+
   const sortedInboundBoxes = sortByPosition([...inboundBoxes]);
   const sortedOutboundBoxes = sortByPosition([...outboundBoxes]);
 
@@ -112,6 +115,7 @@ export default function EstadoBodegaSection(props: Props) {
 
   return (
     <div className="flex w-full flex-col gap-3 sm:gap-4">
+    
     <section className="grid items-stretch gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.8fr)_minmax(0,1fr)] 2xl:grid-cols-[minmax(0,1fr)_minmax(0,2.1fr)_minmax(0,1fr)]">
       <div className="flex h-full min-h-0 w-full min-w-0 max-w-full flex-col rounded-3xl border border-emerald-200/95 bg-emerald-50/85 p-2 sm:max-w-lg sm:p-4">
         <div className="mb-2 flex min-w-0 shrink-0 flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -139,6 +143,7 @@ export default function EstadoBodegaSection(props: Props) {
                       typeof box.temperature === "number" && box.temperature > 5
                     }
                     clients={clients}
+                    soloLectura={mapaSoloLectura}
                   />
                 ) : (
                   <EmptyZonaSlot key={`entrada-empty-${idx}`} variant="entrada" label={idx + 1} />
@@ -161,9 +166,10 @@ export default function EstadoBodegaSection(props: Props) {
         <SlotsGrid
           slots={slots}
           selectedPosition={selectedPosition}
-          onSelect={handleSelectSlot}
+          onSelect={mapaSoloLectura ? () => {} : handleSelectSlot}
           clients={clients}
           titleActions={
+            mapaSoloLectura ? null : (
             <VentasEnCursoMapButton
               clients={clients}
               warehouseCodeCuenta={warehouseCodeCuenta}
@@ -172,12 +178,15 @@ export default function EstadoBodegaSection(props: Props) {
               tareasProcesamientoOperario={tareasProcesamientoOperario}
               onPushTareaProcesamientoOperario={onPushTareaProcesamientoOperario}
               productosCatalogo={productosCatalogo}
+              outboundBoxes={outboundBoxes}
             />
+            )
           }
           headerActions={renderStatusButtons("bodega")}
           occupiedCount={slots.filter((s) => s.autoId && s.autoId.trim() !== "").length}
           totalSlots={slots.length}
           role={role}
+          mapaSoloLectura={mapaSoloLectura}
         />
         <div className="flex min-h-0 w-full flex-1 flex-col rounded-2xl border border-sky-200 bg-white p-3 shadow-md sm:p-4">
           <ProcesamientoOrdenesActivasBodega
@@ -198,8 +207,10 @@ export default function EstadoBodegaSection(props: Props) {
             availableBodegaTargets={availableBodegaTargets}
             onCrearOrdenBodega={onCrearOrdenBodega}
             productosCatalogo={productosCatalogo}
+            soloLecturaMapa={mapaSoloLectura}
           />
         </div>
+        {!mapaSoloLectura ? (
         <SelectedSlotCard
           slot={selectedSlot}
           onClose={() => setSelectedPosition(null)}
@@ -207,6 +218,7 @@ export default function EstadoBodegaSection(props: Props) {
           canEdit={false}
           clients={clients}
         />
+        ) : null}
       </div>
 
       <div className="flex h-full min-h-0 w-full min-w-0 max-w-full flex-col rounded-3xl border border-pink-300 bg-pink-100/90 p-2 sm:max-w-lg sm:p-4">
@@ -233,6 +245,7 @@ export default function EstadoBodegaSection(props: Props) {
                     variant="salida"
                     cornerLabel={idx + 1}
                     clients={clients}
+                    soloLectura={mapaSoloLectura}
                   />
                 ) : (
                   <EmptyZonaSlot key={`salida-empty-${idx}`} variant="salida" label={idx + 1} />

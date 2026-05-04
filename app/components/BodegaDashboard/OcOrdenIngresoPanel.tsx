@@ -11,12 +11,16 @@ import { formatKgEs, parseDecimalEs } from "@/app/lib/decimalEs";
 import { ordenCompraIngresoLineKey } from "@/app/lib/ordenCompraIngresoLineKey";
 import { CatalogoService } from "@/app/services/catalogoService";
 import type { Catalogo } from "@/app/types/catalogo";
+import { almacenProductCodeFromCatalogo } from "@/lib/almacenProductCode";
+import { swalConfirm } from "@/lib/swal";
 
 export type LineaIngresoDesdeOc = {
   catalogoProductId: string;
   name: string;
   temperature: number;
   quantityKg: number;
+  /** Copiado al slot en bodega (solo persistencia). */
+  almacenProductCode?: string;
 };
 
 export type LineaAdicionalIngresoOc = {
@@ -24,6 +28,7 @@ export type LineaAdicionalIngresoOc = {
   name: string;
   temperature: number;
   quantityKg: number;
+  almacenProductCode?: string;
 };
 
 export type IngresoDesdeOrdenCompraPayload = {
@@ -165,6 +170,11 @@ export function OcOrdenIngresoPanel({ warehouseId, isBodegaInterna, onRegistrar,
 
   const handleRegistrar = async () => {
     if (!selected || !canSubmit) return;
+    const ok = await swalConfirm(
+      "¿Registrar ingreso y cerrar orden?",
+      "Se comparará lo pedido con lo recibido y se cerrará la orden de compra.",
+    );
+    if (!ok) return;
     setSubmitError(null);
     setSubmitting(true);
 
@@ -179,11 +189,14 @@ export function OcOrdenIngresoPanel({ warehouseId, isBodegaInterna, onRegistrar,
         const temperature = Number(String(temps[rowKey] ?? "").replace(",", "."));
         const quantityKg = parseDecimalEs(String(kgs[rowKey] ?? "")) ?? 0;
         pesosRecibidosPorLinea[rowKey] = quantityKg;
+        const catLine = catalogos.find((c) => c.id === id);
+        const almacenProductCode = almacenProductCodeFromCatalogo(catLine);
         lineas.push({
           catalogoProductId: id,
           name: li.titleSnapshot?.trim() || "Producto",
           temperature,
           quantityKg,
+          ...(almacenProductCode ? { almacenProductCode } : {}),
         });
       } else {
         pesosRecibidosPorLinea[rowKey] = 0;
@@ -195,11 +208,13 @@ export function OcOrdenIngresoPanel({ warehouseId, isBodegaInterna, onRegistrar,
       const cat = catalogos.find((c) => c.id === extraProductId);
       const temperature = Number(String(extraTemp).replace(",", "."));
       const quantityKg = parseDecimalEs(extraKg) ?? 0;
+      const extraAlmacenCode = almacenProductCodeFromCatalogo(cat);
       lineaAdicional = {
         catalogoProductId: extraProductId.trim(),
         name: (cat?.title ?? "Producto").trim(),
         temperature,
         quantityKg,
+        ...(extraAlmacenCode ? { almacenProductCode: extraAlmacenCode } : {}),
       };
     }
 
@@ -233,7 +248,7 @@ export function OcOrdenIngresoPanel({ warehouseId, isBodegaInterna, onRegistrar,
 
   return (
     <div
-      className={`flex w-full min-w-0 flex-col gap-4 rounded-2xl border border-emerald-200/95 bg-emerald-50/85 p-4 shadow-lg sm:p-6 lg:p-8${className ? ` ${className}` : ""}`}
+      className={`@container flex w-full min-w-0 flex-col gap-4 rounded-2xl border border-emerald-200/95 bg-emerald-50/85 p-4 shadow-lg sm:p-6 lg:p-8${className ? ` ${className}` : ""}`}
     >
       <div className="flex shrink-0 items-center justify-between gap-2">
         <div className="flex min-w-0 items-center gap-2">
@@ -337,9 +352,12 @@ export function OcOrdenIngresoPanel({ warehouseId, isBodegaInterna, onRegistrar,
                     </span>
                   </label>
                   {isChecked ? (
-                    <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                      <label className="flex flex-col gap-1 text-xs font-medium text-slate-600">
-                        Temperatura (°C)
+                    <div className="mt-3 grid grid-cols-1 gap-3 @md:grid-cols-2">
+                      <label className="flex min-w-0 flex-col gap-1.5">
+                        <span className="flex min-h-10 items-end text-xs font-medium leading-snug text-slate-700">
+                          Temperatura{" "}
+                          <span className="font-normal text-slate-500">(°C)</span>
+                        </span>
                         <input
                           type="number"
                           step="any"
@@ -347,19 +365,22 @@ export function OcOrdenIngresoPanel({ warehouseId, isBodegaInterna, onRegistrar,
                           onChange={(e) =>
                             setTemps((prev) => ({ ...prev, [rowKey]: e.target.value }))
                           }
-                          className="rounded-lg border border-emerald-200 bg-white px-2 py-1.5 text-sm"
+                          className="min-h-10 w-full rounded-lg border border-emerald-200 bg-white px-3 py-2 text-sm tabular-nums"
                           placeholder="Ej: -18"
                         />
                       </label>
-                      <label className="flex flex-col gap-1 text-xs font-medium text-slate-600">
-                        Peso recibido (kg)
+                      <label className="flex min-w-0 flex-col gap-1.5">
+                        <span className="flex min-h-10 items-end text-xs font-medium leading-snug text-slate-700">
+                          Peso recibido{" "}
+                          <span className="font-normal text-slate-500">(kg)</span>
+                        </span>
                         <input
                           type="text"
                           inputMode="decimal"
                           value={kgs[rowKey] ?? ""}
                           onChange={(e) => setKgs((prev) => ({ ...prev, [rowKey]: e.target.value }))}
                           placeholder="Ej. 15,6"
-                          className="rounded-lg border border-emerald-200 bg-white px-2 py-1.5 text-sm"
+                          className="min-h-10 w-full rounded-lg border border-emerald-200 bg-white px-3 py-2 text-sm tabular-nums"
                         />
                       </label>
                     </div>
@@ -374,13 +395,13 @@ export function OcOrdenIngresoPanel({ warehouseId, isBodegaInterna, onRegistrar,
               Producto adicional 
             </p>
           
-            <div className="grid gap-2 sm:grid-cols-3">
-              <label className="flex flex-col gap-1 text-xs font-medium text-slate-600 sm:col-span-3">
+            <div className="grid grid-cols-1 gap-3 @md:grid-cols-3">
+              <label className="flex flex-col gap-1.5 text-xs font-medium text-slate-700 @md:col-span-3">
                 Producto del catálogo
                 <select
                   value={extraProductId}
                   onChange={(e) => setExtraProductId(e.target.value)}
-                  className="rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm"
+                  className="min-h-10 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"
                 >
                   <option value="">Sin producto adicional</option>
                   {catalogos
@@ -394,26 +415,30 @@ export function OcOrdenIngresoPanel({ warehouseId, isBodegaInterna, onRegistrar,
               </label>
               {extraProductId ? (
                 <>
-                  <label className="flex flex-col gap-1 text-xs font-medium text-slate-600">
-                    Temperatura (°C)
+                  <label className="flex min-w-0 flex-col gap-1.5">
+                    <span className="flex min-h-10 items-end text-xs font-medium leading-snug text-slate-700">
+                      Temperatura <span className="font-normal text-slate-500">(°C)</span>
+                    </span>
                     <input
                       type="number"
                       step="any"
                       value={extraTemp}
                       onChange={(e) => setExtraTemp(e.target.value)}
-                      className="rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm"
+                      className="min-h-10 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm tabular-nums"
                       placeholder="Ej: -18"
                     />
                   </label>
-                  <label className="flex flex-col gap-1 text-xs font-medium text-slate-600 sm:col-span-2">
-                    Peso (kg)
+                  <label className="flex min-w-0 flex-col gap-1.5 @md:col-span-2">
+                    <span className="flex min-h-10 items-end text-xs font-medium leading-snug text-slate-700">
+                      Peso <span className="font-normal text-slate-500">(kg)</span>
+                    </span>
                     <input
                       type="text"
                       inputMode="decimal"
                       value={extraKg}
                       onChange={(e) => setExtraKg(e.target.value)}
                       placeholder="Ej. 10,5"
-                      className="rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm"
+                      className="min-h-10 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm tabular-nums"
                     />
                   </label>
                 </>

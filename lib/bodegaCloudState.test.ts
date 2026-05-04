@@ -115,4 +115,35 @@ describe("bodegaCloudState", () => {
     await mod.saveHistoryState("w1", { ingresos: [], mermaProcesamientoKgTotal: 999 });
     expect(setDoc).toHaveBeenCalled();
   });
+
+  it("saveWarehouseState serializa por bodega: escritura lenta no corre adelante de una posterior", async () => {
+    const order: string[] = [];
+    const setDoc = vi.fn(async (_ref: unknown, payload: Record<string, unknown>) => {
+      const w = String(payload.warehouseName ?? "");
+      order.push(`start:${w}`);
+      if (w === "lento") {
+        await new Promise((r) => setTimeout(r, 45));
+      }
+      order.push(`end:${w}`);
+    });
+
+    vi.doMock("./firebaseClient", () => ({ db: {} }));
+    vi.doMock("firebase/firestore", () => ({
+      doc: (...args: unknown[]) => ({ path: args.join("/") }),
+      getDoc: vi.fn(async () => ({ exists: () => false, data: () => ({}) })),
+      onSnapshot: vi.fn(() => () => {}),
+      runTransaction: vi.fn(),
+      serverTimestamp: () => "ts",
+      setDoc,
+    }));
+
+    const mod = await import("./bodegaCloudState");
+    void mod.saveWarehouseState("w-serial", { warehouseName: "lento" });
+    void mod.saveWarehouseState("w-serial", { warehouseName: "rapido" });
+    await mod.saveWarehouseState("w-serial", { warehouseName: "ultimo" });
+
+    expect(order.indexOf("end:lento")).toBeLessThan(order.indexOf("start:rapido"));
+    expect(order.indexOf("end:rapido")).toBeLessThan(order.indexOf("start:ultimo"));
+    expect(order[order.length - 1]).toBe("end:ultimo");
+  });
 });

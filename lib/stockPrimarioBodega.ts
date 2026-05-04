@@ -1,6 +1,6 @@
 import type { Slot } from "../app/interfaces/bodega";
 import type { Catalogo } from "../app/types/catalogo";
-import { slotLooksLikeProcesamiento } from "../app/lib/bodegaDisplay";
+import { secondaryTitleFromSlot, slotLooksLikeProcesamiento } from "../app/lib/bodegaDisplay";
 import {
   esCatalogoSecundario,
   estimadoSecundarioAplicarPerdidaPct,
@@ -15,6 +15,57 @@ function norm(s: string): string {
   return s.trim().toLowerCase().replace(/\s+/g, " ");
 }
 
+/** Casillero de procesamiento (PROC) que corresponde al catálogo secundario. */
+function slotProcesamientoCoincideSecundario(slot: Slot, secundario: Catalogo): boolean {
+  const sid = String(secundario.id ?? "").trim();
+  if (sid && String(slot.catalogoProductId ?? "").trim() === sid) return true;
+  if (slotCoincideConCatalogo(slot, secundario)) return true;
+  const titProc = (slot.procesamientoSecundarioTitulo ?? "").trim();
+  if (titProc) {
+    const pseudo: Slot = { ...slot, name: titProc };
+    if (slotCoincideConCatalogo(pseudo, secundario)) return true;
+  }
+  const inferido = (secondaryTitleFromSlot(slot) ?? "").trim();
+  if (inferido) {
+    const pseudo: Slot = { ...slot, name: inferido };
+    if (slotCoincideConCatalogo(pseudo, secundario)) return true;
+  }
+  return false;
+}
+
+/**
+ * Suma unidades del secundario ya ubicadas en casilleros de **procesamiento** (PROC).
+ * No incluye teórico desde primario en crudo; es inventario «empacado» en mapa.
+ */
+export function stockUnidadesSecundarioDesdeSlotsProcesamiento(
+  slots: Slot[],
+  clientId: string,
+  secundario: Catalogo,
+): number {
+  const cid = String(clientId ?? "").trim();
+  if (!cid || !esCatalogoSecundario(secundario)) return 0;
+  let sum = 0;
+  for (const s of slots) {
+    if (!s.autoId?.trim() || String(s.client ?? "").trim() !== cid) continue;
+    if (!slotLooksLikeProcesamiento(s)) continue;
+    if (!slotProcesamientoCoincideSecundario(s, secundario)) continue;
+    const u =
+      typeof s.procesamientoUnidadesSecundario === "number" &&
+      Number.isFinite(s.procesamientoUnidadesSecundario) &&
+      s.procesamientoUnidadesSecundario > 0
+        ? s.procesamientoUnidadesSecundario
+        : undefined;
+    if (u !== undefined) {
+      sum += u;
+      continue;
+    }
+    const raw = s as unknown as Record<string, unknown>;
+    const pz = coercePiezasFromUnknown(raw.piezas ?? s.piezas);
+    if (pz !== undefined && pz > 0) sum += pz;
+  }
+  return sum;
+}
+
 /**
  * Relaciona una posición del mapa con un ítem del catálogo (mismo criterio que en ingreso: nombre del producto).
  */
@@ -27,7 +78,9 @@ export function slotCoincideConCatalogo(slot: Slot, cat: Catalogo): boolean {
   if (title && sn === title) return true;
   if (sku && sn === sku) return true;
   if (code && sn === code) return true;
-  if (title.length >= 6 && (sn.includes(title) || title.includes(sn))) return true;
+  /** Solo el nombre del mapa contiene el título del catálogo (no al revés): si no, dos ítems distintos
+   *  comparten stock p. ej. caja «Frozen-Prime…» y catálogo «BPSHF FROZEN-PRIME…» por `title.includes(sn)`. */
+  if (title.length >= 6 && sn.includes(title)) return true;
   return false;
 }
 

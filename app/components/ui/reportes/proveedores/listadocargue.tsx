@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/app/context/AuthContext";
 import { OrdenCompraService } from "@/app/services/ordenCompraService";
 import { CatalogoService } from "@/app/services/catalogoService";
@@ -129,7 +129,7 @@ export default function ListadoCargue() {
   const [error, setError] = useState<string | null>(null);
   const [page, setPage] = useState(1);
 
-  const reload = useCallback(async () => {
+  useEffect(() => {
     if (!idCliente.trim() || !codeCuenta.trim()) {
       setOrdenes([]);
       setCatalogMap(new Map());
@@ -138,28 +138,30 @@ export default function ListadoCargue() {
     }
     setLoading(true);
     setError(null);
-    try {
-      const [ocList, cats] = await Promise.all([
-        OrdenCompraService.getAll(idCliente, codeCuenta),
-        CatalogoService.getAll(idCliente, codeCuenta),
-      ]);
+    let ocList: OrdenCompra[] = [];
+    let cats: Catalogo[] = [];
+    const emit = () => {
       const map = new Map<string, Catalogo>();
       for (const c of cats) {
         if (c.id) map.set(c.id, c);
       }
       setCatalogMap(map);
       setOrdenes(ocList.filter((o) => ordenEnEstadoProveedor(o)));
-    } catch {
-      setOrdenes([]);
-      setError("No se pudieron cargar las órdenes de compra.");
-    } finally {
       setLoading(false);
-    }
+    };
+    const u1 = OrdenCompraService.subscribeByCodeCuenta(idCliente, codeCuenta, (list) => {
+      ocList = list;
+      emit();
+    });
+    const u2 = CatalogoService.subscribeByCodeCuenta(idCliente, codeCuenta, (list) => {
+      cats = list;
+      emit();
+    });
+    return () => {
+      u1();
+      u2();
+    };
   }, [idCliente, codeCuenta]);
-
-  useEffect(() => {
-    void reload();
-  }, [reload]);
 
   useEffect(() => {
     setPage(1);

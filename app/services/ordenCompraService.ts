@@ -10,6 +10,7 @@ import {
   where,
   orderBy,
   limit,
+  onSnapshot,
 } from "firebase/firestore";
 import type {
   OrdenCompra,
@@ -210,6 +211,34 @@ export const OrdenCompraService = {
       console.error("OrdenCompraService.getAll", e);
       return [];
     }
+  },
+
+  subscribeByCodeCuenta(
+    idCliente: string,
+    codeCuenta: string,
+    onNext: (rows: OrdenCompra[]) => void,
+    onError?: (e: Error) => void,
+  ): () => void {
+    if (!idCliente?.trim()) {
+      onNext([]);
+      return () => {};
+    }
+    const q = query(col(idCliente), where("codeCuenta", "==", codeCuenta));
+    return onSnapshot(
+      q,
+      (snap) => {
+        void (async () => {
+          try {
+            const list = snap.docs.map((d) => ({ id: d.id, ...d.data() } as OrdenCompraConId));
+            const repaired = await repairOrdenesCompraSinNumero(idCliente.trim(), list);
+            onNext(repaired.sort(compareOrdenCompraNewestFirst));
+          } catch (e) {
+            onError?.(e as Error);
+          }
+        })();
+      },
+      (err) => onError?.(err as Error),
+    );
   },
 
   async getByProveedor(

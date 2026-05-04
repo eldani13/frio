@@ -2,7 +2,7 @@
 
 import React from "react";
 import { HiArrowsRightLeft, HiOutlineChevronDown, HiOutlineXMark } from "react-icons/hi2";
-import { FiArrowLeft, FiBox, FiCpu } from "react-icons/fi";
+import { FiArrowLeft, FiBox, FiCpu, FiInfo, FiPackage, FiSend } from "react-icons/fi";
 import { MdPendingActions } from "react-icons/md";
 import type {
   BodegaOrder,
@@ -32,6 +32,7 @@ import {
 } from "@/app/lib/bodegaDisplay";
 import { kgSobranteParaDevolucionMapa, unidadesSecundarioEnterasParaMapa } from "@/app/lib/sobranteKg";
 import { recordMermaProcesamientoKg } from "@/lib/bodegaCloudState";
+import { swalConfirm, swalWarning } from "@/lib/swal";
 import { SolicitudProcesamientoService } from "@/app/services/solicitudProcesamientoService";
 import type { SolicitudProcesamiento } from "@/app/types/solicitudProcesamiento";
 import {
@@ -48,6 +49,13 @@ import {
   normalizeProcesamientoEstado,
 } from "@/app/types/solicitudProcesamiento";
 import { BodegaDetalleModalFila } from "@/app/components/bodega/CajaDetalleModal";
+import {
+  JefeModalField,
+  JefeOrderModalShell,
+  jefeBtnGhost,
+  jefeModalAccentClass,
+  jefeNestedShellBorder,
+} from "@/app/components/bodega/JefeOrderModalShell";
 import { ModalPlantilla } from "@/app/components/ui/ModalPlantilla";
 import { EmptyZonaSlot, ZonaCuatroSlotsRow } from "@/app/components/bodega/ZonaCuatroSlotsRow";
 import {
@@ -55,6 +63,7 @@ import {
   BODEGA_SLOT_ROUNDED,
   BODEGA_SLOT_SHELL_CLASS,
   BODEGA_SLOT_SHELL_PADDING,
+  BODEGA_SLOTS_GRID_ALMACEN_CLASS,
 } from "@/app/lib/bodegaSlotUniform";
 import type { Catalogo } from "@/app/types/catalogo";
 import {
@@ -63,6 +72,7 @@ import {
   primarioCatalogoPorId,
   textoPrecioSecundarioCatalogo,
 } from "@/app/lib/procesamientoDisplay";
+import { almacenProductCodeFromCatalogo } from "@/lib/almacenProductCode";
 
 function opcionesEstadoSelect(estadoActual: string): string[] {
   const cur = estadoActual.trim();
@@ -161,11 +171,13 @@ function TarjetaSlotProcesamientoPrimario({
   onSelect,
   cornerLabel,
   productosCatalogo,
+  soloLectura = false,
 }: {
   row: SolicitudProcesamiento;
   onSelect: (row: SolicitudProcesamiento) => void;
   cornerLabel: number;
   productosCatalogo?: Catalogo[];
+  soloLectura?: boolean;
 }) {
   const cuenta = String(row.clientName ?? row.clientId ?? "").trim() || "—";
   const esEnCurso = normalizeProcesamientoEstado(row.estado) === "En curso";
@@ -182,13 +194,8 @@ function TarjetaSlotProcesamientoPrimario({
       ]
         .filter((x) => String(x).trim().length > 0)
         .join(" · ");
-  return (
-    <button
-      type="button"
-      onClick={() => onSelect(row)}
-      title={`${row.numero} · ${row.productoPrimarioTitulo}`}
-      className={`relative flex w-full flex-col text-left ${BODEGA_SLOT_SHELL_CLASS} ${BODEGA_SLOT_ROUNDED} ${BODEGA_SLOT_SHELL_PADDING} transition ${tone.shell}`}
-    >
+  const inner = (
+    <>
       <span className={`absolute left-2 top-2 z-10 text-xs leading-none ${tone.positionLabel}`}>
         {cornerLabel}
       </span>
@@ -215,13 +222,31 @@ function TarjetaSlotProcesamientoPrimario({
           </div>
           <div className="mt-2 flex shrink-0 justify-center">
             <span
-              className={`inline-block max-w-full truncate rounded-full px-2 py-0.5 text-base font-medium ${procesamientoEstadoBadgeClass(row.estado)}`}
+              className={`inline-block max-w-full truncate rounded-full px-2 py-0.5 text-base font-medium ${tone.pill}`}
             >
               {row.estado}
             </span>
           </div>
         </div>
       </div>
+    </>
+  );
+  const shell = `${BODEGA_SLOT_SHELL_CLASS} relative flex w-full flex-col ${BODEGA_SLOT_ROUNDED} ${BODEGA_SLOT_SHELL_PADDING} transition ${tone.shell} ${soloLectura ? "cursor-default" : ""}`;
+  if (soloLectura) {
+    return (
+      <div className={shell} title={`${row.numero} · ${row.productoPrimarioTitulo}`} role="group">
+        {inner}
+      </div>
+    );
+  }
+  return (
+    <button
+      type="button"
+      onClick={() => onSelect(row)}
+      title={`${row.numero} · ${row.productoPrimarioTitulo}`}
+      className={shell}
+    >
+      {inner}
     </button>
   );
 }
@@ -231,10 +256,12 @@ function TarjetaSlotProcesamientoSecundario({
   row,
   onSelect,
   cornerLabel,
+  soloLectura = false,
 }: {
   row: SolicitudProcesamiento;
   onSelect: (row: SolicitudProcesamiento) => void;
   cornerLabel: number;
+  soloLectura?: boolean;
 }) {
   const cuenta = String(row.clientName ?? row.clientId ?? "").trim() || "—";
   const estSec =
@@ -245,13 +272,8 @@ function TarjetaSlotProcesamientoSecundario({
       : null;
   const tone = OCCUPIED_MAPA_TONE_PROCESADO;
   const lineaSub = [row.numero, cuenta, estSec].filter((x) => x && String(x).trim().length > 0).join(" · ");
-  return (
-    <button
-      type="button"
-      onClick={() => onSelect(row)}
-      title={`${row.numero} · ${row.productoSecundarioTitulo}`}
-      className={`relative flex w-full flex-col text-left ${BODEGA_SLOT_SHELL_CLASS} ${BODEGA_SLOT_ROUNDED} ${BODEGA_SLOT_SHELL_PADDING} transition ${tone.shell}`}
-    >
+  const inner = (
+    <>
       <span className={`absolute left-2 top-2 z-10 text-xs leading-none ${tone.positionLabel}`}>
         {cornerLabel}
       </span>
@@ -278,13 +300,31 @@ function TarjetaSlotProcesamientoSecundario({
           </div>
           <div className="mt-2 flex shrink-0 justify-center">
             <span
-              className={`inline-block max-w-full truncate rounded-full px-2 py-0.5 text-base font-medium ${procesamientoEstadoBadgeClass(row.estado)}`}
+              className={`inline-block max-w-full truncate rounded-full px-2 py-0.5 text-base font-medium ${tone.pill}`}
             >
               {row.estado}
             </span>
           </div>
         </div>
       </div>
+    </>
+  );
+  const shell = `${BODEGA_SLOT_SHELL_CLASS} relative flex w-full flex-col ${BODEGA_SLOT_ROUNDED} ${BODEGA_SLOT_SHELL_PADDING} transition ${tone.shell} ${soloLectura ? "cursor-default" : ""}`;
+  if (soloLectura) {
+    return (
+      <div className={shell} title={`${row.numero} · ${row.productoSecundarioTitulo}`} role="group">
+        {inner}
+      </div>
+    );
+  }
+  return (
+    <button
+      type="button"
+      onClick={() => onSelect(row)}
+      title={`${row.numero} · ${row.productoSecundarioTitulo}`}
+      className={shell}
+    >
+      {inner}
     </button>
   );
 }
@@ -309,7 +349,7 @@ export function TarjetaOrdenProcesamientoSlotInner({
     <button
       type="button"
       onClick={() => onSelect(row)}
-      className={`relative flex w-full flex-col text-left ${BODEGA_SLOT_SHELL_CLASS} ${BODEGA_SLOT_ROUNDED} ${BODEGA_SLOT_SHELL_PADDING} transition ${tone.shell}`}
+      className={`${BODEGA_SLOT_SHELL_CLASS} relative flex w-full flex-col ${BODEGA_SLOT_ROUNDED} ${BODEGA_SLOT_SHELL_PADDING} transition ${tone.shell}`}
     >
       <span className={`absolute left-2 top-2 z-10 text-xs leading-none ${tone.positionLabel}`}>
         {cornerLabel ?? row.numero}
@@ -337,7 +377,7 @@ export function TarjetaOrdenProcesamientoSlotInner({
           </div>
           <div className="mt-2 flex shrink-0 justify-center">
             <span
-              className={`inline-block max-w-full truncate rounded-full px-2 py-0.5 text-base font-medium ${procesamientoEstadoBadgeClass(row.estado)}`}
+              className={`inline-block max-w-full truncate rounded-full px-2 py-0.5 text-base font-medium ${tone.pill}`}
             >
               {row.estado}
             </span>
@@ -371,8 +411,8 @@ function TarjetaOrdenProcesamientoCarrusel({
 }
 
 /**
- * Misma huella que `SlotCard` en almacenamiento (`BODEGA_SLOT_*` + `tone.shell` / `tone.inner`).
- * Procesado → violeta; sobrante a primario → cielo.
+ * Misma huella que casilleros del mapa (`BODEGA_SLOT_*`).
+ * **Azul (cielo)** = sobrante de primario a ubicar; **violeta** = producto procesado → «A bodega».
  */
 function CajaPendienteMovimientoBodega({
   p,
@@ -409,7 +449,9 @@ function CajaPendienteMovimientoBodega({
         type="button"
         onClick={onVerDetalle}
         title={`Ver orden ${row.numero}`}
-        className="relative w-full text-left outline-none focus-visible:ring-2 focus-visible:ring-sky-400/50 focus-visible:ring-offset-1 rounded-[inherit]"
+        className={`relative w-full text-left outline-none focus-visible:ring-2 focus-visible:ring-offset-1 rounded-[inherit] ${
+          p.kind === "procesado" ? "focus-visible:ring-violet-400/60" : "focus-visible:ring-sky-400/50"
+        }`}
         aria-label={`Ver detalle de la orden ${row.numero}`}
       >
         <span
@@ -447,7 +489,11 @@ function CajaPendienteMovimientoBodega({
         </div>
       </button>
       {puedeCrearOrdenTraslado ? (
-        <div className="mt-2 flex shrink-0 justify-center border-t border-slate-200/60 pt-2">
+        <div
+          className={`mt-2 flex shrink-0 justify-center border-t pt-2 ${
+            p.kind === "procesado" ? "border-violet-200/70" : "border-slate-200/60"
+          }`}
+        >
           <button
             type="button"
             onClick={(e) => {
@@ -455,7 +501,11 @@ function CajaPendienteMovimientoBodega({
               e.stopPropagation();
               onCrearOrden();
             }}
-            className="rounded-lg bg-sky-600 px-3 py-1.5 text-base font-bold text-white shadow-sm transition hover:bg-sky-700 sm:text-xs"
+            className={`rounded-lg px-3 py-1.5 text-base font-bold text-white shadow-sm transition sm:text-xs ${
+              p.kind === "procesado"
+                ? "bg-violet-600 hover:bg-violet-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-500/50"
+                : "bg-sky-600 hover:bg-sky-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/50"
+            }`}
           >
             Crear orden
           </button>
@@ -465,7 +515,10 @@ function CajaPendienteMovimientoBodega({
   );
 }
 
-function buildProcesamientoOrigenDesdePendiente(p: PendienteMovimientoBodega): ProcesamientoOrigenOrden {
+function buildProcesamientoOrigenDesdePendiente(
+  p: PendienteMovimientoBodega,
+  productosCatalogo: Catalogo[] | undefined,
+): ProcesamientoOrigenOrden {
   const row = p.row;
   const estimadoUnidadesSecundario =
     typeof row.estimadoUnidadesSecundario === "number" && Number.isFinite(row.estimadoUnidadesSecundario)
@@ -473,6 +526,10 @@ function buildProcesamientoOrigenDesdePendiente(p: PendienteMovimientoBodega): P
       : row.estimadoUnidadesSecundario === null
         ? null
         : undefined;
+  const primCat = primarioCatalogoPorId(productosCatalogo, row.productoPrimarioId);
+  const secCat = primarioCatalogoPorId(productosCatalogo, row.productoSecundarioId);
+  const capPrim = almacenProductCodeFromCatalogo(primCat);
+  const capSec = almacenProductCodeFromCatalogo(secCat);
   const base: Omit<ProcesamientoOrigenOrden, "rolDevolucion" | "unidadPrimarioVisualizacion" | "sobranteKg"> = {
     cuentaClientId: String(row.clientId ?? "").trim(),
     solicitudId: String(row.id ?? "").trim(),
@@ -480,8 +537,11 @@ function buildProcesamientoOrigenDesdePendiente(p: PendienteMovimientoBodega): P
     productoPrimarioTitulo: row.productoPrimarioTitulo ?? "",
     productoSecundarioTitulo: row.productoSecundarioTitulo ?? "",
     productoPrimarioId: row.productoPrimarioId,
+    ...(row.productoSecundarioId?.trim() ? { productoSecundarioId: row.productoSecundarioId.trim() } : {}),
     cantidadPrimario: row.cantidadPrimario,
     estimadoUnidadesSecundario,
+    ...(capPrim ? { catalogoAlmacenCodePrimario: capPrim } : {}),
+    ...(capSec ? { catalogoAlmacenCodeSecundario: capSec } : {}),
   };
   if (p.kind === "desperdicio") {
     return {
@@ -524,6 +584,7 @@ export function ProcesamientoOrdenesActivasBodega({
   onCrearOrdenBodega,
   /** Opcional: para mostrar la unidad del catálogo (lonchas, cajas…) cuando el primario va por cantidad. */
   productosCatalogo,
+  soloLecturaMapa = false,
 }: {
   clients: Client[];
   warehouseCodeCuenta: string;
@@ -562,6 +623,7 @@ export function ProcesamientoOrdenesActivasBodega({
     procesamientoOrigen?: ProcesamientoOrigenOrden;
   }) => void;
   productosCatalogo?: Catalogo[];
+  soloLecturaMapa?: boolean;
 }) {
   const [rows, setRows] = React.useState<SolicitudProcesamiento[]>([]);
   const [error, setError] = React.useState<string | null>(null);
@@ -678,14 +740,20 @@ export function ProcesamientoOrdenesActivasBodega({
     pendientesContexto === "almacenamiento" || pendientesContexto === "procesamiento";
   const [modalPendientesIniciadoAbierto, setModalPendientesIniciadoAbierto] = React.useState(false);
   const puedeAsignar = puedeGestionarAsignaciones(sessionRole);
-  const puedeCrearOrdenTraslado = Boolean(onCrearOrdenBodega && puedeAsignar);
+  const puedeCrearOrdenTraslado = Boolean(onCrearOrdenBodega && puedeAsignar && !soloLecturaMapa);
   const [movimientoTrasladoPendiente, setMovimientoTrasladoPendiente] =
     React.useState<PendienteMovimientoBodega | null>(null);
   const [targetCasilleroTraslado, setTargetCasilleroTraslado] = React.useState(1);
 
-  const confirmarOrdenTrasladoDesdePendiente = React.useCallback(() => {
+  const confirmarOrdenTrasladoDesdePendiente = React.useCallback(async () => {
     if (!movimientoTrasladoPendiente || !onCrearOrdenBodega) return;
-    const po = buildProcesamientoOrigenDesdePendiente(movimientoTrasladoPendiente);
+    const textoDetalle =
+      movimientoTrasladoPendiente.kind === "desperdicio"
+        ? "Se creará la orden para devolver desperdicio al mapa de bodega."
+        : `Se creará la orden moviendo procesado al casillero ${targetCasilleroTraslado} del mapa.`;
+    const ok = await swalConfirm("¿Confirmar orden de traslado a bodega?", textoDetalle);
+    if (!ok) return;
+    const po = buildProcesamientoOrigenDesdePendiente(movimientoTrasladoPendiente, productosCatalogo);
     if (movimientoTrasladoPendiente.kind === "desperdicio") {
       onCrearOrdenBodega({
         destination: "a_bodega",
@@ -704,7 +772,13 @@ export function ProcesamientoOrdenesActivasBodega({
       });
     }
     setMovimientoTrasladoPendiente(null);
-  }, [movimientoTrasladoPendiente, onCrearOrdenBodega, availableBodegaTargets, targetCasilleroTraslado]);
+  }, [
+    movimientoTrasladoPendiente,
+    onCrearOrdenBodega,
+    availableBodegaTargets,
+    targetCasilleroTraslado,
+    productosCatalogo,
+  ]);
 
   React.useEffect(() => {
     if (!movimientoTrasladoPendiente || movimientoTrasladoPendiente.kind !== "procesado") return;
@@ -936,6 +1010,11 @@ export function ProcesamientoOrdenesActivasBodega({
 
   const asignarOperario = async () => {
     if (!detalle || !responsableSeleccionado || !onPushTareaProcesamientoOperario) return;
+    const ok = await swalConfirm(
+      "¿Asignar responsable en bodega?",
+      `Se asignará «${responsableSeleccionado.name}» a esta orden y se actualizará en la base de datos.`,
+    );
+    if (!ok) return;
     setModalBusy(true);
     setError(null);
     try {
@@ -1051,13 +1130,14 @@ export function ProcesamientoOrdenesActivasBodega({
     </div>
   );
 
-  const btnAsignarOperarioClass =
-    "w-full rounded-lg bg-sky-600 px-3 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-sky-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/50 disabled:opacity-50";
-
   const esDetalleTrasladoAlmacen = detalle !== null && detallePendienteMovimiento !== null;
   const detalleEstadoNorm = detalle ? normalizeProcesamientoEstado(detalle.estado) : "";
   const mostrarBloqueAsignarOperario =
-    Boolean(detalle) && puedeAsignar && detalleEstadoNorm === "Iniciado" && !esDetalleTrasladoAlmacen;
+    Boolean(detalle) &&
+    puedeAsignar &&
+    !soloLecturaMapa &&
+    detalleEstadoNorm === "Iniciado" &&
+    !esDetalleTrasladoAlmacen;
   const mostrarCrearOrdenTrasladoDesdeDetalle =
     esDetalleTrasladoAlmacen && Boolean(detallePendienteMovimiento) && puedeCrearOrdenTraslado && onCrearOrdenBodega;
   const mostrarAvisoTrasladoSinPermiso =
@@ -1065,225 +1145,316 @@ export function ProcesamientoOrdenesActivasBodega({
   /** Detalle modal: solo lo necesario para retiro físico mapa → procesamiento. */
   const detalleVistaMinimalMovimientoAlmacenAProc =
     Boolean(detalle) && !esDetalleTrasladoAlmacen && detalleEstadoNorm === "Iniciado";
+  /** Detalle modal abierto desde tarea «Procesamiento → almacenamiento»: sin listado largo de la orden. */
+  const detalleVistaMinimalTrasladoAAlmacen = esDetalleTrasladoAlmacen;
   const subtituloDetalleOrden =
     detalle && esDetalleTrasladoAlmacen
       ? "Traslado pendiente desde procesamiento hacia el mapa de almacenamiento."
       : detalleVistaMinimalMovimientoAlmacenAProc
         ? "Retiro en bodega: del mapa hacia procesamiento."
         : "Seguimiento de la orden en planta.";
-  const textoBannerContexto =
+
+  const textoBannerProcDetalle =
     detalle && esDetalleTrasladoAlmacen
       ? "Procesamiento → almacenamiento."
       : detalle && detalleEstadoNorm === "Iniciado"
         ? "Almacenamiento → procesamiento."
         : "Procesamiento.";
 
+  const emeraldProcDetalle = jefeModalAccentClass.emerald;
+
   const detalleModal =
     detalle && (layout === "cards" || layout === "slots4") ? (
-      <ModalPlantilla
-        open
+      <JefeOrderModalShell
+        id="proc-bodega-detalle"
+        title={String(detalle.numero ?? "").trim() || detalle.id}
+        description={subtituloDetalleOrden}
+        accent="emerald"
+        icon={<FiCpu className="h-6 w-6" aria-hidden />}
         onClose={cerrarDetalleOrden}
-        titulo={String(detalle.numero ?? "").trim() || detalle.id}
+        contentMaxWidthClass={esDetalleTrasladoAlmacen ? "max-w-2xl" : "max-w-3xl"}
+        bodyMaxHeightClass="max-h-[min(88vh,820px)]"
+        zIndexClass="z-[110]"
         tituloClassName="font-mono"
-        tituloId="proc-bodega-detalle-titulo"
-        headerIcon={<FiCpu className="h-7 w-7 text-blue-600" strokeWidth={2} aria-hidden />}
         headerStart={
           <button
             type="button"
             onClick={cerrarDetalleOrden}
-            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 shadow-sm transition hover:bg-slate-50"
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 shadow-sm transition hover:bg-slate-50"
             aria-label="Volver al listado"
           >
             <FiArrowLeft className="h-5 w-5" />
           </button>
         }
-        subtitulo={subtituloDetalleOrden}
-        maxWidthClass="max-w-3xl"
-        cardMaxHeightClass="max-h-[90vh]"
-        zIndexClass="z-[110]"
+        footer={
+          <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
+            <button type="button" onClick={cerrarDetalleOrden} className={jefeBtnGhost}>
+              Volver al listado
+            </button>
+            <button type="button" onClick={cerrarDetalleOrden} className={jefeBtnGhost}>
+              Cerrar
+            </button>
+          </div>
+        }
       >
-            {esDetalleTrasladoAlmacen ? (
-              <p className="mb-4 rounded-xl border border-violet-200 bg-violet-50/90 px-3 py-2.5 text-left text-xs leading-relaxed text-violet-950">
-                <strong className="font-semibold">Pendiente en planta.</strong> La orden ya no está en{" "}
-                <strong>Iniciado</strong>: el botón «Asignar a operario» solo aplica cuando el material sigue en bodega y
-                hay que mandarlo a la cola del operario. Acá lo que falta es el{" "}
-                <strong>traslado al almacenamiento</strong> (mapa).
-              </p>
-            ) : null}
-            <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-sky-100 bg-sky-50/60 px-4 py-3 text-sm">
-              {esDetalleTrasladoAlmacen ? (
-                <HiArrowsRightLeft className="h-4 w-4 shrink-0 text-violet-600" strokeWidth={2} aria-hidden />
-              ) : (
-                <FiCpu className="h-4 w-4 shrink-0 text-sky-600" aria-hidden />
-              )}
-              <span
-                className={`rounded-full px-2.5 py-0.5 text-base font-bold uppercase ${procesamientoEstadoBadgeClass(detalle.estado)}`}
-              >
-                {detalle.estado}
+        <JefeModalField
+          label="Estado"
+          icon={<FiInfo className="h-4 w-4" aria-hidden />}
+          hint="Estado de la orden y flujo en esta bodega."
+        >
+          <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-emerald-100/90 bg-emerald-50/50 px-4 py-3 text-sm">
+            <span
+              className={`rounded-full px-2.5 py-0.5 text-base font-bold uppercase ${procesamientoEstadoBadgeClass(detalle.estado)}`}
+            >
+              {detalle.estado}
+            </span>
+            <span className="text-slate-600">{textoBannerProcDetalle}</span>
+            {detalle.fecha ? (
+              <span className="text-slate-600">
+                Fecha: <strong className="text-slate-900">{detalle.fecha}</strong>
               </span>
-              <span className="text-slate-600">{textoBannerContexto}</span>
-            </div>
-            <dl className="mt-4 space-y-3 text-base">
-              {detalleVistaMinimalMovimientoAlmacenAProc ? (
-                <>
-                  <BodegaDetalleModalFila
-                    label="Producto"
-                    value={(detalle.productoPrimarioTitulo || "—").trim() || "—"}
-                  />
-                  {(() => {
-                    const est = detalle.estimadoUnidadesSecundario;
-                    if (
-                      est !== undefined &&
-                      est !== null &&
-                      Number.isFinite(Number(est)) &&
-                      unidadesSecundarioEnterasParaMapa(Number(est)) > 0
-                    ) {
-                      const udsMapa = unidadesSecundarioEnterasParaMapa(Number(est));
-                      return (
-                        <BodegaDetalleModalFila label="Unidades en mapa" value={`${udsMapa} u.`} />
-                      );
-                    }
-                    return (
-                      <BodegaDetalleModalFila
-                        label="Cantidad"
-                        value={cantidadPrimarioProcesamientoTexto(
-                          detalle,
-                          primarioCatalogoPorId(productosCatalogo, detalle.productoPrimarioId),
-                        )}
-                      />
-                    );
-                  })()}
-                  {Boolean(String(detalle.operarioBodegaNombre ?? "").trim() || String(detalle.operarioBodegaUid ?? "").trim()) ? (
+            ) : null}
+          </div>
+        </JefeModalField>
+
+        <JefeModalField
+          label={
+            detalleVistaMinimalMovimientoAlmacenAProc
+              ? "Productos"
+              : detalleVistaMinimalTrasladoAAlmacen
+                ? "Producto"
+                : "Orden"
+          }
+          icon={
+            detalleVistaMinimalMovimientoAlmacenAProc || detalleVistaMinimalTrasladoAAlmacen ? (
+              <FiPackage className="h-4 w-4" aria-hidden />
+            ) : (
+              <FiBox className="h-4 w-4" aria-hidden />
+            )
+          }
+          hint={
+            detalleVistaMinimalMovimientoAlmacenAProc
+              ? "Producto y cantidad a retirar del mapa hacia procesamiento."
+              : detalleVistaMinimalTrasladoAAlmacen
+                ? "Lo esencial para crear la orden y que el operario ubique en almacenamiento."
+                : "Datos registrados de la solicitud."
+          }
+        >
+          <div
+            className={`rounded-2xl border bg-linear-to-br from-white to-emerald-50/35 p-4 shadow-sm ${jefeNestedShellBorder.emerald}`}
+          >
+            <dl className="space-y-4 text-base">
+            {detalleVistaMinimalMovimientoAlmacenAProc ? (
+              <>
+                <BodegaDetalleModalFila
+                  label="Producto"
+                  value={(detalle.productoPrimarioTitulo || "—").trim() || "—"}
+                />
+                {(() => {
+                  const est = detalle.estimadoUnidadesSecundario;
+                  if (
+                    est !== undefined &&
+                    est !== null &&
+                    Number.isFinite(Number(est)) &&
+                    unidadesSecundarioEnterasParaMapa(Number(est)) > 0
+                  ) {
+                    const udsMapa = unidadesSecundarioEnterasParaMapa(Number(est));
+                    return <BodegaDetalleModalFila label="Unidades en mapa" value={`${udsMapa} u.`} />;
+                  }
+                  return (
                     <BodegaDetalleModalFila
-                      label="Responsable"
-                      value={detalle.operarioBodegaNombre?.trim() || detalle.operarioBodegaUid || "—"}
+                      label="Cantidad"
+                      value={cantidadPrimarioProcesamientoTexto(
+                        detalle,
+                        primarioCatalogoPorId(productosCatalogo, detalle.productoPrimarioId),
+                      )}
                     />
-                  ) : null}
-                </>
-              ) : (
-                <>
+                  );
+                })()}
+                {Boolean(String(detalle.operarioBodegaNombre ?? "").trim() || String(detalle.operarioBodegaUid ?? "").trim()) ? (
                   <BodegaDetalleModalFila
-                    label="Número"
-                    value={<span className="font-mono font-semibold">{detalle.numero}</span>}
+                    label="Responsable"
+                    value={detalle.operarioBodegaNombre?.trim() || detalle.operarioBodegaUid || "—"}
                   />
-                  <BodegaDetalleModalFila
-                    label="Cliente"
-                    value={detalle.clientName?.trim() || detalle.clientId || "—"}
-                  />
-                  <BodegaDetalleModalFila
-                    label="Producto primario"
-                    value={(detalle.productoPrimarioTitulo || "—").trim() || "—"}
-                  />
-                  <BodegaDetalleModalFila
-                    label="Cantidad primario"
-                    value={cantidadPrimarioProcesamientoTexto(
-                      detalle,
-                      primarioCatalogoPorId(productosCatalogo, detalle.productoPrimarioId),
-                    )}
-                  />
-                  <BodegaDetalleModalFila
-                    label="Producto secundario"
-                    value={(detalle.productoSecundarioTitulo || "—").trim() || "—"}
-                  />
-                  <BodegaDetalleModalFila
-                    label="Precio secundario (catálogo)"
-                    value={textoPrecioSecundarioCatalogo(productosCatalogo, detalle.productoSecundarioId)}
-                  />
-                  {detalle.estimadoUnidadesSecundario !== undefined &&
-                  detalle.estimadoUnidadesSecundario !== null &&
-                  Number.isFinite(Number(detalle.estimadoUnidadesSecundario)) ? (
-                    <>
-                      <BodegaDetalleModalFila
-                        label="Unidades secundario (estimado)"
-                        value={estimadoUnidadesSecundarioTexto(Number(detalle.estimadoUnidadesSecundario))}
-                      />
-                      {(() => {
-                        const udsMapa = unidadesSecundarioEnterasParaMapa(Number(detalle.estimadoUnidadesSecundario));
-                        if (udsMapa <= 0) return null;
+                ) : null}
+              </>
+            ) : detalleVistaMinimalTrasladoAAlmacen && detallePendienteMovimiento ? (
+              <>
+                <BodegaDetalleModalFila
+                  label="Cliente"
+                  value={detalle.clientName?.trim() || detalle.clientId || "—"}
+                />
+                {detallePendienteMovimiento.kind === "procesado" ? (
+                  <>
+                    <BodegaDetalleModalFila
+                      label="Procesado"
+                      value={(detalle.productoSecundarioTitulo || "—").trim() || "—"}
+                    />
+                    {(() => {
+                      const est = detalle.estimadoUnidadesSecundario;
+                      if (
+                        est !== undefined &&
+                        est !== null &&
+                        Number.isFinite(Number(est)) &&
+                        unidadesSecundarioEnterasParaMapa(Number(est)) > 0
+                      ) {
+                        const udsMapa = unidadesSecundarioEnterasParaMapa(Number(est));
+                        return <BodegaDetalleModalFila label="Unidades en mapa" value={`${udsMapa} u.`} />;
+                      }
+                      if (est !== undefined && est !== null && Number.isFinite(Number(est))) {
                         return (
                           <BodegaDetalleModalFila
-                            label="Unidades en mapa (enteras)"
-                            value={`${udsMapa} u.`}
+                            label="Cantidad"
+                            value={estimadoUnidadesSecundarioTexto(Number(est))}
                           />
                         );
-                      })()}
-                    </>
-                  ) : null}
-                  {normalizeProcesamientoEstado(detalle.estado) === "Pendiente" ||
-                  normalizeProcesamientoEstado(detalle.estado) === "Terminado" ? (
-                    <BodegaDetalleModalFila label="Merma" value={formatKgDesperdicio(detalle.desperdicioKg)} />
-                  ) : null}
-                  {(normalizeProcesamientoEstado(detalle.estado) === "Pendiente" ||
-                    normalizeProcesamientoEstado(detalle.estado) === "Terminado") &&
-                  kgSobranteParaDevolucionMapa(detalle) > 0 ? (
+                      }
+                      return null;
+                    })()}
+                  </>
+                ) : (
+                  <>
                     <BodegaDetalleModalFila
-                      label="Sobrante"
+                      label="Primario"
+                      value={(detalle.productoPrimarioTitulo || "—").trim() || "—"}
+                    />
+                    <BodegaDetalleModalFila
+                      label="Sobrante a ubicar"
                       value={formatKgDesperdicio(kgSobranteParaDevolucionMapa(detalle))}
                     />
-                  ) : null}
-                  {Boolean(String(detalle.operarioBodegaNombre ?? "").trim() || String(detalle.operarioBodegaUid ?? "").trim()) ? (
-                    <BodegaDetalleModalFila
-                      label="Responsable"
-                      value={detalle.operarioBodegaNombre?.trim() || detalle.operarioBodegaUid || "—"}
-                    />
-                  ) : null}
-                </>
-              )}
-            </dl>
-
-        footer={
-          <div className="flex flex-col gap-3">
-            {mostrarBloqueAsignarOperario ? (
-              <div className="rounded-2xl border border-sky-200/80 bg-white px-4 py-3 shadow-sm">
-                <p className="text-base font-bold uppercase tracking-wide text-sky-800/90">
-                  Tarea pendiente · retiro en bodega
-                </p>
-                <p className="mt-1 text-xs text-slate-600">
-                  {detalleVistaMinimalMovimientoAlmacenAProc ? (
-                    "Elegí operario y confirmá para mandar la tarea a su cola."
-                  ) : (
-                    <>
-                      Asigná el operario que debe retirar el <strong>primario</strong> del mapa hacia{" "}
-                      <strong>procesamiento</strong>.
-                    </>
+                  </>
+                )}
+              </>
+            ) : (
+              <>
+                <BodegaDetalleModalFila
+                  label="Número"
+                  value={<span className="font-mono font-semibold">{detalle.numero}</span>}
+                />
+                <BodegaDetalleModalFila
+                  label="Cliente"
+                  value={detalle.clientName?.trim() || detalle.clientId || "—"}
+                />
+                <BodegaDetalleModalFila
+                  label="Producto primario"
+                  value={(detalle.productoPrimarioTitulo || "—").trim() || "—"}
+                />
+                <BodegaDetalleModalFila
+                  label="Cantidad primario"
+                  value={cantidadPrimarioProcesamientoTexto(
+                    detalle,
+                    primarioCatalogoPorId(productosCatalogo, detalle.productoPrimarioId),
                   )}
-                </p>
-                {(() => {
-                  const yaFs = Boolean(String(detalle.operarioBodegaUid ?? "").trim());
-                  const yaCola = tareasProcesamientoOperario.some(
-                    (t) =>
-                      String(t.clientId ?? "") === detalle.clientId && String(t.solicitudId ?? "") === detalle.id,
-                  );
-                  const asignado = yaFs || yaCola;
-                  const puedePulsar =
-                    Boolean(responsableSeleccionado) &&
-                    !asignado &&
-                    !modalBusy &&
-                    Boolean(onPushTareaProcesamientoOperario);
-                  const variosOperarios = operariosBodega.length > 1;
-                  return (
-                    <>
-                      {operariosBodega.length === 0 ? (
-                        <p className="mt-2 rounded-md border border-amber-100 bg-amber-50 px-2.5 py-1.5 text-base text-amber-900">
-                          Sin operarios configurados.
-                        </p>
-                      ) : null}
+                />
+                <BodegaDetalleModalFila
+                  label="Producto secundario"
+                  value={(detalle.productoSecundarioTitulo || "—").trim() || "—"}
+                />
+                <BodegaDetalleModalFila
+                  label="Precio secundario (catálogo)"
+                  value={textoPrecioSecundarioCatalogo(productosCatalogo, detalle.productoSecundarioId)}
+                />
+                {detalle.estimadoUnidadesSecundario !== undefined &&
+                detalle.estimadoUnidadesSecundario !== null &&
+                Number.isFinite(Number(detalle.estimadoUnidadesSecundario)) ? (
+                  <>
+                    <BodegaDetalleModalFila
+                      label="Unidades secundario (estimado)"
+                      value={estimadoUnidadesSecundarioTexto(Number(detalle.estimadoUnidadesSecundario))}
+                    />
+                    {(() => {
+                      const udsMapa = unidadesSecundarioEnterasParaMapa(Number(detalle.estimadoUnidadesSecundario));
+                      if (udsMapa <= 0) return null;
+                      return (
+                        <BodegaDetalleModalFila label="Unidades en mapa (enteras)" value={`${udsMapa} u.`} />
+                      );
+                    })()}
+                  </>
+                ) : null}
+                {normalizeProcesamientoEstado(detalle.estado) === "Pendiente" ||
+                normalizeProcesamientoEstado(detalle.estado) === "Terminado" ? (
+                  <BodegaDetalleModalFila label="Merma" value={formatKgDesperdicio(detalle.desperdicioKg)} />
+                ) : null}
+                {(normalizeProcesamientoEstado(detalle.estado) === "Pendiente" ||
+                  normalizeProcesamientoEstado(detalle.estado) === "Terminado") &&
+                kgSobranteParaDevolucionMapa(detalle) > 0 ? (
+                  <BodegaDetalleModalFila
+                    label="Sobrante"
+                    value={formatKgDesperdicio(kgSobranteParaDevolucionMapa(detalle))}
+                  />
+                ) : null}
+                {Boolean(String(detalle.operarioBodegaNombre ?? "").trim() || String(detalle.operarioBodegaUid ?? "").trim()) ? (
+                  <BodegaDetalleModalFila
+                    label="Responsable"
+                    value={detalle.operarioBodegaNombre?.trim() || detalle.operarioBodegaUid || "—"}
+                  />
+                ) : null}
+              </>
+            )}
+            </dl>
+          </div>
+        </JefeModalField>
+
+        {mostrarBloqueAsignarOperario ? (
+          <JefeModalField
+            label="Retiro en bodega"
+            icon={<FiSend className="h-4 w-4" aria-hidden />}
+            hint="El operario retirará el primario del mapa hacia la zona de procesamiento."
+          >
+            <div className={`rounded-2xl border bg-slate-50/90 px-4 py-3 ${jefeNestedShellBorder.emerald}`}>
+              <p className="text-sm font-bold uppercase tracking-wide text-slate-700">
+                Tarea pendiente · retiro en bodega
+              </p>
+              <p className="mt-1 text-xs text-slate-600">
+                {detalleVistaMinimalMovimientoAlmacenAProc ? (
+                  "Elegí operario y confirmá para mandar la tarea a su cola."
+                ) : (
+                  <>
+                    Asigná el operario que debe retirar el <strong>primario</strong> del mapa hacia{" "}
+                    <strong>procesamiento</strong>.
+                  </>
+                )}
+              </p>
+              {(() => {
+                const yaFs = Boolean(String(detalle.operarioBodegaUid ?? "").trim());
+                const yaCola = tareasProcesamientoOperario.some(
+                  (t) =>
+                    String(t.clientId ?? "") === detalle.clientId && String(t.solicitudId ?? "") === detalle.id,
+                );
+                const asignado = yaFs || yaCola;
+                const puedePulsar =
+                  Boolean(responsableSeleccionado) &&
+                  !asignado &&
+                  !modalBusy &&
+                  Boolean(onPushTareaProcesamientoOperario);
+                const variosOperarios = operariosBodega.length > 1;
+                return (
+                  <>
+                    {operariosBodega.length === 0 ? (
+                      <p className="mt-2 rounded-md border border-amber-100 bg-amber-50 px-2.5 py-1.5 text-sm text-amber-900">
+                        Sin operarios configurados.
+                      </p>
+                    ) : null}
+                    <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-end">
                       {variosOperarios ? (
-                        <select
-                          id="proc-asignar-a"
-                          aria-label="Operario"
-                          className="mt-3 w-full rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-sm text-slate-900 focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-400/50"
-                          value={asignadoUid}
-                          onChange={(e) => setAsignadoUid(e.target.value)}
-                          disabled={asignado || modalBusy}
-                        >
-                          {operariosBodega.map((o) => (
-                            <option key={o.id} value={o.id}>
-                              {(o.name || "Sin nombre").trim()}
-                              {o.roleLabel ? ` · ${o.roleLabel}` : ""}
-                            </option>
-                          ))}
-                        </select>
+                        <label className="flex min-w-0 flex-1 flex-col gap-1 text-xs text-slate-600">
+                          <span className="font-semibold text-slate-700">Operario</span>
+                          <select
+                            id="proc-asignar-a"
+                            aria-label="Operario"
+                            className={`w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-medium text-slate-900 shadow-sm outline-none transition focus:ring-2 ${emeraldProcDetalle.selectFocus}`}
+                            value={asignadoUid}
+                            onChange={(e) => setAsignadoUid(e.target.value)}
+                            disabled={asignado || modalBusy}
+                          >
+                            {operariosBodega.map((o) => (
+                              <option key={o.id} value={o.id}>
+                                {(o.name || "Sin nombre").trim()}
+                                {o.roleLabel ? ` · ${o.roleLabel}` : ""}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
                       ) : null}
                       {operariosBodega.length > 0 ? (
                         <button
@@ -1297,69 +1468,57 @@ export function ProcesamientoOrdenesActivasBodega({
                           }
                           disabled={!puedePulsar}
                           onClick={() => void asignarOperario()}
-                          className={`mt-3 ${btnAsignarOperarioClass}`}
+                          className={`shrink-0 rounded-xl px-5 py-2.5 text-sm font-bold text-white shadow-md transition focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/70 disabled:cursor-not-allowed disabled:opacity-50 sm:min-w-[9.5rem] ${variosOperarios ? "" : "w-full"} ${emeraldProcDetalle.primary} ${emeraldProcDetalle.primaryHover}`}
                         >
-                          {asignado ? "En cola / asignado" : "Asignar a operario"}
+                          {asignado ? "En cola / asignado" : "Asignar"}
                         </button>
                       ) : null}
-                    </>
-                  );
-                })()}
-              </div>
-            ) : null}
-            {mostrarCrearOrdenTrasladoDesdeDetalle && detallePendienteMovimiento ? (
-              <div className="rounded-2xl border border-violet-200/80 bg-white px-4 py-3 shadow-sm">
-                <p className="text-base font-bold uppercase tracking-wide text-violet-900/90">
-                  Tarea pendiente · traslado a almacenamiento
-                </p>
-                <p className="mt-1 text-xs text-slate-600">
-                  Generá la orden para que el operario ubique{" "}
-                  {detallePendienteMovimiento.kind === "procesado"
-                    ? "el producto procesado"
-                    : "el sobrante de primario"}{" "}
-                  en el mapa de almacenamiento.
-                </p>
-                <button
-                  type="button"
-                  onClick={() => {
-                    const p = detallePendienteMovimiento;
-                    setMovimientoTrasladoPendiente(p);
-                    if (p.kind === "procesado") {
-                      const first = availableBodegaTargets[0];
-                      if (first !== undefined) setTargetCasilleroTraslado(first);
-                    }
-                    cerrarDetalleOrden();
-                  }}
-                  className="mt-3 w-full rounded-lg bg-violet-600 px-3 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-violet-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-500/50"
-                >
-                  Crear orden de traslado
-                </button>
-              </div>
-            ) : null}
-            {mostrarAvisoTrasladoSinPermiso ? (
-              <p className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-left text-base leading-relaxed text-slate-500">
-                Solo jefe o administrador pueden crear la orden de traslado; el operario la ejecuta desde el mapa.
+                    </div>
+                  </>
+                );
+              })()}
+            </div>
+          </JefeModalField>
+        ) : null}
+
+        {mostrarCrearOrdenTrasladoDesdeDetalle && detallePendienteMovimiento ? (
+          <JefeModalField label="Traslado" icon={<HiArrowsRightLeft className="h-4 w-4 text-violet-600" aria-hidden />}>
+            <div className="rounded-2xl border border-violet-200/80 bg-violet-50/40 px-4 py-3">
+              <p className="text-sm font-bold uppercase tracking-wide text-violet-900/90">
+                Tarea pendiente · traslado a almacenamiento
               </p>
-            ) : null}
-            <div className="flex flex-wrap gap-2">
+              <p className="mt-1 text-xs text-slate-600">
+                Generá la orden para que el operario ubique{" "}
+                {detallePendienteMovimiento.kind === "procesado"
+                  ? "el producto procesado"
+                  : "el sobrante de primario"}{" "}
+                en el mapa de almacenamiento.
+              </p>
               <button
                 type="button"
-                onClick={cerrarDetalleOrden}
-                className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50"
+                onClick={() => {
+                  const p = detallePendienteMovimiento;
+                  setMovimientoTrasladoPendiente(p);
+                  if (p.kind === "procesado") {
+                    const first = availableBodegaTargets[0];
+                    if (first !== undefined) setTargetCasilleroTraslado(first);
+                  }
+                  cerrarDetalleOrden();
+                }}
+                className="mt-3 w-full rounded-xl bg-violet-600 px-3 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-violet-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-500/50"
               >
-                Volver al listado
-              </button>
-              <button
-                type="button"
-                onClick={cerrarDetalleOrden}
-                className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50"
-              >
-                Cerrar
+                Crear orden de traslado
               </button>
             </div>
-          </div>
-        }
-      </ModalPlantilla>
+          </JefeModalField>
+        ) : null}
+
+        {mostrarAvisoTrasladoSinPermiso ? (
+          <p className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-left text-sm leading-relaxed text-slate-600">
+            Solo jefe o administrador pueden crear la orden de traslado; el operario la ejecuta desde el mapa.
+          </p>
+        ) : null}
+      </JefeOrderModalShell>
     ) : null;
 
   const modalPendientesVacio =
@@ -1369,105 +1528,92 @@ export function ProcesamientoOrdenesActivasBodega({
     (pendientesContexto === "almacenamiento" && filasSoloIniciado.length === 0) ||
     (pendientesContexto === "procesamiento" && pendientesMovimientoBodega.length === 0);
 
+  const tituloModalPendientesIniciado =
+    pendientesContexto === "almacenamiento"
+      ? "Almacenamiento"
+      : pendientesContexto === "procesamiento"
+        ? "Procesamiento"
+        : "En planta";
+
+  const subtituloModalPendientesIniciado =
+    pendientesContexto === "almacenamiento" ? (
+      <span>
+        <span className="font-semibold text-slate-700">Almacenamiento → Procesamiento</span>
+        {cantidadPendientesIniciado > 0 ? (
+          <span className="tabular-nums">
+            {" "}
+            · {cantidadPendientesIniciado} orden{cantidadPendientesIniciado === 1 ? "" : "es"}
+          </span>
+        ) : (
+          " · ninguna"
+        )}
+      </span>
+    ) : pendientesContexto === "procesamiento" ? (
+      <span>
+        <span className="font-semibold text-slate-700">Procesamiento → Almacenamiento</span>
+        {pendientesMovimientoBodega.length > 0 ? (
+          <span className="tabular-nums">
+            {" "}
+            · {pendientesMovimientoBodega.length} tarea{pendientesMovimientoBodega.length === 1 ? "" : "s"}
+          </span>
+        ) : (
+          " · ninguna"
+        )}
+      </span>
+    ) : (
+      <span>
+        <span className="font-semibold text-slate-700">Almacenamiento → Procesamiento</span>
+        {cantidadPendientesIniciado > 0 ? (
+          <span className="tabular-nums">
+            {" "}
+            · {cantidadPendientesIniciado} orden{cantidadPendientesIniciado === 1 ? "" : "es"}
+          </span>
+        ) : (
+          " · ninguna"
+        )}
+        <span className="mx-1.5 text-slate-300" aria-hidden>
+          |
+        </span>
+        <span className="font-semibold text-slate-700">Procesamiento → Almacenamiento</span>
+        {pendientesMovimientoBodega.length > 0 ? (
+          <span className="tabular-nums">
+            {" "}
+            · {pendientesMovimientoBodega.length} tarea{pendientesMovimientoBodega.length === 1 ? "" : "s"}
+          </span>
+        ) : (
+          " · ninguna"
+        )}
+      </span>
+    );
+
   const modalPendientesIniciado =
     (layout === "cards" || layout === "slots4") && modalPendientesIniciadoAbierto ? (
-      <div
-        className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-900/50 p-3 sm:p-6"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="modal-pendientes-iniciado-titulo"
-      >
-        <button
-          type="button"
-          className="absolute inset-0 cursor-default"
-          aria-label="Cerrar"
-          onClick={() => setModalPendientesIniciadoAbierto(false)}
-        />
-        <div
-          className={`relative z-10 flex max-h-[min(92vh,780px)] w-full flex-col rounded-3xl border border-sky-200/90 bg-white shadow-2xl shadow-sky-900/10 overflow-hidden ${
-            modalPendientesUnaSolaDireccion ? "max-w-3xl" : "max-w-5xl"
-          }`}
-        >
-          <div className="shrink-0 border-b border-sky-100 bg-gradient-to-r from-sky-50 via-white to-cyan-50/80 px-5 py-4 sm:px-6 sm:py-5">
-            <div className="flex items-start gap-3">
-              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-sky-100 text-sky-700 shadow-inner">
-                <MdPendingActions className="h-6 w-6" aria-hidden />
-              </span>
-              <div className="min-w-0 flex-1">
-                <h2
-                  id="modal-pendientes-iniciado-titulo"
-                  className="app-title"
-                >
-                  Tareas pendientes
-                </h2>
-                <p className="mt-0.5 text-sm text-slate-600">
-                  {pendientesContexto === "almacenamiento" ? (
-                    <>
-                      <span className="font-semibold text-sky-800">Almacenamiento → Procesamiento</span>
-                      {cantidadPendientesIniciado > 0 ? (
-                        <span className="tabular-nums">
-                          {" "}
-                          · {cantidadPendientesIniciado} orden{cantidadPendientesIniciado === 1 ? "" : "es"}
-                        </span>
-                      ) : (
-                        " · ninguna"
-                      )}
-                    </>
-                  ) : pendientesContexto === "procesamiento" ? (
-                    <>
-                      <span className="font-semibold text-sky-800">Procesamiento → Almacenamiento</span>
-                      {pendientesMovimientoBodega.length > 0 ? (
-                        <span className="tabular-nums">
-                          {" "}
-                          · {pendientesMovimientoBodega.length} tarea
-                          {pendientesMovimientoBodega.length === 1 ? "" : "s"}
-                        </span>
-                      ) : (
-                        " · ninguna"
-                      )}
-                    </>
-                  ) : (
-                    <>
-                      <span className="font-semibold text-sky-800">Almacenamiento → Procesamiento</span>
-                      {cantidadPendientesIniciado > 0 ? (
-                        <span className="tabular-nums">
-                          {" "}
-                          · {cantidadPendientesIniciado} orden{cantidadPendientesIniciado === 1 ? "" : "es"}
-                        </span>
-                      ) : (
-                        " · ninguna"
-                      )}
-                      <span className="mx-1.5 text-slate-300" aria-hidden>
-                        |
-                      </span>
-                      <span className="font-semibold text-sky-800">Procesamiento → Almacenamiento</span>
-                      {pendientesMovimientoBodega.length > 0 ? (
-                        <span className="tabular-nums">
-                          {" "}
-                          · {pendientesMovimientoBodega.length} tarea
-                          {pendientesMovimientoBodega.length === 1 ? "" : "s"}
-                        </span>
-                      ) : (
-                        " · ninguna"
-                      )}
-                    </>
-                  )}
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setModalPendientesIniciadoAbierto(false)}
-                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 transition hover:bg-slate-50 hover:text-slate-900"
-                aria-label="Cerrar"
-              >
-                <HiOutlineXMark className="h-6 w-6" strokeWidth={2} />
-              </button>
-            </div>
+      <ModalPlantilla
+        open
+        onClose={() => setModalPendientesIniciadoAbierto(false)}
+        titulo={tituloModalPendientesIniciado}
+        tituloId="modal-pendientes-iniciado-titulo"
+        headerIcon={<MdPendingActions className="h-7 w-7 text-slate-800" aria-hidden />}
+        encabezadoSup="Tareas pendientes"
+        subtitulo={subtituloModalPendientesIniciado}
+        maxWidthClass={modalPendientesUnaSolaDireccion ? "max-w-3xl" : "max-w-5xl"}
+        cardMaxHeightClass="max-h-[min(92vh,780px)]"
+        zIndexClass="z-[70]"
+        footer={
+          <div className="flex flex-wrap justify-start gap-2">
+            <button
+              type="button"
+              onClick={() => setModalPendientesIniciadoAbierto(false)}
+              className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-900 shadow-sm transition hover:bg-slate-50"
+            >
+              Cerrar
+            </button>
           </div>
-          <div className="min-h-0 flex-1 overflow-y-auto bg-white px-4 py-4 sm:px-6 sm:py-5">
+        }
+      >
             {modalPendientesVacio ? (
-              <div className="flex min-h-[200px] items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-slate-50/60 px-4 py-12 text-center text-sm text-slate-500">
-                No hay tareas pendientes en este momento.
+              <div className="-mx-5 border-y border-slate-100 py-12 text-center text-base leading-relaxed text-slate-600 sm:-mx-6">
+                No hay <strong className="font-semibold text-slate-800">tareas pendientes</strong> en este momento.
               </div>
             ) : (
               <div
@@ -1487,19 +1633,20 @@ export function ProcesamientoOrdenesActivasBodega({
                     </h3>
 
                     {filasSoloIniciado.length === 0 ? (
-                      <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/60 px-3 py-8 text-center text-xs text-slate-500">
-                        Ninguna orden en <strong className="text-slate-700">Iniciado</strong>.
+                      <div className="-mx-5 border-y border-slate-100 py-8 text-center text-sm leading-relaxed text-slate-600 sm:-mx-6">
+                        Ninguna orden en <strong className="font-semibold text-slate-800">Iniciado</strong>.
                       </div>
                     ) : (
-                      <div
-                        className="grid grid-cols-1 gap-3 sm:grid-cols-2"
+                      <ul
+                        className={BODEGA_SLOTS_GRID_ALMACEN_CLASS}
                         role="list"
                         aria-label="Órdenes de almacenamiento hacia procesamiento"
                       >
-                        {filasSoloIniciado.map((row) => (
-                          <div key={`${row.clientId}::${row.id}`} role="listitem" className="w-full min-w-0">
+                        {filasSoloIniciado.map((row, cardIdx) => (
+                          <li key={`${row.clientId}::${row.id}`} className="min-w-0">
                             <TarjetaOrdenProcesamientoSlotInner
                               row={row}
+                              cornerLabel={cardIdx + 1}
                               onSelect={(r) => {
                                 setError(null);
                                 setDetallePendienteMovimiento(null);
@@ -1507,9 +1654,9 @@ export function ProcesamientoOrdenesActivasBodega({
                                 setDetalle(r);
                               }}
                             />
-                          </div>
+                          </li>
                         ))}
-                      </div>
+                      </ul>
                     )}
                   </section>
                 ) : null}
@@ -1531,20 +1678,20 @@ export function ProcesamientoOrdenesActivasBodega({
                     </h3>
 
                     {pendientesMovimientoBodega.length === 0 ? (
-                      <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/60 px-3 py-8 text-center text-xs text-slate-500">
+                      <div className="-mx-5 border-y border-slate-100 py-8 text-center text-sm leading-relaxed text-slate-600 sm:-mx-6">
                         Ningún movimiento pendiente hacia almacenamiento.
                       </div>
                     ) : (
-                      <div
-                        className="grid grid-cols-1 gap-3 sm:grid-cols-2"
+                      <ul
+                        className={BODEGA_SLOTS_GRID_ALMACEN_CLASS}
                         role="list"
                         aria-label="Traslados de procesamiento hacia almacenamiento"
                       >
-                        {pendientesMovimientoBodega.map((p) => (
-                          <div key={`${p.row.clientId}::${p.row.id}::${p.kind}`} role="listitem" className="w-full min-w-0">
+                        {pendientesMovimientoBodega.map((p, cardIdx) => (
+                          <li key={`${p.row.clientId}::${p.row.id}::${p.kind}`} className="min-w-0">
                             <CajaPendienteMovimientoBodega
                               p={p}
-                              cornerLabel={p.row.numero}
+                              cornerLabel={cardIdx + 1}
                               puedeCrearOrdenTraslado={puedeCrearOrdenTraslado}
                               onVerDetalle={() => {
                                 setError(null);
@@ -1559,9 +1706,9 @@ export function ProcesamientoOrdenesActivasBodega({
                                 }
                               }}
                             />
-                          </div>
+                          </li>
                         ))}
-                      </div>
+                      </ul>
                     )}
                     {pendientesMovimientoBodega.length > 0 && !puedeCrearOrdenTraslado ? (
                       <p className="mt-3 text-base leading-relaxed text-slate-500">
@@ -1574,9 +1721,7 @@ export function ProcesamientoOrdenesActivasBodega({
                 ) : null}
               </div>
             )}
-          </div>
-        </div>
-      </div>
+      </ModalPlantilla>
     ) : null;
 
   const modalTrasladoMovimientoBodega =
@@ -1735,7 +1880,7 @@ export function ProcesamientoOrdenesActivasBodega({
             <button
               type="button"
               disabled={!trasladoPuedeConfirmar}
-              onClick={confirmarOrdenTrasladoDesdePendiente}
+              onClick={() => void confirmarOrdenTrasladoDesdePendiente()}
               className="rounded-xl bg-sky-600 px-4 py-2.5 text-sm font-bold text-white shadow-sm transition hover:bg-sky-700 disabled:cursor-not-allowed disabled:opacity-45"
             >
               Crear orden
@@ -1819,15 +1964,22 @@ export function ProcesamientoOrdenesActivasBodega({
             type="button"
             className="rounded-xl bg-sky-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-sky-700"
             onClick={() => {
-              const raw = String(modalDesperdicioKg).replace(",", ".").trim();
-              const kg = Number(raw);
-              if (!Number.isFinite(kg) || kg < 0) {
-                window.alert("Ingresá un número de kg mayor o igual a 0.");
-                return;
-              }
-              const r = modalDesperdicioRow;
-              setModalDesperdicioRow(null);
-              void handleEstado(r, "Pendiente", kg);
+              void (async () => {
+                const raw = String(modalDesperdicioKg).replace(",", ".").trim();
+                const kg = Number(raw);
+                if (!Number.isFinite(kg) || kg < 0) {
+                  void swalWarning("Validación", "Ingresá un número de kg mayor o igual a 0.");
+                  return;
+                }
+                const ok = await swalConfirm(
+                  "¿Confirmar orden como pendiente?",
+                  `Se registrará merma de ${kg} kg. La orden no volverá al mapa hasta nueva gestión.`,
+                );
+                if (!ok) return;
+                const r = modalDesperdicioRow;
+                setModalDesperdicioRow(null);
+                void handleEstado(r, "Pendiente", kg);
+              })();
             }}
           >
             Confirmar pendiente
@@ -1865,6 +2017,7 @@ export function ProcesamientoOrdenesActivasBodega({
               cornerLabel={cornerLabel}
               onSelect={onSel}
               productosCatalogo={productosCatalogo}
+              soloLectura={soloLecturaMapa}
             />
           </div>,
         );
@@ -1874,7 +2027,12 @@ export function ProcesamientoOrdenesActivasBodega({
             key={`${item.row.clientId}::${item.row.id}::s-${procSlotsPage}-${idx}`}
             className="min-w-0 flex justify-center"
           >
-            <TarjetaSlotProcesamientoSecundario row={item.row} cornerLabel={cornerLabel} onSelect={onSel} />
+            <TarjetaSlotProcesamientoSecundario
+              row={item.row}
+              cornerLabel={cornerLabel}
+              onSelect={onSel}
+              soloLectura={soloLecturaMapa}
+            />
           </div>,
         );
       }
@@ -1899,40 +2057,42 @@ export function ProcesamientoOrdenesActivasBodega({
           <div className="min-w-0 flex-1">
             <h3 className="app-title">Procesamiento</h3>
           </div>
-          <button
-            type="button"
-            aria-label={
-              pendientesContexto === "procesamiento"
-                ? `Abrir tareas pendientes procesamiento → almacenamiento (${cantidadTareasPendientesPanel})`
-                : `Abrir tareas pendientes (${cantidadTareasPendientesPanel})`
-            }
-            title={tituloChipTareasPendientes}
-            onClick={() => setModalPendientesIniciadoAbierto(true)}
-            className={
-              cantidadTareasPendientesPanel > 0
-                ? BODEGA_ZONE_STATUS_PILL_ACTIVE_CLASS
-                : BODEGA_ZONE_STATUS_PILL_INACTIVE_CLASS
-            }
-          >
-            <MdPendingActions
+          {!soloLecturaMapa ? (
+            <button
+              type="button"
+              aria-label={
+                pendientesContexto === "procesamiento"
+                  ? `Abrir tareas pendientes procesamiento → almacenamiento (${cantidadTareasPendientesPanel})`
+                  : `Abrir tareas pendientes (${cantidadTareasPendientesPanel})`
+              }
+              title={tituloChipTareasPendientes}
+              onClick={() => setModalPendientesIniciadoAbierto(true)}
               className={
                 cantidadTareasPendientesPanel > 0
-                  ? BODEGA_ZONE_STATUS_ICON_ACTIVE_CLASS
-                  : BODEGA_ZONE_STATUS_ICON_INACTIVE_CLASS
+                  ? BODEGA_ZONE_STATUS_PILL_ACTIVE_CLASS
+                  : BODEGA_ZONE_STATUS_PILL_INACTIVE_CLASS
               }
-              aria-hidden
-            />
-            <span
-              className={`min-w-[1.125rem] text-center text-base ${
-                cantidadTareasPendientesPanel > 0
-                  ? BODEGA_ZONE_STATUS_NUM_ACTIVE_CLASS
-                  : BODEGA_ZONE_STATUS_NUM_INACTIVE_CLASS
-              }`}
-              aria-hidden
             >
-              {cantidadTareasPendientesPanel}
-            </span>
-          </button>
+              <MdPendingActions
+                className={
+                  cantidadTareasPendientesPanel > 0
+                    ? BODEGA_ZONE_STATUS_ICON_ACTIVE_CLASS
+                    : BODEGA_ZONE_STATUS_ICON_INACTIVE_CLASS
+                }
+                aria-hidden
+              />
+              <span
+                className={`min-w-[1.125rem] text-center text-base ${
+                  cantidadTareasPendientesPanel > 0
+                    ? BODEGA_ZONE_STATUS_NUM_ACTIVE_CLASS
+                    : BODEGA_ZONE_STATUS_NUM_INACTIVE_CLASS
+                }`}
+                aria-hidden
+              >
+                {cantidadTareasPendientesPanel}
+              </span>
+            </button>
+          ) : null}
         </div>
         <div className="flex min-h-0 flex-1 flex-col gap-4">
           <div className="min-w-0 space-y-3">

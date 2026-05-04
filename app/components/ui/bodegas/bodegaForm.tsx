@@ -9,6 +9,7 @@ import {
 } from "@/app/components/ui/FormularioPlantilla";
 import { AsignarBodegaService } from "@/app/services/asignarbodegaService";
 import { useAuth } from "@/app/context/AuthContext";
+import { swalError } from "@/lib/swal";
 
 interface Props {
   isOpen: boolean;
@@ -67,7 +68,7 @@ export const BodegaAsignarModal = ({
       onClose();
     } catch (error) {
       console.error("Error al asignar:", error);
-      alert("No se pudo vincular la bodega");
+      void swalError("No se pudo vincular", "No se pudo vincular la bodega a la cuenta.");
     } finally {
       setLoading(false);
     }

@@ -32,6 +32,8 @@ export type Slot = {
 	procesamientoDesperdicioDevueltoSolicitudId?: string;
 	/** Catálogo (alineado con descuentos / ventas). */
 	catalogoProductId?: string;
+	/** Código de correlación con `clientes/.../productos` (solo BD; no mostrar en UI). */
+	almacenProductCode?: string;
 };
 
 export type Role =
@@ -88,6 +90,10 @@ export type Box = {
 	ordenCompraClienteId?: string;
 	ordenVentaId?: string;
 	ordenVentaClienteId?: string;
+	/** En ingreso → bodega se copia al slot para correlación con catálogo. */
+	catalogoProductId?: string;
+	/** Copia del código de almacén del producto de catálogo (solo BD). */
+	almacenProductCode?: string;
 };
 
 export type OrderType = "a_bodega" | "a_salida" | "revisar";
@@ -102,6 +108,8 @@ export type ProcesamientoOrigenOrden = {
 	productoPrimarioTitulo: string;
 	productoSecundarioTitulo: string;
 	productoPrimarioId?: string;
+	/** Id catálogo del resultado (secundario), para correlación al ubicar en mapa. */
+	productoSecundarioId?: string;
 	cantidadPrimario: number;
 	unidadPrimarioVisualizacion?: "peso" | "cantidad";
 	/** Estimación al crear la solicitud (regla de tres hacia el secundario). */
@@ -112,6 +120,9 @@ export type ProcesamientoOrigenOrden = {
 	sobranteKg?: number;
 	/** @deprecated Usar `sobranteKg`; se mantiene solo para lectura de órdenes viejas. */
 	desperdicioKg?: number;
+	/** Códigos de almacén del catálogo al crear la orden (evita lecturas async al ejecutar). */
+	catalogoAlmacenCodePrimario?: string;
+	catalogoAlmacenCodeSecundario?: string;
 };
 
 export type BodegaOrder = {
@@ -176,6 +187,11 @@ export type DispatchedHistoryEntry = {
 	box: Box;
 	atMs: number;
 	fromSalidaPosition: number;
+	truckId?: string;
+	truckCode?: string;
+	truckPlate?: string;
+	truckBrand?: string;
+	truckModel?: string;
 };
 
 export type HistoryState = {

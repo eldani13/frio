@@ -6,8 +6,8 @@ import { db } from "@/lib/firebaseClient";
 import { useAuth } from "@/app/context/AuthContext";
 import {
   createOperadorCuenta,
-  listOperadoresCuenta,
   normalizeOperadorCodeInput,
+  subscribeOperadoresCuenta,
   suggestOperadorCodeFromName,
   type OperadorCuentaRow,
 } from "@/app/services/operadorCuentaService";
@@ -61,25 +61,23 @@ export function CuentaOperadoresSection() {
     };
   }, [idCliente]);
 
-  const reload = React.useCallback(async () => {
+  React.useEffect(() => {
     if (!idCliente.trim()) {
       setRows([]);
       setLoading(false);
       return;
     }
     setLoading(true);
-    try {
-      setRows(await listOperadoresCuenta(idCliente));
-    } catch {
-      setRows([]);
-    } finally {
-      setLoading(false);
-    }
+    const unsub = subscribeOperadoresCuenta(
+      idCliente,
+      (list) => {
+        setRows(list);
+        setLoading(false);
+      },
+      () => setLoading(false),
+    );
+    return () => unsub();
   }, [idCliente]);
-
-  React.useEffect(() => {
-    void reload();
-  }, [reload]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -110,7 +108,6 @@ export function CuentaOperadoresSection() {
       setCorreo("");
       setClave("");
       setModalOpen(false);
-      await reload();
     } catch (err: unknown) {
       const fromFirebase =
         typeof err === "object" &&

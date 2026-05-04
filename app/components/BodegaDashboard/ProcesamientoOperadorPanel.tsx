@@ -12,6 +12,7 @@ import {
   normalizeProcesamientoEstado,
 } from "@/app/types/solicitudProcesamiento";
 import { compareOrdenCompraByCodigoDesc } from "@/lib/ordenCompraSort";
+import { ModalPlantilla, ModalPlantillaFila } from "@/app/components/ui/ModalPlantilla";
 import { OrdenProcesamientoFormModal } from "@/app/components/ui/procesamiento/OrdenProcesamientoFormModal";
 import type { Catalogo } from "@/app/types/catalogo";
 import type { WarehouseMeta } from "@/app/interfaces/bodega";
@@ -30,6 +31,7 @@ import {
   desperdicioKgSugeridoDesdeMerma,
   stringKgInicialDesperdicio,
 } from "@/app/lib/desperdicioKgSugerido";
+import { swalConfirm, swalWarning } from "@/lib/swal";
 
 function opcionesEstadoSelect(estadoActual: string): string[] {
   const cur = estadoActual.trim();
@@ -282,15 +284,22 @@ export function ProcesamientoOperadorPanel({
                 type="button"
                 className="rounded-xl bg-sky-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-sky-700"
                 onClick={() => {
-                  const raw = String(modalDesperdicioKg).replace(",", ".").trim();
-                  const kg = Number(raw);
-                  if (!Number.isFinite(kg) || kg < 0) {
-                    window.alert("Ingresá un número de kg mayor o igual a 0.");
-                    return;
-                  }
-                  const r = modalDesperdicioRow;
-                  setModalDesperdicioRow(null);
-                  void handleEstado(r, "Pendiente", kg);
+                  void (async () => {
+                    const raw = String(modalDesperdicioKg).replace(",", ".").trim();
+                    const kg = Number(raw);
+                    if (!Number.isFinite(kg) || kg < 0) {
+                      void swalWarning("Validación", "Ingresá un número de kg mayor o igual a 0.");
+                      return;
+                    }
+                    const ok = await swalConfirm(
+                      "¿Confirmar orden como pendiente?",
+                      `Se registrará merma de ${kg} kg. Revisá el valor antes de continuar.`,
+                    );
+                    if (!ok) return;
+                    const r = modalDesperdicioRow;
+                    setModalDesperdicioRow(null);
+                    void handleEstado(r, "Pendiente", kg);
+                  })();
                 }}
               >
                 Confirmar pendiente
@@ -547,86 +556,80 @@ export function ProcesamientoOperadorPanel({
       />
 
       {detalle ? (
-        <div
-          className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/40 p-4 sm:items-center"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="proc-detalle-titulo"
-        >
-          <button
-            type="button"
-            className="absolute inset-0 cursor-default"
-            aria-label="Cerrar"
-            onClick={() => setDetalle(null)}
-          />
-          <div className="relative z-10 w-full max-w-lg rounded-2xl border border-slate-200 bg-white p-6 shadow-xl">
-            <h2 id="proc-detalle-titulo" className="app-title">
-              {detalle.numero}
-            </h2>
-            <p className="mt-3 text-xs font-bold uppercase tracking-wide text-slate-500">Producto primario</p>
-            <p className="mt-1 text-sm font-medium text-slate-900">{detalle.productoPrimarioTitulo}</p>
-            <p className="mt-1 text-sm text-slate-700">
-              <span className="text-slate-500">Cantidad en primario:</span>{" "}
-              <span className="font-semibold tabular-nums">{cantidadPrimarioEtiqueta(detalle, productos)}</span>
-            </p>
-            <p className="mt-3 text-xs font-bold uppercase tracking-wide text-slate-500">Producto secundario</p>
-            <p className="mt-1 text-sm font-medium text-slate-900">{detalle.productoSecundarioTitulo}</p>
-            <p className="mt-1 text-sm text-slate-700">
-              <span className="text-slate-500">Precio (catálogo):</span>{" "}
-              <span className="font-semibold tabular-nums">
-                {textoPrecioSecundarioCatalogo(productos, detalle.productoSecundarioId)}
+        <ModalPlantilla
+          open
+          onClose={() => setDetalle(null)}
+          titulo={String(detalle.numero ?? "").trim() || detalle.id}
+          tituloId="proc-detalle-titulo"
+          tituloClassName="font-mono"
+          headerIcon={<FiCpu className="h-7 w-7 text-blue-600" strokeWidth={2} aria-hidden />}
+          subtitulo={
+            <div className="flex flex-col items-center gap-2">
+              <span
+                className={`rounded-full px-2.5 py-0.5 text-xs font-bold uppercase ${procesamientoEstadoBadgeClass(detalle.estado)}`}
+              >
+                {detalle.estado}
               </span>
-            </p>
+              <p className="text-xs leading-relaxed text-slate-500">
+                Fecha: {detalle.fecha || "—"} · Destino (codeCuenta):{" "}
+                <span className="font-mono text-slate-600">{detalle.codeCuenta || "—"}</span>
+              </p>
+            </div>
+          }
+          maxWidthClass="max-w-lg"
+          footer={
+            <button
+              type="button"
+              onClick={() => setDetalle(null)}
+              className="w-full rounded-xl bg-slate-900 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-slate-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-400"
+            >
+              Cerrar
+            </button>
+          }
+        >
+          <dl className="space-y-4 text-base">
+            <ModalPlantillaFila
+              label="Producto primario"
+              value={(detalle.productoPrimarioTitulo || "—").trim() || "—"}
+            />
+            <ModalPlantillaFila label="Cantidad en primario" value={cantidadPrimarioEtiqueta(detalle, productos)} />
+            <ModalPlantillaFila
+              label="Producto secundario"
+              value={(detalle.productoSecundarioTitulo || "—").trim() || "—"}
+            />
+            <ModalPlantillaFila
+              label="Precio (catálogo)"
+              value={textoPrecioSecundarioCatalogo(productos, detalle.productoSecundarioId)}
+            />
             {detalle.estimadoUnidadesSecundario !== undefined &&
             detalle.estimadoUnidadesSecundario !== null &&
             Number.isFinite(detalle.estimadoUnidadesSecundario) ? (
-              <p className="mt-2 text-sm text-slate-700">
-                <span className="text-slate-500">Estimado unidades secundario:</span>{" "}
-                <span className="font-semibold tabular-nums">
-                  {formatEstimadoUnidadesSecundario(detalle.estimadoUnidadesSecundario)}
-                </span>
-              </p>
+              <ModalPlantillaFila
+                label="Estimado unidades secundario"
+                value={formatEstimadoUnidadesSecundario(detalle.estimadoUnidadesSecundario)}
+              />
             ) : null}
             {Number(detalle.reglaConversionCantidadPrimario) > 0 &&
             Number(detalle.reglaConversionUnidadesSecundario) > 0 ? (
-              <p className="mt-1 text-xs text-slate-600">
-                Regla al crear: {detalle.reglaConversionCantidadPrimario} (primario) →{" "}
-                {detalle.reglaConversionUnidadesSecundario} (secundario)
-              </p>
+              <ModalPlantillaFila
+                label="Regla al crear"
+                value={`${detalle.reglaConversionCantidadPrimario} (primario) → ${detalle.reglaConversionUnidadesSecundario} (secundario)`}
+              />
             ) : null}
             {detalle.perdidaProcesamientoPct !== undefined &&
             detalle.perdidaProcesamientoPct !== null &&
             Number(detalle.perdidaProcesamientoPct) > 0 ? (
-              <p className="mt-1 text-xs text-slate-600">
-                Pérdida / merma declarada:{" "}
-                <span className="font-semibold tabular-nums">{formatCantidad(detalle.perdidaProcesamientoPct)}</span>{" "}
-                % (sobre estimado teórico de uds. secundario)
-              </p>
+              <ModalPlantillaFila
+                label="Pérdida / merma (catálogo)"
+                value={`${formatCantidad(detalle.perdidaProcesamientoPct)} % (sobre estimado teórico de uds. secundario)`}
+              />
             ) : null}
-            <p className="mt-2 text-xs text-slate-400">
-              Fecha: {detalle.fecha} · Destino (codeCuenta):{" "}
-              <span className="font-mono">{detalle.codeCuenta || "—"}</span>
-            </p>
-            <p className="mt-2 text-xs text-slate-500">
-              Operario bodega:{" "}
-              <span className="font-medium text-slate-700">
-                {detalle.operarioBodegaNombre?.trim() || detalle.operarioBodegaUid || "—"}
-              </span>
-            </p>
-            <span
-              className={`mt-3 inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold ${procesamientoEstadoBadgeClass(detalle.estado)}`}
-            >
-              {detalle.estado}
-            </span>
-            <button
-              type="button"
-              onClick={() => setDetalle(null)}
-              className="mt-6 w-full rounded-xl bg-slate-900 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800"
-            >
-              Cerrar
-            </button>
-          </div>
-        </div>
+            <ModalPlantillaFila
+              label="Operario bodega"
+              value={detalle.operarioBodegaNombre?.trim() || detalle.operarioBodegaUid || "—"}
+            />
+          </dl>
+        </ModalPlantilla>
       ) : null}
     </section>
   );

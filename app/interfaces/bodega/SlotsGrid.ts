@@ -14,4 +14,6 @@ export type SlotsGridProps = {
   onPageChange?: (page: number) => void;
   clients?: Client[];
   slotCantidadContext?: SlotCantidadContext;
+  /** Mapa de almacenamiento sin interacción (p. ej. administrador). */
+  mapaSoloLectura?: boolean;
 };

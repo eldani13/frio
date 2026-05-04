@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/app/context/AuthContext";
 import { CatalogoService } from "@/app/services/catalogoService";
 import {
@@ -127,7 +127,7 @@ export default function ListadoCargue() {
     return m;
   }, [catalogos]);
 
-  const reload = useCallback(async () => {
+  useEffect(() => {
     if (!idCliente.trim() || !codeCuenta.trim()) {
       setViajes([]);
       setCatalogos([]);
@@ -136,23 +136,26 @@ export default function ListadoCargue() {
     }
     setLoading(true);
     setError(null);
-    try {
-      const cats = await CatalogoService.getAll(idCliente, codeCuenta);
-      const vList = await ViajeVentaTransporteService.listEnCursoParaCuenta(idCliente, codeCuenta, cats);
-      setViajes(vList);
+    let viajesList: ViajeVentaTransporteConContext[] = [];
+    let cats: Catalogo[] = [];
+    const emit = () => {
+      setViajes(viajesList);
       setCatalogos(cats);
-    } catch {
-      setViajes([]);
-      setCatalogos([]);
-      setError("No se pudieron cargar los viajes en curso.");
-    } finally {
       setLoading(false);
-    }
+    };
+    const u1 = ViajeVentaTransporteService.subscribeEnCursoParaCuenta(idCliente, codeCuenta, (list) => {
+      viajesList = list;
+      emit();
+    });
+    const u2 = CatalogoService.subscribeByCodeCuenta(idCliente, codeCuenta, (list) => {
+      cats = list;
+      emit();
+    });
+    return () => {
+      u1();
+      u2();
+    };
   }, [idCliente, codeCuenta]);
-
-  useEffect(() => {
-    void reload();
-  }, [reload]);
 
   useEffect(() => {
     setPage(1);

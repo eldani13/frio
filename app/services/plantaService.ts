@@ -1,15 +1,16 @@
 import { db } from "@/lib/firebaseClient";
-import { 
-  collection, 
-  addDoc, 
-  getDocs, 
-  deleteDoc, 
-  doc, 
-  updateDoc, 
-  query, 
+import {
+  collection,
+  addDoc,
+  getDocs,
+  deleteDoc,
+  doc,
+  updateDoc,
+  query,
   where, // Agregado para filtrar
   orderBy,
-  limit
+  limit,
+  onSnapshot,
 } from "firebase/firestore";
 import { Planta } from "@/app/types/planta";
 
@@ -45,6 +46,26 @@ export const PlantaService = {
       console.error("Error en PlantaService.getAll:", error instanceof Error ? error.message : error);
       return [];
     }
+  },
+
+  subscribeByCodeCuenta(
+    idCliente: string,
+    codeCuenta: string,
+    onNext: (rows: Planta[]) => void,
+    onError?: (e: Error) => void,
+  ): () => void {
+    if (!idCliente?.trim()) {
+      onNext([]);
+      return () => {};
+    }
+    const q = query(getColRef(idCliente), where("codeCuenta", "==", codeCuenta));
+    return onSnapshot(
+      q,
+      (snap) => {
+        onNext(snap.docs.map((d) => ({ id: d.id, ...d.data() } as Planta)));
+      },
+      (err) => onError?.(err as Error),
+    );
   },
 
   // 2. Agregamos codeCuenta a los parámetros y al objeto final

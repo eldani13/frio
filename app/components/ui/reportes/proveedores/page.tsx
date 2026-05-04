@@ -1,11 +1,8 @@
 "use client";
-import React, { useState } from "react";
-import Operacion from "./operacion";
+import React from "react";
 import ListadoCargue from "./listadocargue";
 
 export default function ProveedoresPage() {
-  const [view, setView] = useState<"OP" | "CA">("CA");
-
   return (
     <div className="p-6">
       <div className="flex flex-col gap-2 sm:flex-row sm:justify-between sm:items-center mb-6">
@@ -14,27 +11,26 @@ export default function ProveedoresPage() {
         <div className="flex gap-2 bg-slate-100 p-1 rounded-xl shadow-inner">
           <button
             type="button"
-            onClick={() => setView("CA")}
-            className={`px-4 py-2 rounded-lg font-bold transition-all ${
-              view === "CA" ? "bg-white shadow text-blue-600" : "text-slate-500 hover:text-slate-700"
-            }`}
+            className="rounded-lg bg-white px-4 py-2 font-bold text-blue-600 shadow transition-all"
           >
             Listado
           </button>
 
           <button
             type="button"
-            onClick={() => setView("OP")}
-            className={`px-4 py-2 rounded-lg font-bold transition-all ${
-              view === "OP" ? "bg-white shadow text-blue-600" : "text-slate-500 hover:text-slate-700"
-            }`}
+            disabled
+            aria-disabled="true"
+            title="Vista en gráfico no disponible por ahora."
+            className="cursor-not-allowed rounded-lg px-4 py-2 font-bold text-slate-400 opacity-65"
           >
             Grafico
           </button>
         </div>
       </div>
 
-      <div className="mt-4">{view === "CA" ? <ListadoCargue /> : <Operacion />}</div>
+      <div className="mt-4">
+        <ListadoCargue />
+      </div>
     </div>
   );
 }

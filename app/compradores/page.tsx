@@ -6,6 +6,7 @@ import { CompradorTable } from "@/app/components/ui/compradores/CompradorTable";
 import { CompradorForm } from "@/app/components/ui/compradores/CompradorForm";
 import { HiOutlinePlus,HiOutlineSquares2X2 } from "react-icons/hi2";
 import { useAuth } from "@/app/context/AuthContext";
+import { swalConfirmDelete, swalError } from "@/lib/swal";
 
 export default function CompradoresPage() {
   const [compradores, setCompradores] = useState<Comprador[]>([]);
@@ -16,17 +17,13 @@ export default function CompradoresPage() {
   const codeCuenta = session?.codeCuenta ?? "";
   const idCliente = session?.clientId ?? "";
 
-  const load = async () => {
-    if (!idCliente) {
+  useEffect(() => {
+    if (!idCliente.trim()) {
       setCompradores([]);
       return;
     }
-    const data = await CompradorService.getAll(idCliente, codeCuenta);
-    setCompradores(data);
-  };
-
-  useEffect(() => {
-    void load();
+    const unsub = CompradorService.subscribeByCodeCuenta(idCliente, codeCuenta, setCompradores);
+    return () => unsub();
   }, [idCliente, codeCuenta]);
 
   const handleSuccess = async (name: string) => {
@@ -37,23 +34,22 @@ export default function CompradoresPage() {
       } else {
         await CompradorService.create(name, idCliente, codeCuenta);
       }
-      await load();
     } catch (error) {
       console.error("Error en la operación:", error);
-      alert("Hubo un error al procesar la solicitud.");
+      void swalError("Error", "Hubo un error al procesar la solicitud.");
     }
   };
 
   // Manejador para Eliminar
   const handleDelete = async (id: string) => {
     if (!idCliente) return;
-    if (window.confirm("¿Eliminar este comprador definitivamente?")) {
-      try {
-        await CompradorService.delete(idCliente, id);
-        await load();
-      } catch (error) {
-        console.error("Error al eliminar:", error);
-      }
+    const ok = await swalConfirmDelete("¿Eliminar este comprador?", "Se eliminará de forma definitiva.");
+    if (!ok) return;
+    try {
+      await CompradorService.delete(idCliente, id);
+    } catch (error) {
+      console.error("Error al eliminar:", error);
+      void swalError("No se pudo eliminar", "Reintentá o revisá que el comprador no esté en uso.");
     }
   };
 

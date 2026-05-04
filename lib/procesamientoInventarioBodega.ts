@@ -82,6 +82,7 @@ const SLOT_VACIO_PATCH: Partial<Slot> = {
   fechaIngreso: undefined,
   llaveUnica: undefined,
   catalogoProductId: undefined,
+  almacenProductCode: undefined,
   procesamientoSecundarioTitulo: undefined,
   procesamientoUnidadesSecundario: undefined,
   procesamientoSolicitudId: undefined,

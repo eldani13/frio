@@ -5,6 +5,7 @@ import { FiCamera, FiCheckCircle, FiPackage, FiX } from "react-icons/fi";
 import { HiOutlineTruck } from "react-icons/hi2";
 import { formatKgEs } from "@/app/lib/decimalEs";
 import { ViajeVentaTransporteService } from "@/app/services/viajeVentaTransporteService";
+import { swalConfirm } from "@/lib/swal";
 import type { ViajeLineaEntrega, ViajeVentaTransporteConContext } from "@/app/types/viajeVentaTransporte";
 
 type Props = {
@@ -301,6 +302,12 @@ export function TransporteViajesPanel({ uid, displayName }: Props) {
       return;
     }
 
+    const ok = await swalConfirm(
+      "¿Cerrar la entrega?",
+      "Se guardarán foto, firma, cantidades entregadas y el estado de conformidad en el viaje.",
+    );
+    if (!ok) return;
+
     setSaving(true);
     setSaveErr(null);
     try {
@@ -442,50 +449,52 @@ export function TransporteViajesPanel({ uid, displayName }: Props) {
 
       {sel ? (
         <div
-          className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/45 p-3 backdrop-blur-[2px] sm:items-center sm:p-4"
+          className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/45 p-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] backdrop-blur-[2px] max-sm:pt-3 sm:items-center sm:p-4 sm:pb-4"
           role="dialog"
           aria-modal="true"
           aria-labelledby="viaje-entrega-titulo"
           onClick={() => setSel(null)}
         >
           <div
-            className="relative z-10 flex max-h-[min(92vh,900px)] w-full max-w-xl flex-col overflow-hidden rounded-3xl border border-slate-200/90 bg-white shadow-2xl"
+            className="relative z-10 flex max-h-[min(96dvh,900px)] w-full max-w-xl flex-col overflow-hidden rounded-2xl border border-slate-200/90 bg-white shadow-2xl max-sm:mx-auto max-sm:max-h-[min(96dvh,900px)] max-sm:w-[min(100%,calc(100vw-1rem))] sm:max-h-[min(92vh,900px)] sm:rounded-3xl"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="relative shrink-0 border-b border-amber-100 bg-linear-to-br from-amber-50 via-white to-slate-50 px-5 pb-4 pt-5 sm:px-6">
+            <div className="relative shrink-0 border-b border-amber-100 bg-linear-to-br from-amber-50 via-white to-slate-50 px-4 pb-4 pt-4 max-sm:space-y-1 sm:px-6 sm:pb-4 sm:pt-5">
               <button
                 type="button"
                 onClick={() => setSel(null)}
-                className="absolute right-3 top-3 rounded-xl border border-slate-200/80 bg-white/90 p-2 text-slate-500 shadow-sm transition hover:bg-white hover:text-slate-800"
+                className="absolute right-2 top-2 rounded-xl border border-slate-200/80 bg-white/90 p-2 text-slate-500 shadow-sm transition hover:bg-white hover:text-slate-800 max-sm:active:scale-[0.98] sm:right-3 sm:top-3"
                 aria-label="Cerrar"
               >
                 <FiX className="h-5 w-5" />
               </button>
-              <div className="flex items-start gap-3 pr-12">
-                <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-amber-100 text-amber-900 shadow-inner">
-                  <HiOutlineTruck className="h-7 w-7" aria-hidden />
+              <div className="flex items-start gap-3 pr-11 sm:pr-12">
+                <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-amber-100 text-amber-900 shadow-inner sm:h-12 sm:w-12">
+                  <HiOutlineTruck className="h-6 w-6 sm:h-7 sm:w-7" aria-hidden />
                 </span>
                 <div className="min-w-0 pt-0.5">
-                  <p className="text-base font-bold uppercase tracking-[0.14em] text-amber-800/90">
+                  <p className="text-sm font-bold uppercase tracking-[0.12em] text-amber-800/90 sm:text-base sm:tracking-[0.14em]">
                     Realizar entrega
                   </p>
                   <h2
                     id="viaje-entrega-titulo"
-                    className="mt-0.5 text-lg font-bold tracking-tight text-slate-900 sm:text-xl"
+                    className="mt-1 text-base font-bold leading-snug tracking-tight text-slate-900 sm:mt-0.5 sm:text-lg sm:text-xl"
                   >
                     {sel.numero}{" "}
                     <span className="font-semibold text-slate-500">· venta {sel.ventaNumero}</span>
                   </h2>
-                  <p className="mt-1 text-xs text-slate-600">
+                  <p className="mt-2 text-xs leading-relaxed text-slate-600 sm:mt-1">
                     Transportista: <span className="font-medium text-slate-800">{displayName || "—"}</span>
                   </p>
                 </div>
               </div>
 
-              <div className="mt-4 rounded-2xl border border-slate-100 bg-white/90 px-4 py-3 shadow-sm">
-                <p className="text-base font-bold uppercase tracking-wide text-slate-400">Destinatario</p>
-                <p className="mt-1 text-base font-semibold leading-snug text-slate-900">{sel.ventaCompradorNombre}</p>
-                <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-slate-600">
+              <div className="mt-4 rounded-2xl border border-slate-100 bg-white/90 px-3.5 py-3.5 shadow-sm max-sm:mt-3 sm:px-4 sm:py-3">
+                <p className="text-xs font-bold uppercase tracking-wide text-slate-400 sm:text-base">Destinatario</p>
+                <p className="mt-2 text-sm font-semibold leading-snug text-slate-900 sm:mt-1 sm:text-base">
+                  {sel.ventaCompradorNombre}
+                </p>
+                <div className="mt-3 flex flex-wrap gap-x-3 gap-y-2 text-xs text-slate-600 sm:mt-2 sm:gap-y-1">
                   {sel.ventaCodeCuenta ? (
                     <span className="inline-flex items-center gap-1 rounded-lg bg-slate-100 px-2 py-0.5 font-medium text-slate-700">
                       Cuenta {sel.ventaCodeCuenta}
@@ -499,12 +508,12 @@ export function TransporteViajesPanel({ uid, displayName }: Props) {
                 </div>
               </div>
 
-              <p className="mt-4 text-center text-base font-semibold uppercase tracking-wide text-slate-500">
+              <p className="mt-4 text-center text-xs font-semibold uppercase tracking-[0.2em] text-slate-500 max-sm:mt-5 max-sm:leading-relaxed sm:text-base sm:tracking-wide">
                 Paso {pasoEntrega + 1} de {PASOS_ENTREGA}
               </p>
             </div>
 
-            <div className="min-h-0 flex-1 overflow-y-auto px-5 py-5 sm:px-6">
+            <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 max-sm:[scrollbar-gutter:stable] sm:px-6 sm:py-5">
               {pasoEntrega === 0 ? (
                 <section className="rounded-2xl border border-slate-100 bg-slate-50/80 p-4">
                   <p className="mb-1 flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-slate-500">
@@ -559,30 +568,48 @@ export function TransporteViajesPanel({ uid, displayName }: Props) {
               ) : null}
 
               {pasoEntrega === 1 ? (
-                <label className="flex cursor-pointer flex-col gap-2">
-                  <span className="flex flex-wrap items-center gap-2 text-sm font-semibold text-slate-800">
-                    <FiCamera className="h-4 w-4 text-amber-600" aria-hidden />
-                    Evidencia de la entrega (foto)
-                    <span className="text-rose-600">*</span>
+                <label className="flex cursor-pointer flex-col gap-3 max-sm:gap-4">
+                  <span className="flex flex-wrap items-center gap-x-2 gap-y-1.5 text-sm font-semibold leading-snug text-slate-800 max-sm:text-[0.9375rem]">
+                    <FiCamera className="h-4 w-4 shrink-0 text-amber-600" aria-hidden />
+                    <span>
+                      Evidencia de la entrega (foto) <span className="text-rose-600">*</span>
+                    </span>
                   </span>
-                  <div className="flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-slate-200 bg-slate-50/50 px-4 py-6 transition hover:border-amber-300 hover:bg-amber-50/30">
+                  <div className="relative flex min-h-[9.5rem] flex-col justify-center overflow-hidden rounded-2xl border-2 border-dashed border-slate-200 bg-slate-50/50 px-3 py-5 transition hover:border-amber-300 hover:bg-amber-50/30 max-sm:px-4 max-sm:py-6 sm:min-h-0 sm:px-4 sm:py-6">
+                    <div className="pointer-events-none flex flex-col items-center gap-2.5 px-1 text-center sm:hidden">
+                      <span className="w-full max-w-[16rem] rounded-xl bg-amber-100 px-4 py-3 text-sm font-bold text-amber-950 shadow-sm ring-1 ring-amber-200/70">
+                        {fotoFile ? "Cambiar foto" : "Elegir archivo"}
+                      </span>
+                      {fotoFile ? (
+                        <span className="line-clamp-3 w-full max-w-full break-words text-xs leading-relaxed text-slate-600">
+                          {fotoFile.name}
+                        </span>
+                      ) : (
+                        <span className="text-xs leading-relaxed text-slate-500">
+                          Tocá el área o el botón de arriba · cámara o galería
+                        </span>
+                      )}
+                    </div>
                     <input
                       type="file"
                       accept="image/*"
                       capture="environment"
                       onChange={onFotoChange}
-                      className="text-xs file:mr-3 file:rounded-lg file:border-0 file:bg-amber-100 file:px-3 file:py-1.5 file:text-sm file:font-semibold file:text-amber-900 hover:file:bg-amber-200"
+                      aria-label="Elegir archivo de evidencia de entrega"
+                      className="absolute inset-0 z-[1] h-full w-full cursor-pointer opacity-0 sm:pointer-events-auto sm:static sm:inset-auto sm:z-auto sm:mt-2 sm:block sm:h-auto sm:w-full sm:opacity-100 sm:max-w-full
+                        text-xs text-slate-600
+                        file:mr-3 file:rounded-lg file:border-0 file:bg-amber-100 file:px-3 file:py-2 file:text-sm file:font-semibold file:text-amber-900 hover:file:bg-amber-200"
                     />
-                    <p className="mt-2 text-center text-base text-slate-500">
-                      Obligatorio: fotografiá la entrega, el remito o la caja. Hasta 10 MB.
-                    </p>
                   </div>
+                  <p className="text-center text-xs leading-relaxed text-slate-500 max-sm:px-0.5 sm:text-base">
+                    Obligatorio: fotografiá la entrega, el remito o la caja. Hasta 10 MB.
+                  </p>
                   {fotoPreview ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img
                       src={fotoPreview}
                       alt="Vista previa de evidencia"
-                      className="mt-2 max-h-48 w-full rounded-xl border border-slate-200 object-contain shadow-inner"
+                      className="mt-1 max-h-44 w-full rounded-xl border border-slate-200 object-contain shadow-inner max-sm:max-h-[min(40vh,14rem)] sm:mt-2 sm:max-h-48"
                     />
                   ) : null}
                 </label>
@@ -686,11 +713,11 @@ export function TransporteViajesPanel({ uid, displayName }: Props) {
               ) : null}
             </div>
 
-            <div className="flex shrink-0 flex-wrap gap-3 border-t border-slate-100 bg-slate-50/90 px-5 py-4 sm:px-6">
+            <div className="flex shrink-0 flex-col gap-2 border-t border-slate-100 bg-slate-50/90 px-4 py-3 max-sm:pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:flex-row sm:flex-wrap sm:gap-3 sm:px-6 sm:py-4">
               <button
                 type="button"
                 onClick={() => setSel(null)}
-                className="min-h-[44px] flex-1 rounded-2xl border border-slate-200 bg-white py-3 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50"
+                className="min-h-[48px] w-full rounded-2xl border border-slate-200 bg-white py-3 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 max-sm:order-1 sm:min-h-[44px] sm:flex-1"
               >
                 Cancelar
               </button>
@@ -699,7 +726,7 @@ export function TransporteViajesPanel({ uid, displayName }: Props) {
                   type="button"
                   disabled={saving}
                   onClick={irAnteriorPaso}
-                  className="min-h-[44px] flex-1 rounded-2xl border border-slate-200 bg-white py-3 text-sm font-semibold text-slate-600 shadow-sm transition hover:bg-slate-50 disabled:opacity-50"
+                  className="min-h-[48px] w-full rounded-2xl border border-slate-200 bg-white py-3 text-sm font-semibold text-slate-600 shadow-sm transition hover:bg-slate-50 disabled:opacity-50 max-sm:order-2 sm:min-h-[44px] sm:flex-1"
                 >
                   Anterior
                 </button>
@@ -709,7 +736,7 @@ export function TransporteViajesPanel({ uid, displayName }: Props) {
                   type="button"
                   disabled={saving}
                   onClick={validarPasoYAvanzar}
-                  className="min-h-[44px] flex-[1.15] rounded-2xl bg-amber-600 py-3 text-sm font-bold text-white shadow-md transition hover:bg-amber-500 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="min-h-[48px] w-full rounded-2xl bg-amber-600 py-3 text-sm font-bold text-white shadow-md transition hover:bg-amber-500 disabled:cursor-not-allowed disabled:opacity-50 max-sm:order-3 sm:min-h-[44px] sm:flex-[1.15]"
                 >
                   Siguiente
                 </button>
@@ -718,7 +745,7 @@ export function TransporteViajesPanel({ uid, displayName }: Props) {
                   type="button"
                   disabled={saving || conforme === null || (conforme === false && !descripcion.trim())}
                   onClick={() => void handleEntregar()}
-                  className="min-h-[44px] flex-[1.15] inline-flex items-center justify-center gap-2 rounded-2xl bg-emerald-600 py-3 text-sm font-bold text-white shadow-md transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="min-h-[48px] w-full rounded-2xl bg-emerald-600 py-3 text-sm font-bold text-white shadow-md transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-50 max-sm:order-3 sm:min-h-[44px] sm:inline-flex sm:flex-[1.15] sm:items-center sm:justify-center sm:gap-2"
                 >
                   {saving ? (
                     "Guardando…"

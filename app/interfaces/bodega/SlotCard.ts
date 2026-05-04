@@ -11,4 +11,6 @@ export type SlotCardProps = {
   slotCantidadContext?: SlotCantidadContext;
   /** Contenido extra bajo el bloque principal del modal de detalle (p. ej. procesamiento). */
   detalleChildren?: ReactNode;
+  /** Sin clic ni modal (p. ej. administrador en «Estado de bodega»). */
+  mapaSoloLectura?: boolean;
 };

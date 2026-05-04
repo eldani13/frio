@@ -16,11 +16,13 @@ import type { Catalogo } from "@/app/types/catalogo";
 import type { Comprador } from "@/app/types/comprador";
 import { ORDEN_COMPRA_ESTADOS } from "@/app/types/ordenCompra";
 import type { VentaEnCursoLineItem } from "@/app/types/ventaCuenta";
-import { esCatalogoSecundario } from "@/lib/catalogoProcesamiento";
+import { esCatalogoSecundario, unidadVisualizacionDe } from "@/lib/catalogoProcesamiento";
 import {
   stockPrimarioDesdeSlotsPreferirKgCuandoExisten,
   stockTeoricoUnidadesSecundarioDesdeSlots,
+  stockUnidadesSecundarioDesdeSlotsProcesamiento,
 } from "@/lib/stockPrimarioBodega";
+import { swalConfirm } from "@/lib/swal";
 
 type DraftLine = VentaEnCursoLineItem;
 
@@ -78,6 +80,7 @@ function catalogoTieneStockParaVentaManual(
   const cid = clientIdFirestore.trim();
   if (!cid) return false;
   if (esCatalogoSecundario(p)) {
+    if (stockUnidadesSecundarioDesdeSlotsProcesamiento(slots, cid, p) > 0) return true;
     const pid = String(p.includedPrimarioCatalogoId ?? "").trim();
     const prim = catalogosConId.find(
       (x) => String(x.id ?? "").trim() === pid && !esCatalogoSecundario(x),
@@ -98,6 +101,7 @@ function catalogoTieneStockSoloMapa(
   const cid = clientIdFirestore.trim();
   if (!cid) return false;
   if (esCatalogoSecundario(p)) {
+    if (stockUnidadesSecundarioDesdeSlotsProcesamiento(slots, cid, p) > 0) return true;
     const pid = String(p.includedPrimarioCatalogoId ?? "").trim();
     const prim = catalogosConId.find(
       (x) => String(x.id ?? "").trim() === pid && !esCatalogoSecundario(x),
@@ -107,6 +111,72 @@ function catalogoTieneStockSoloMapa(
   }
   const { total } = stockPrimarioDesdeSlotsPreferirKgCuandoExisten(slots, cid, p);
   return Number.isFinite(total) && total > 0;
+}
+
+const STOCK_CMP_EPS = 1e-6;
+
+/** Cantidad máxima vendible para esa línea (misma base que el selector: mapa y/o inventario). */
+function disponibleStockParaVentaManual(
+  p: Catalogo,
+  clientIdFirestore: string,
+  slots: Slot[],
+  catalogosConId: Catalogo[],
+  soloStockMapaBodegasInternas: boolean,
+): number {
+  const cid = clientIdFirestore.trim();
+  if (esCatalogoSecundario(p)) {
+    if (!cid) return 0;
+    const pid = String(p.includedPrimarioCatalogoId ?? "").trim();
+    const prim = catalogosConId.find(
+      (x) => String(x.id ?? "").trim() === pid && !esCatalogoSecundario(x),
+    );
+    const proc = stockUnidadesSecundarioDesdeSlotsProcesamiento(slots, cid, p);
+    if (soloStockMapaBodegasInternas && proc > 0) return proc;
+    const n = stockTeoricoUnidadesSecundarioDesdeSlots(slots, cid, p, prim);
+    return Number.isFinite(n) && n > 0 ? n : 0;
+  }
+  const invRaw = Number(p.inventoryQty);
+  const invOk = Number.isFinite(invRaw) && invRaw > 0 ? invRaw : 0;
+  if (!cid) {
+    return soloStockMapaBodegasInternas ? 0 : invOk;
+  }
+  const { total } = stockPrimarioDesdeSlotsPreferirKgCuandoExisten(slots, cid, p);
+  const mapOk = Number.isFinite(total) && total > 0 ? total : 0;
+  if (soloStockMapaBodegasInternas) return mapOk;
+  return mapOk > 0 ? mapOk : invOk;
+}
+
+function cantidadYaReservadaEnLineas(lines: DraftLine[], catalogoProductId: string): number {
+  return lines.reduce((acc, ln) => (ln.catalogoProductId === catalogoProductId ? acc + ln.cantidad : acc), 0);
+}
+
+function formatoCantidadStock(n: number): string {
+  if (!Number.isFinite(n)) return "0";
+  return Number.isInteger(n) ? String(n) : n.toLocaleString("es", { maximumFractionDigits: 3 });
+}
+
+/** Una línea corta bajo el selector (misma base que la validación de venta). */
+function textoDisponibleProductoPick(
+  p: Catalogo,
+  clientIdFirestore: string,
+  slots: Slot[],
+  catalogosConId: Catalogo[],
+  soloStockMapaBodegasInternas: boolean,
+): string {
+  const cid = clientIdFirestore.trim();
+  if (esCatalogoSecundario(p) && !cid) return "Disponible: —";
+  const disp = disponibleStockParaVentaManual(p, clientIdFirestore, slots, catalogosConId, soloStockMapaBodegasInternas);
+  if (esCatalogoSecundario(p)) {
+    return `Disponible: ${formatoCantidadStock(disp)} uds.`;
+  }
+  let suf = "uds.";
+  if (cid) {
+    const { unidadUsada } = stockPrimarioDesdeSlotsPreferirKgCuandoExisten(slots, cid, p);
+    suf = unidadUsada === "peso" ? "kg" : "uds.";
+  } else {
+    suf = unidadVisualizacionDe(p) === "peso" ? "kg" : "uds.";
+  }
+  return `Disponible: ${formatoCantidadStock(disp)} ${suf}`;
 }
 
 export function VentaManualFormModal({
@@ -145,6 +215,11 @@ export function VentaManualFormModal({
     [compradoresConId],
   );
 
+  const productosConId = useMemo(
+    () => productos.filter((p): p is Catalogo & { id: string } => Boolean(p.id?.trim())),
+    [productos],
+  );
+
   const usaStockPorBodega =
     Boolean(soloStockMapaBodegasInternas) &&
     Boolean(bodegasInternasVenta?.length) &&
@@ -159,19 +234,56 @@ export function VentaManualFormModal({
 
   const productosParaSelector = useMemo(() => {
     const cid = clientIdFirestore.trim();
-    const conId = productos.filter((p): p is Catalogo & { id: string } => Boolean(p.id?.trim()));
-    const elegibles = conId.filter((p) => {
+    const elegibles = productosConId.filter((p) => {
       if (!cid) {
         if (soloStockMapaBodegasInternas) return false;
         return catalogoTieneStockInventario(p);
       }
-      if (soloStockMapaBodegasInternas) return catalogoTieneStockSoloMapa(p, cid, slotsParaFiltro, conId);
-      return catalogoTieneStockParaVentaManual(p, cid, slotsParaFiltro, conId);
+      if (soloStockMapaBodegasInternas) return catalogoTieneStockSoloMapa(p, cid, slotsParaFiltro, productosConId);
+      return catalogoTieneStockParaVentaManual(p, cid, slotsParaFiltro, productosConId);
     });
     const prim = elegibles.filter((p) => !esCatalogoSecundario(p));
     const sec = elegibles.filter((p) => esCatalogoSecundario(p));
     return [...prim, ...sec].sort((a, b) => (a.title || "").localeCompare(b.title || "", "es", { sensitivity: "base" }));
-  }, [productos, clientIdFirestore, slotsParaFiltro, soloStockMapaBodegasInternas]);
+  }, [productosConId, clientIdFirestore, slotsParaFiltro, soloStockMapaBodegasInternas]);
+
+  const stockPreviewLineas = useMemo(() => {
+    if (!pickProductId.trim()) return null;
+    if (cargandoStockMapa) return "Cargando…";
+    const p =
+      productosParaSelector.find((x) => x.id === pickProductId) ??
+      productosConId.find((x) => x.id === pickProductId);
+    if (!p) return null;
+    let t = textoDisponibleProductoPick(
+      p,
+      clientIdFirestore,
+      slotsParaFiltro,
+      productosConId,
+      soloStockMapaBodegasInternas,
+    );
+    const ya = cantidadYaReservadaEnLineas(lines, pickProductId);
+    if (ya > 0) {
+      const disp = disponibleStockParaVentaManual(
+        p,
+        clientIdFirestore,
+        slotsParaFiltro,
+        productosConId,
+        soloStockMapaBodegasInternas,
+      );
+      const rest = Math.max(0, disp - ya);
+      t = `${t} · restante: ${formatoCantidadStock(rest)}`;
+    }
+    return t;
+  }, [
+    pickProductId,
+    cargandoStockMapa,
+    productosParaSelector,
+    productosConId,
+    clientIdFirestore,
+    slotsParaFiltro,
+    soloStockMapaBodegasInternas,
+    lines,
+  ]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -221,6 +333,23 @@ export function VentaManualFormModal({
       setError("Ingresá una cantidad entera mayor a 0.");
       return;
     }
+    const ya = cantidadYaReservadaEnLineas(lines, p.id);
+    const disp = disponibleStockParaVentaManual(
+      p,
+      clientIdFirestore,
+      slotsParaFiltro,
+      productosConId,
+      soloStockMapaBodegasInternas,
+    );
+    if (ya + q > disp + STOCK_CMP_EPS) {
+      const tit = (p.title || "Producto").trim();
+      setError(
+        ya > 0
+          ? `Stock insuficiente para «${tit}»: disponible ${formatoCantidadStock(disp)}; con esta línea el total sería ${ya + q}.`
+          : `Stock insuficiente para «${tit}»: disponible ${formatoCantidadStock(disp)} y pedís ${q}.`,
+      );
+      return;
+    }
     const line: DraftLine = {
       catalogoProductId: p.id,
       cantidad: q,
@@ -251,8 +380,43 @@ export function VentaManualFormModal({
       setError("Seleccioná la bodega interna donde se realiza la venta.");
       return;
     }
+    const totalesPorProducto = new Map<string, number>();
+    for (const ln of lines) {
+      const pid = String(ln.catalogoProductId ?? "").trim();
+      if (!pid) {
+        setError("Hay una línea con un producto inválido. Quitála y volvé a agregarla.");
+        return;
+      }
+      totalesPorProducto.set(pid, (totalesPorProducto.get(pid) ?? 0) + ln.cantidad);
+    }
+    for (const [pid, suma] of totalesPorProducto) {
+      const p = productosConId.find((x) => x.id === pid);
+      if (!p) {
+        setError("Hay una línea con un producto inválido. Quitála y volvé a agregarla.");
+        return;
+      }
+      const disp = disponibleStockParaVentaManual(
+        p,
+        clientIdFirestore,
+        slotsParaFiltro,
+        productosConId,
+        soloStockMapaBodegasInternas,
+      );
+      if (suma > disp + STOCK_CMP_EPS) {
+        const tit = (p.title || "Producto").trim();
+        setError(
+          `Stock insuficiente para «${tit}»: el pedido suma ${suma} y el disponible es ${formatoCantidadStock(disp)}.`,
+        );
+        return;
+      }
+    }
     const nombre = (comp.name || "").trim() || "Sin nombre";
     const bodegaSel = bodegasInternasVenta?.find((b) => b.id === bodegaVentaId.trim());
+    const ok = await swalConfirm(
+      "¿Guardar la venta manual?",
+      `Se creará la venta para «${nombre}» con ${lines.length} línea(s) de producto.`,
+    );
+    if (!ok) return;
     setSaving(true);
     try {
       await Promise.resolve(
@@ -447,6 +611,12 @@ export function VentaManualFormModal({
                 Agregar
               </button>
             </div>
+
+            {stockPreviewLineas ? (
+              <p className="mt-2 text-xs font-medium text-slate-600" aria-live="polite">
+                {stockPreviewLineas}
+              </p>
+            ) : null}
 
             {productosParaSelector.length === 0 && !cargandoStockMapa ? (
               <p className="mt-2 text-center text-xs text-amber-800/90">

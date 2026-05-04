@@ -13,8 +13,8 @@ export function ModalPlantillaFila({
 }) {
   return (
     <div className="flex flex-col gap-0.5 sm:flex-row sm:items-baseline sm:gap-2">
-      <dt className="shrink-0 font-bold text-slate-700">{label}:</dt>
-      <dd className="min-w-0 break-words text-slate-600">{value}</dd>
+      <dt className="shrink-0 font-bold text-slate-900">{label}:</dt>
+      <dd className="min-w-0 break-words font-normal text-slate-600">{value}</dd>
     </div>
   );
 }
