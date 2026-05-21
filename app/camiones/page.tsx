@@ -7,7 +7,7 @@ import { TruckTable } from "@/app/components/ui/camiones/camionTable";
 import { TruckForm } from "@/app/components/ui/camiones/camionForm";
 import { HiOutlinePlus,HiOutlineSquares2X2 } from "react-icons/hi2";
 import { useAuth } from "@/app/context/AuthContext";
-import { swalConfirmDelete, swalError } from "@/lib/swal";
+import { swalConfirmDelete, swalError } from "@/lib/ui/swal";
 
 export default function TrucksPage() {
   const [trucks, setTrucks] = useState<Camion[]>([]);

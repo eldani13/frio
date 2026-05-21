@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { compareOrdenCompraNewestFirst } from "@/lib/ordenCompraSort";
+import { compareOrdenCompraNewestFirst } from "@/lib/ordenes/ordenCompraSort";
 import {
   OrdenCompraService,
   type OrdenCompraPendienteRecepcion,

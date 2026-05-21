@@ -17,7 +17,7 @@ import {
   FiUser,
 } from "react-icons/fi";
 import { SolicitudProcesamientoService } from "@/app/services/solicitudProcesamientoService";
-import { recordMermaProcesamientoKg } from "@/lib/bodegaCloudState";
+import { recordMermaProcesamientoKg } from "@/lib/bodega/bodegaCloudState";
 import { IoCloseOutline } from "react-icons/io5";
 import { temperatureStringFromAnalyzeResponse } from "@/app/lib/imageAnalyzeApi";
 import {
@@ -28,7 +28,7 @@ import {
 } from "@/app/lib/desperdicioKgSugerido";
 import { estimadoUnidadesSecundarioTexto } from "@/app/lib/procesamientoDisplay";
 import { PrecioSecundarioCatalogoLive } from "@/app/components/ui/procesamiento/PrecioSecundarioCatalogoLive";
-import { swalConfirm, swalError, swalWarning } from "@/lib/swal";
+import { swalConfirm, swalError, swalWarning } from "@/lib/ui/swal";
 
 const TYPE_LABELS: Record<OrderType, string> = {
   a_bodega: "A bodega",

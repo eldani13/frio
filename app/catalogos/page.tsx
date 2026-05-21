@@ -8,8 +8,8 @@ import { CatalogoSecundarioForm } from "@/app/components/ui/catalogos/CatalogoSe
 import { HiOutlinePlus, HiOutlineSquares2X2, HiOutlineMagnifyingGlass } from "react-icons/hi2";
 import { useAuth } from "@/app/context/AuthContext";
 import { ImportExcel } from "@/app/utils/importarExcelCatalogo";
-import { precioCatalogoNumerico } from "@/lib/catalogoPrecio";
-import { swalConfirmDelete, swalError, swalSuccess } from "@/lib/swal";
+import { precioCatalogoNumerico } from "@/lib/catalogo/catalogoPrecio";
+import { swalConfirmDelete, swalError, swalSuccess } from "@/lib/ui/swal";
 
 export default function CatalogoPage() {
   const [productos, setProductos] = useState<Catalogo[]>([]);

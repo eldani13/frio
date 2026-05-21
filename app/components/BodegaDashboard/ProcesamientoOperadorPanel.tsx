@@ -4,14 +4,14 @@ import React from "react";
 import { HiOutlineArrowLeft, HiOutlineChevronDown, HiOutlinePlus } from "react-icons/hi2";
 import { FiCpu } from "react-icons/fi";
 import { SolicitudProcesamientoService } from "@/app/services/solicitudProcesamientoService";
-import { recordMermaProcesamientoKg } from "@/lib/bodegaCloudState";
+import { recordMermaProcesamientoKg } from "@/lib/bodega/bodegaCloudState";
 import type { SolicitudProcesamiento } from "@/app/types/solicitudProcesamiento";
 import {
   PROCESAMIENTO_ESTADOS,
   procesamientoEstadoBadgeClass,
   normalizeProcesamientoEstado,
 } from "@/app/types/solicitudProcesamiento";
-import { compareOrdenCompraByCodigoDesc } from "@/lib/ordenCompraSort";
+import { compareOrdenCompraByCodigoDesc } from "@/lib/ordenes/ordenCompraSort";
 import { ModalPlantilla, ModalPlantillaFila } from "@/app/components/ui/ModalPlantilla";
 import { OrdenProcesamientoFormModal } from "@/app/components/ui/procesamiento/OrdenProcesamientoFormModal";
 import type { Catalogo } from "@/app/types/catalogo";
@@ -20,7 +20,7 @@ import {
   catalogosPrimarios,
   esCatalogoSecundario,
   formatEstimadoUnidadesSecundario,
-} from "@/lib/catalogoProcesamiento";
+} from "@/lib/catalogo/catalogoProcesamiento";
 import {
   cantidadPrimarioProcesamientoTexto,
   estimadoUnidadesSecundarioTexto,
@@ -31,7 +31,7 @@ import {
   desperdicioKgSugeridoDesdeMerma,
   stringKgInicialDesperdicio,
 } from "@/app/lib/desperdicioKgSugerido";
-import { swalConfirm, swalWarning } from "@/lib/swal";
+import { swalConfirm, swalWarning } from "@/lib/ui/swal";
 
 function opcionesEstadoSelect(estadoActual: string): string[] {
   const cur = estadoActual.trim();

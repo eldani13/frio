@@ -11,8 +11,8 @@ import {
   FormularioPlantillaAcciones,
   FormularioPlantillaEtiquetaCampo,
 } from "@/app/components/ui/FormularioPlantilla";
-import { REGLA_PRIMARIO_BASE_GRAMOS } from "@/lib/catalogoProcesamiento";
-import { UNIDAD_VIS_CATALOGO_OPCIONES } from "@/lib/unidadVisualizacionCatalogo";
+import { REGLA_PRIMARIO_BASE_GRAMOS } from "@/lib/catalogo/catalogoProcesamiento";
+import { UNIDAD_VIS_CATALOGO_OPCIONES } from "@/lib/catalogo/unidadVisualizacionCatalogo";
 
 interface Props {
   isOpen: boolean;

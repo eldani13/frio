@@ -20,7 +20,7 @@ describe("fridemInventory", () => {
     vi.doMock("firebase/database", () => ({ child: vi.fn(), get: vi.fn(), ref: vi.fn() }));
 
     const mod = await import("./fridemInventory");
-    const rows = await mod.fetchFridemSlots("w1");
+    const rows = await mod.fetchFridemSlots("w1", "MIT00");
     expect(rows.length).toBe(1);
     expect(rows[0]?.autoId).toContain("RD1");
   });
@@ -39,7 +39,7 @@ describe("fridemInventory", () => {
     vi.doMock("firebase/database", () => ({ child: vi.fn(), get, ref: vi.fn(() => ({})) }));
 
     const mod = await import("./fridemInventory");
-    const rows = await mod.fetchFridemInventoryRows("w1");
+    const rows = await mod.fetchFridemInventoryRows("w1", "MIT00");
     expect(rows.length).toBe(1);
     expect(rows[0]?.kilos).toBe(1234.5);
   });
@@ -60,7 +60,7 @@ describe("fridemInventory", () => {
     }));
 
     const mod = await import("./fridemInventory");
-    const slots = await mod.fetchFridemSlots("w1");
+    const slots = await mod.fetchFridemSlots("w1", "MIT00");
     expect(slots.length).toBe(1);
     expect(slots[0]?.name).toContain("Caja");
   });
@@ -90,10 +90,26 @@ describe("fridemInventory", () => {
     vi.doMock("firebase/database", () => ({ child: vi.fn(), get: vi.fn(), ref: vi.fn() }));
 
     const mod = await import("./fridemInventory");
-    const rows = await mod.fetchFridemInventoryRows("w1");
+    const rows = await mod.fetchFridemInventoryRows("w1", "MIT00");
     expect(rows.length).toBe(1);
     expect(rows[0]?.kilos).toBe(10.5);
     expect(rows[0]?.rd).toBe("R2");
+  });
+
+  it("devuelve vacío si la cuenta no está autorizada para Fridem", async () => {
+    vi.doMock("./fridemClient", () => ({ ensureFridemAuth: vi.fn(async () => {}), fridemDb: {}, fridemDatabase: {} }));
+    vi.doMock("firebase/firestore", () => ({
+      collection: vi.fn(() => ({})),
+      getDocs: vi.fn(async () => ({
+        empty: false,
+        docs: [{ data: () => ({ rd: "R", descripcion: "X" }) }],
+      })),
+    }));
+    vi.doMock("firebase/database", () => ({ child: vi.fn(), get: vi.fn(), ref: vi.fn() }));
+
+    const mod = await import("./fridemInventory");
+    const rows = await mod.fetchFridemInventoryRows("w1", "OTRA1");
+    expect(rows).toEqual([]);
   });
 
   it("lanza error si no hay base externa configurada", async () => {
@@ -102,6 +118,8 @@ describe("fridemInventory", () => {
     vi.doMock("firebase/database", () => ({ child: vi.fn(), get: vi.fn(), ref: vi.fn() }));
 
     const mod = await import("./fridemInventory");
-    await expect(mod.fetchFridemInventoryRows("w1")).rejects.toThrow("No hay base externa configurada");
+    await expect(mod.fetchFridemInventoryRows("w1", "MIT00")).rejects.toThrow(
+      "No hay base externa configurada",
+    );
   });
 });

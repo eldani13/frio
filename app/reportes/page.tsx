@@ -6,12 +6,12 @@ import { BiPackage, BiArrowBack } from "react-icons/bi";
 import { useAuth } from "@/app/context/AuthContext";
 import { AsignarBodegaService } from "@/app/services/asignarbodegaService";
 import type { WarehouseMeta } from "@/app/interfaces/bodega";
-import { fetchFridemInventoryRows } from "@/lib/fridemInventory";
-import { fetchHistoryStateOnce, fetchWarehouseStateOnce } from "@/lib/bodegaCloudState";
+import { fetchFridemInventoryRows } from "@/lib/fridem/fridemInventory";
+import { fetchHistoryStateOnce, fetchWarehouseStateOnce } from "@/lib/bodega/bodegaCloudState";
 import {
   buildIngresoRecordByAutoId,
   totalKgInternoDesdeSlots,
-} from "@/lib/bodegaInternalInventoryRows";
+} from "@/lib/bodega/bodegaInternalInventoryRows";
 import { kilosPedidoLineItem } from "@/app/lib/ordenCompraLineKgPedido";
 import { OrdenCompraService } from "@/app/services/ordenCompraService";
 import { CatalogoService } from "@/app/services/catalogoService";
@@ -162,7 +162,7 @@ const ReportesSection = () => {
 
         await Promise.all(
           externas.map((w) =>
-            fetchFridemInventoryRows(w.id)
+            fetchFridemInventoryRows(w.id, (w.codeCuenta ?? codeCuenta).trim() || undefined)
               .then((rows) => {
                 if (cancelled) return;
                 const kg = sumRowsKg(rows);
@@ -551,6 +551,7 @@ const ReportesSection = () => {
           key={selectedWarehouse?.id ?? "ext"}
           warehouseId={selectedWarehouse?.id}
           warehouseName={selectedWarehouse?.name}
+          codeCuenta={codeCuenta.trim() || undefined}
           onTotalChange={setExternalTotalKg}
         />
       )}

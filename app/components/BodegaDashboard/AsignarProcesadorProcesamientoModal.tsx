@@ -8,7 +8,7 @@ import { SolicitudProcesamientoService } from "@/app/services/solicitudProcesami
 import type { SolicitudProcesamiento } from "@/app/types/solicitudProcesamiento";
 import { normalizeProcesamientoEstado } from "@/app/types/solicitudProcesamiento";
 import { cantidadPrimarioProcesamientoTexto } from "@/app/lib/procesamientoDisplay";
-import { formatEstimadoUnidadesSecundario } from "@/lib/catalogoProcesamiento";
+import { formatEstimadoUnidadesSecundario } from "@/lib/catalogo/catalogoProcesamiento";
 import { PrecioSecundarioCatalogoLive } from "@/app/components/ui/procesamiento/PrecioSecundarioCatalogoLive";
 
 function clientIdsParaBodega(clients: Client[], warehouseCodeCuenta: string): string[] {

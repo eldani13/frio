@@ -1,7 +1,7 @@
 "use client";
 
 import * as XLSX from "xlsx";
-import { swalInfo } from "@/lib/swal";
+import { swalInfo } from "@/lib/ui/swal";
 import type { ChangeEvent } from "react";
 import { HiOutlineArrowDownTray } from "react-icons/hi2";
 

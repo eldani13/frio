@@ -13,7 +13,7 @@ import { formatKgEs } from "@/app/lib/decimalEs";
 import { buildLineasRecepcionDiff } from "@/app/lib/ordenCompraRecepcionDiff";
 import { HiOutlinePlus, HiOutlineSquares2X2 } from "react-icons/hi2";
 import { useAuth } from "@/app/context/AuthContext";
-import { swalConfirmDelete, swalError } from "@/lib/swal";
+import { swalConfirmDelete, swalError } from "@/lib/ui/swal";
 
 export default function ProvidersPage() {
   const [providers, setProviders] = useState<Provider[]>([]);

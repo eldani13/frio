@@ -1,6 +1,6 @@
 import type { Slot } from "@/app/interfaces/bodega";
-import { coerceKgFromUnknown, coercePiezasFromUnknown, kgFromFirestoreSlotRecord } from "@/lib/coerceBodegaKg";
-import { unidadVisualizacionStockMode } from "@/lib/unidadVisualizacionCatalogo";
+import { coerceKgFromUnknown, coercePiezasFromUnknown, kgFromFirestoreSlotRecord } from "./coerceBodegaKg";
+import { unidadVisualizacionStockMode } from "../catalogo/unidadVisualizacionCatalogo";
 
 export type VentaLineItemLike = {
   catalogoProductId?: string;

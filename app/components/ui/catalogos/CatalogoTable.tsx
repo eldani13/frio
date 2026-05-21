@@ -1,8 +1,8 @@
 "use client";
 import { HiOutlinePencilSquare, HiOutlineTrash, HiArrowsUpDown } from "react-icons/hi2";
 import { Catalogo } from "@/app/types/catalogo";
-import { etiquetaUnidadVisualizacion } from "@/lib/unidadVisualizacionCatalogo";
-import { formatoPrecioCatalogo } from "@/lib/catalogoPrecio";
+import { etiquetaUnidadVisualizacion } from "@/lib/catalogo/unidadVisualizacionCatalogo";
+import { formatoPrecioCatalogo } from "@/lib/catalogo/catalogoPrecio";
 
 interface Props {
   productos: Catalogo[];

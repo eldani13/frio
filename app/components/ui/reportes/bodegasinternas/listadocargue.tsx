@@ -5,12 +5,12 @@ import {
   subscribeHistoryState,
   subscribeWarehouseState,
   type CloudWarehouseState,
-} from "@/lib/bodegaCloudState";
+} from "@/lib/bodega/bodegaCloudState";
 import {
   buildIngresoRecordByAutoId,
   filasInventarioInternoFromSlots,
   type FilaInventarioInterno,
-} from "@/lib/bodegaInternalInventoryRows";
+} from "@/lib/bodega/bodegaInternalInventoryRows";
 
 const PAGE_SIZE = 10;
 

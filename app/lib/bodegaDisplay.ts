@@ -1,7 +1,7 @@
 import type { Client, Slot } from "@/app/interfaces/bodega";
 import type { SolicitudProcesamiento } from "@/app/types/solicitudProcesamiento";
-import { coercePiezasFromUnknown } from "@/lib/coerceBodegaKg";
-import { formatEstimadoUnidadesSecundario } from "@/lib/catalogoProcesamiento";
+import { coercePiezasFromUnknown } from "@/lib/bodega/coerceBodegaKg";
+import { formatEstimadoUnidadesSecundario } from "@/lib/catalogo/catalogoProcesamiento";
 
 export function clientLabelFromList(
   clientField: string,

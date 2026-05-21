@@ -52,7 +52,7 @@ Este repositorio ya no es solo un dashboard de 12 posiciones. Hoy incluye:
 
 ### 3.3 Persistencia
 
-- `lib/bodegaCloudState.ts`:
+- `lib/bodega/bodegaCloudState.ts`:
   - Estado principal: `warehouses/{warehouseId}/state/main`
   - Historial: `warehouses/{warehouseId}/state/history`
   - Helpers de subscribe, lectura puntual, guardado merge y acumulado de merma.
@@ -66,7 +66,7 @@ Este repositorio ya no es solo un dashboard de 12 posiciones. Hoy incluye:
 ### 3.5 Modo bodega interna/externa
 
 - Bodega interna: usa estado cloud propio del sistema.
-- Bodega externa: carga inventario desde Fridem (`lib/fridemClient.ts`, `lib/fridemInventory.ts`).
+- Bodega externa: carga inventario desde Fridem (`lib/fridem/fridemClient.ts`, `lib/fridem/fridemInventory.ts`).
 
 ## 4) Flujo completo de operacion (end-to-end)
 
@@ -287,7 +287,7 @@ Esta seccion resume las funciones exportadas clave (la logica de negocio princip
   - `subscribeHistoryState`
   - `saveHistoryState` (compatibilidad)
 
-- `lib/bodegaInternalInventoryRows.ts`
+- `lib/bodega/bodegaInternalInventoryRows.ts`
   - `buildIngresoRecordByAutoId`
   - `filasInventarioInternoFromSlots`
   - `totalKgInternoDesdeSlots`
@@ -300,10 +300,10 @@ Esta seccion resume las funciones exportadas clave (la logica de negocio princip
 
 ### 7.7 Integracion externa Fridem
 
-- `lib/fridemClient.ts`
+- `lib/fridem/fridemClient.ts`
   - `ensureFridemAuth`
 
-- `lib/fridemInventory.ts`
+- `lib/fridem/fridemInventory.ts`
   - `fetchFridemSlots`
   - `fetchFridemInventoryRows`
 

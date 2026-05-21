@@ -4,7 +4,7 @@
 - Frontend Next.js (App Router). Pantalla principal: `app/page.tsx` → `BodegaDashboard` orquesta estado, auth y persistencia.
 - UI por secciones en `app/components/bodega/*` (grid, formularios, cola de solicitudes, alertas, etc.).
 - Tipos compartidos en `app/interfaces/bodega.ts` y props específicos en `app/interfaces/bodega/*`.
-- Infra: Firebase (Auth, Firestore, Storage) inicializado en `lib/firebaseClient.ts`; sincronización de estado e historial en Firestore vía `lib/bodegaCloudState.ts`.
+- Infra: Firebase (Auth, Firestore, Storage) inicializado en `lib/firebase/firebaseClient.ts`; sincronización de estado e historial en Firestore vía `lib/bodega/bodegaCloudState.ts`.
 
 ## Flujo de datos
 1. Usuario se autentica (Firebase Auth) en `BodegaDashboard`.
@@ -58,5 +58,5 @@ npm run dev
 - `app/components/BodegaDashboard.tsx`: negocio, auth, estado y persistencia.
 - `app/components/bodega/*`: UI por sección (grilla, formularios, cola de solicitudes, alertas).
 - `app/interfaces/bodega.ts`: modelos compartidos (Slot, Box, BodegaOrder, AlertItem, AlertAssignment, HistoryState).
-- `lib/firebaseClient.ts`: bootstrap Firebase (Auth, Firestore, Storage).
-- `lib/bodegaCloudState.ts`: suscripción y guardado de estado/historial en Firestore.
+- `lib/firebase/firebaseClient.ts`: bootstrap Firebase (Auth, Firestore, Storage).
+- `lib/bodega/bodegaCloudState.ts`: suscripción y guardado de estado/historial en Firestore.

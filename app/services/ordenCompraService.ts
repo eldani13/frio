@@ -1,4 +1,4 @@
-import { db } from "@/lib/firebaseClient";
+import { db } from "@/lib/firebase/firebaseClient";
 import {
   addDoc,
   collection,
@@ -20,7 +20,7 @@ import type {
 } from "@/app/types/ordenCompra";
 import { resolveProveedorPedidoIntegracion } from "@/app/services/pedidoProveedorResolve";
 import { ordenCompraIngresoLineKey } from "@/app/lib/ordenCompraIngresoLineKey";
-import { compareOrdenCompraNewestFirst } from "@/lib/ordenCompraSort";
+import { compareOrdenCompraNewestFirst } from "@/lib/ordenes/ordenCompraSort";
 
 /** OC con ruta de dueño (custodio / vistas globales). */
 export type OrdenCompraPendienteRecepcion = OrdenCompra & {

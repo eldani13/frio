@@ -11,8 +11,8 @@ import { formatKgEs, parseDecimalEs } from "@/app/lib/decimalEs";
 import { ordenCompraIngresoLineKey } from "@/app/lib/ordenCompraIngresoLineKey";
 import { CatalogoService } from "@/app/services/catalogoService";
 import type { Catalogo } from "@/app/types/catalogo";
-import { almacenProductCodeFromCatalogo } from "@/lib/almacenProductCode";
-import { swalConfirm } from "@/lib/swal";
+import { almacenProductCodeFromCatalogo } from "@/lib/bodega/almacenProductCode";
+import { swalConfirm } from "@/lib/ui/swal";
 
 export type LineaIngresoDesdeVenta = {
   catalogoProductId: string;

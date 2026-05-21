@@ -1,8 +1,8 @@
 import type { Catalogo } from "@/app/types/catalogo";
 import type { SolicitudProcesamiento } from "@/app/types/solicitudProcesamiento";
-import { formatEstimadoUnidadesSecundario, unidadVisualizacionDe } from "@/lib/catalogoProcesamiento";
-import { formatoPrecioCatalogo } from "@/lib/catalogoPrecio";
-import { etiquetaUnidadVisualizacion } from "@/lib/unidadVisualizacionCatalogo";
+import { formatEstimadoUnidadesSecundario, unidadVisualizacionDe } from "@/lib/catalogo/catalogoProcesamiento";
+import { formatoPrecioCatalogo } from "@/lib/catalogo/catalogoPrecio";
+import { etiquetaUnidadVisualizacion } from "@/lib/catalogo/unidadVisualizacionCatalogo";
 
 export function primarioCatalogoPorId(
   productos: Catalogo[] | undefined,

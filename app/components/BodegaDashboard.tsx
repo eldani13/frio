@@ -25,7 +25,7 @@ import {
   almacenProductCodeFromCatalogo,
   boxesWithAlmacenProductCodeFilled,
   slotsWithAlmacenProductCodeFilled,
-} from "@/lib/almacenProductCode";
+} from "@/lib/bodega/almacenProductCode";
 import { normalizeProcesamientoEstado } from "@/app/types/solicitudProcesamiento";
 import { procesamientoUbicacionCompletaEnMapa } from "@/app/lib/pendientesMovimientoProcesamiento";
 import {
@@ -41,8 +41,8 @@ import {
   findSlotPrimarioParaDevolverDesperdicio,
   tareaColaOperarioToSolicitudInventario,
   type ResultadoDescuentoProcesamiento,
-} from "@/lib/procesamientoInventarioBodega";
-import { planSalidaVentaDesdeMapa } from "@/lib/ventaSalidaBodegaMatch";
+} from "@/lib/bodega/procesamientoInventarioBodega";
+import { planSalidaVentaDesdeMapa } from "@/lib/bodega/ventaSalidaBodegaMatch";
 import type { IngresoDesdeOrdenCompraPayload } from "./BodegaDashboard/OcOrdenIngresoPanel";
 import type { IngresoDesdeOrdenVentaPayload } from "./BodegaDashboard/OcOrdenVentaIngresoPanel";
 import { AiTwotoneAppstore } from "react-icons/ai";
@@ -73,7 +73,7 @@ import {
   signInWithEmailAndPassword,
   signOut,
 } from "firebase/auth";
-import { auth, db, getSecondaryAuth } from "../../lib/firebaseClient";
+import { auth, db, getSecondaryAuth } from "../../lib/firebase/firebaseClient";
 import Header from "./bodega/Header";
 import MessageBanner from "./bodega/MessageBanner";
 import ConfiguratorPanel from "./bodega/ConfiguratorPanel";
@@ -102,17 +102,17 @@ import {
   ensureWarehouseState,
   saveWarehouseState,
   subscribeWarehouseState,
-} from "../../lib/bodegaCloudState";
+} from "../../lib/bodega/bodegaCloudState";
 import {
   coerceKgFromUnknown,
   kgFromFirestoreSlotRecord,
   slotTracePartialFromRecord,
-} from "../../lib/coerceBodegaKg";
-import { fetchFridemSlots } from "../../lib/fridemInventory";
+} from "../../lib/bodega/coerceBodegaKg";
+import { fetchFridemSlots } from "../../lib/fridem/fridemInventory";
 import {
   getLoginRoleShortcutGroups,
   loginRoleShortcutsEnabled,
-} from "../../lib/loginRolePresets";
+} from "../../lib/auth/loginRolePresets";
 import { BiTask } from "react-icons/bi";
 import { MdOutlinePointOfSale } from "react-icons/md";
 
@@ -1694,7 +1694,7 @@ export default function BodegaDashboard() {
     setCloudReady(false);
     setMessage("");
     try {
-      const slotsFromExternal = await fetchFridemSlots(externalId);
+      const slotsFromExternal = await fetchFridemSlots(externalId, session?.codeCuenta);
       if (!slotsFromExternal.length) {
         setMessage(
           "No se encontraron datos en la bodega externa. Revisa la base externa (Firestore o Realtime) y la URL de Realtime (NEXT_PUBLIC_FRIDEM_DATABASE_URL).",
@@ -1726,7 +1726,7 @@ export default function BodegaDashboard() {
     } finally {
       setCloudReady(true);
     }
-  }, []);
+  }, [session?.codeCuenta]);
 
   useEffect(() => {
     setIsHydrated(true);

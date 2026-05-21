@@ -8,7 +8,7 @@ import {
   ordenCompraEstadoBadgeClass,
 } from "@/app/types/ordenCompra";
 import type { VentaEnCurso } from "@/app/types/ventaCuenta";
-import { compareOrdenCompraByCodigoDesc } from "@/lib/ordenCompraSort";
+import { compareOrdenCompraByCodigoDesc } from "@/lib/ordenes/ordenCompraSort";
 import type { Catalogo } from "@/app/types/catalogo";
 import type { Comprador } from "@/app/types/comprador";
 import { ModalPlantilla } from "@/app/components/ui/ModalPlantilla";
@@ -17,8 +17,8 @@ import { VentaPdoEntregaSection } from "@/app/components/ui/ventas/VentaPdoEntre
 import { OrdenVentaService } from "@/app/services/ordenVentaService";
 import { AsignarBodegaService } from "@/app/services/asignarbodegaService";
 import type { Slot, WarehouseMeta } from "@/app/interfaces/bodega";
-import { fetchWarehouseStateOnce } from "@/lib/bodegaCloudState";
-import { swalConfirm, swalError } from "@/lib/swal";
+import { fetchWarehouseStateOnce } from "@/lib/bodega/bodegaCloudState";
+import { swalConfirm, swalError } from "@/lib/ui/swal";
 
 function productosResumen(v: VentaEnCurso): string {
   const items = v.lineItems ?? [];

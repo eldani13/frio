@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { CatalogoService } from "@/app/services/catalogoService";
-import { formatoPrecioCatalogo } from "@/lib/catalogoPrecio";
+import { formatoPrecioCatalogo } from "@/lib/catalogo/catalogoPrecio";
 
 /**
  * Resuelve el precio del secundario leyendo `clientes/{clientId}/productos/{productoSecundarioId}`.

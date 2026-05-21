@@ -20,7 +20,7 @@ import {
   defaultHistoryState,
   mergeHistoryState,
   subscribeHistoryState,
-} from "../../../lib/bodegaCloudState";
+} from "../../../lib/bodega/bodegaCloudState";
 
 interface BodegaHistoryContextType extends HistoryState {
   warehouseId: string;

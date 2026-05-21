@@ -5,7 +5,7 @@ import { FiCamera, FiCheckCircle, FiPackage, FiX } from "react-icons/fi";
 import { HiOutlineTruck } from "react-icons/hi2";
 import { formatKgEs } from "@/app/lib/decimalEs";
 import { ViajeVentaTransporteService } from "@/app/services/viajeVentaTransporteService";
-import { swalConfirm } from "@/lib/swal";
+import { swalConfirm } from "@/lib/ui/swal";
 import type { ViajeLineaEntrega, ViajeVentaTransporteConContext } from "@/app/types/viajeVentaTransporte";
 
 type Props = {

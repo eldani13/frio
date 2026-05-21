@@ -6,7 +6,7 @@ import { CompradorTable } from "@/app/components/ui/compradores/CompradorTable";
 import { CompradorForm } from "@/app/components/ui/compradores/CompradorForm";
 import { HiOutlinePlus,HiOutlineSquares2X2 } from "react-icons/hi2";
 import { useAuth } from "@/app/context/AuthContext";
-import { swalConfirmDelete, swalError } from "@/lib/swal";
+import { swalConfirmDelete, swalError } from "@/lib/ui/swal";
 
 export default function CompradoresPage() {
   const [compradores, setCompradores] = useState<Comprador[]>([]);

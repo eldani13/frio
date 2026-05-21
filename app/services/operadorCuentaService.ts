@@ -9,7 +9,7 @@ import {
   onSnapshot,
 } from "firebase/firestore";
 import { createUserWithEmailAndPassword, signOut } from "firebase/auth";
-import { db, getSecondaryAuth } from "@/lib/firebaseClient";
+import { db, getSecondaryAuth } from "@/lib/firebase/firebaseClient";
 
 export const OPERADOR_CUENTAS_ROLE = "operadorCuentas" as const;
 
