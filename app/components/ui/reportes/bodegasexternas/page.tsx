@@ -89,9 +89,11 @@ export default function BodegasExternasPage({
     }
   }, [view, availability]);
 
+  const tabLabel = (nombre: string, enabled: boolean) => (enabled ? nombre : "No aplica");
+
   const tabClass = (active: boolean, enabled: boolean) => {
-    const base = "px-4 py-2 rounded-lg font-medium transition-all";
-    if (!enabled) return `${base} text-slate-300 cursor-not-allowed opacity-50`;
+    const base = "px-4 py-2 rounded-lg font-medium transition-all min-w-[5.5rem]";
+    if (!enabled) return `${base} text-slate-400 cursor-not-allowed opacity-70 italic`;
     if (active && enabled) return `${base} bg-white shadow text-blue-600`;
     return `${base} text-slate-500 hover:text-slate-700`;
   };
@@ -111,31 +113,31 @@ export default function BodegasExternasPage({
           <button
             type="button"
             disabled={!availability.listado}
-            title={availability.listado ? undefined : "No hay registros para el listado"}
+            title={availability.listado ? undefined : "No aplica: sin datos para listado"}
             onClick={() => availability.listado && setView("CA")}
             className={tabClass(view === "CA", availability.listado)}
           >
-            Listado
+            {tabLabel("Listado", availability.listado)}
           </button>
 
           <button
             type="button"
             disabled={!availability.grafico}
-            title={availability.grafico ? undefined : "No hay datos suficientes para gráficos"}
+            title={availability.grafico ? undefined : "No aplica: sin datos para gráfico"}
             onClick={() => availability.grafico && setView("OP")}
             className={tabClass(view === "OP", availability.grafico)}
           >
-            Grafico
+            {tabLabel("Grafico", availability.grafico)}
           </button>
 
           <button
             type="button"
             disabled={!availability.reporte}
-            title={availability.reporte ? undefined : "No hay reporte configurado para esta cuenta"}
+            title={availability.reporte ? undefined : "No aplica: sin reporte para esta cuenta"}
             onClick={() => availability.reporte && setView("REP")}
             className={tabClass(view === "REP", availability.reporte)}
           >
-            Reporte
+            {tabLabel("Reporte", availability.reporte)}
           </button>
         </div>
       </div>
