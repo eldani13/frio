@@ -25,12 +25,20 @@ import type { OrdenCompra } from "@/app/types/ordenCompra";
 import type { VentaEnCurso } from "@/app/types/ventaCuenta";
 
 import BodegaExtModule from "@/app/components/ui/reportes/bodegasexternas/page";
+import { disponibilidadVistasExternas } from "@/app/components/ui/reportes/bodegasexternas/viewAvailability";
+import { cuentaExternaTieneReporteEmbed } from "@/app/components/ui/reportes/bodegasexternas/externaReportEmbed";
 import BodegaIntModule from "@/app/components/ui/reportes/bodegasinternas/page";
 import CompradorModule from "@/app/components/ui/reportes/compradores/page";
 import ProveedorModule from "@/app/components/ui/reportes/proveedores/page";
 import TransportesModule from "@/app/components/ui/reportes/transportes/page";
+import {
+  etiquetaKgTarjetaInventario,
+  moduloInventarioPermiteEntrada,
+  type InventarioModuloCardState,
+} from "./inventarioMercanciaGrid";
+import type { ModuloTipo } from "./inventarioMercanciaTypes";
 
-type ModuloTipo = "PROVEEDOR" | "TRANSPORTE" | "BODEGA_INT" | "BODEGA_EXT" | "COMPRADOR" | null;
+type ModuloActivo = ModuloTipo | null;
 type BodegaStep = "list" | "detail";
 
 function warehousesForTipo(list: WarehouseMeta[], tipo: "interna" | "externa"): WarehouseMeta[] {
@@ -86,7 +94,9 @@ const ReportesSection = () => {
   const codeCuenta = session?.codeCuenta ?? "";
   const idCliente = session?.clientId ?? "";
 
-  const [activeModule, setActiveModule] = useState<ModuloTipo>(null);
+  const [activeModule, setActiveModule] = useState<ModuloActivo>(null);
+  /** Bodega externa en grilla: true si alguna vista (listado, gráfico o reporte) tiene datos en la cuenta. */
+  const [externalModuloAplica, setExternalModuloAplica] = useState(false);
   const [bodegaStep, setBodegaStep] = useState<BodegaStep | null>(null);
   const [selectedWarehouse, setSelectedWarehouse] = useState<{ id: string; name: string } | null>(null);
   const [externalTotalKg, setExternalTotalKg] = useState(0);
@@ -137,12 +147,14 @@ const ReportesSection = () => {
     if (authLoading || activeModule !== null) return;
     if (!codeCuenta.trim()) {
       setExternalTotalKg(0);
+      setExternalModuloAplica(false);
       setExternalTotalGridLoading(false);
       return;
     }
 
     let cancelled = false;
     setExternalTotalKg(0);
+    setExternalModuloAplica(cuentaExternaTieneReporteEmbed(codeCuenta));
     setExternalTotalGridLoading(true);
 
     const stopLoadingTimer = window.setTimeout(() => {
@@ -153,31 +165,48 @@ const ReportesSection = () => {
       try {
         if (cancelled) return;
         const externas = warehousesForTipo(warehouseRows, "externa");
+        const cc = codeCuenta.trim();
+        let moduloAplica = cuentaExternaTieneReporteEmbed(cc);
+        let totalKgAcc = 0;
+
         if (externas.length === 0) {
-          setExternalTotalKg(0);
-          setExternalTotalGridLoading(false);
-          window.clearTimeout(stopLoadingTimer);
+          if (!cancelled) {
+            setExternalTotalKg(0);
+            setExternalModuloAplica(moduloAplica);
+            setExternalTotalGridLoading(false);
+            window.clearTimeout(stopLoadingTimer);
+          }
           return;
         }
 
-        await Promise.all(
-          externas.map((w) =>
-            fetchFridemInventoryRows(w.id, (w.codeCuenta ?? codeCuenta).trim() || undefined)
-              .then((rows) => {
-                if (cancelled) return;
-                const kg = sumRowsKg(rows);
-                setExternalTotalKg((prev) => prev + kg);
-              })
-              .catch(() => {}),
-          ),
+        const partes = await Promise.all(
+          externas.map(async (w) => {
+            try {
+              const rows = await fetchFridemInventoryRows(w.id, (w.codeCuenta ?? cc).trim() || undefined);
+              const vistas = disponibilidadVistasExternas(rows, false, null, w.codeCuenta ?? cc);
+              return {
+                kg: sumRowsKg(rows),
+                tieneVista: vistas.listado || vistas.grafico || vistas.reporte,
+              };
+            } catch {
+              return { kg: 0, tieneVista: false };
+            }
+          }),
         );
         if (!cancelled) {
+          for (const p of partes) {
+            totalKgAcc += p.kg;
+            if (p.tieneVista) moduloAplica = true;
+          }
+          setExternalTotalKg(totalKgAcc);
+          setExternalModuloAplica(moduloAplica);
           setExternalTotalGridLoading(false);
           window.clearTimeout(stopLoadingTimer);
         }
       } catch {
         if (!cancelled) {
           setExternalTotalKg(0);
+          setExternalModuloAplica(cuentaExternaTieneReporteEmbed(codeCuenta));
           setExternalTotalGridLoading(false);
           window.clearTimeout(stopLoadingTimer);
         }
@@ -370,7 +399,61 @@ const ReportesSection = () => {
     return [];
   }, [activeModule, warehouseRows]);
 
+  const modulosGrid = useMemo((): InventarioModuloCardState[] => {
+    return [
+      {
+        id: "PROVEEDOR",
+        label: "Proveedor",
+        kg: proveedorTotalKg,
+        loading: proveedorTotalGridLoading,
+        aplica: !proveedorTotalGridLoading && proveedorTotalKg > 0,
+      },
+      {
+        id: "TRANSPORTE",
+        label: "Transporte",
+        kg: transporteTotalKg,
+        loading: transporteTotalGridLoading,
+        aplica: !transporteTotalGridLoading && transporteTotalKg > 0,
+      },
+      {
+        id: "BODEGA_INT",
+        label: "Bodega interna",
+        kg: internalTotalKg,
+        loading: internalTotalGridLoading,
+        aplica: !internalTotalGridLoading && internalTotalKg > 0,
+      },
+      {
+        id: "BODEGA_EXT",
+        label: "Bodega externa",
+        kg: externalTotalKg,
+        loading: externalTotalGridLoading,
+        aplica: !externalTotalGridLoading && externalModuloAplica,
+      },
+      {
+        id: "COMPRADOR",
+        label: "Ventas",
+        kg: compradorTotalKg,
+        loading: compradorTotalGridLoading,
+        aplica: !compradorTotalGridLoading && compradorTotalKg > 0,
+      },
+    ];
+  }, [
+    proveedorTotalKg,
+    proveedorTotalGridLoading,
+    transporteTotalKg,
+    transporteTotalGridLoading,
+    internalTotalKg,
+    internalTotalGridLoading,
+    externalTotalKg,
+    externalTotalGridLoading,
+    externalModuloAplica,
+    compradorTotalKg,
+    compradorTotalGridLoading,
+  ]);
+
   const openModuleFromGrid = (id: ModuloTipo) => {
+    const card = modulosGrid.find((m) => m.id === id);
+    if (card && !moduloInventarioPermiteEntrada(card)) return;
     setActiveModule(id);
     if (id === "BODEGA_INT" || id === "BODEGA_EXT") {
       setBodegaStep("list");
@@ -392,58 +475,13 @@ const ReportesSection = () => {
     setSelectedWarehouse(null);
   };
 
-  const modulos = [
-    {
-      id: "PROVEEDOR",
-      label: "Proveedor",
-      value:
-        proveedorTotalGridLoading && proveedorTotalKg === 0
-          ? "(…)"
-          : `(${proveedorTotalKg.toLocaleString("es-CO", { maximumFractionDigits: 2 })} Kg)`,
-      icon: <MdBusiness size={28} />,
-      color: "bg-white",
-    },
-    {
-      id: "TRANSPORTE",
-      label: "Transporte",
-      value:
-        transporteTotalGridLoading && transporteTotalKg === 0
-          ? "(…)"
-          : `(${transporteTotalKg.toLocaleString("es-CO", { maximumFractionDigits: 2 })} Kg)`,
-      icon: <HiOutlineTruck size={28} />,
-      color: "bg-white",
-    },
-    {
-      id: "BODEGA_INT",
-      label: "Bodega interna",
-      value:
-        internalTotalGridLoading && internalTotalKg === 0
-          ? "(…)"
-          : `(${internalTotalKg.toLocaleString("es-CO", { maximumFractionDigits: 2 })} Kg)`,
-      icon: <BiPackage size={28} />,
-      color: "bg-white",
-    },
-    {
-      id: "BODEGA_EXT",
-      label: "Bodega externa",
-      value:
-        externalTotalGridLoading && externalTotalKg === 0
-          ? "(…)"
-          : `(${externalTotalKg.toLocaleString("es-CO", { maximumFractionDigits: 2 })} Kg)`,
-      icon: <MdFactory size={28} />,
-      color: "bg-white",
-    },
-    {
-      id: "COMPRADOR",
-      label: "Ventas",
-      value:
-        compradorTotalGridLoading && compradorTotalKg === 0
-          ? "(…)"
-          : `(${compradorTotalKg.toLocaleString("es-CO", { maximumFractionDigits: 2 })} Kg)`,
-      icon: <MdShoppingCart size={28} />,
-      color: "bg-white",
-    },
-  ];
+  const modulosIconos: Record<ModuloTipo, React.ReactNode> = {
+    PROVEEDOR: <MdBusiness size={28} />,
+    TRANSPORTE: <HiOutlineTruck size={28} />,
+    BODEGA_INT: <BiPackage size={28} />,
+    BODEGA_EXT: <MdFactory size={28} />,
+    COMPRADOR: <MdShoppingCart size={28} />,
+  };
 
   if (!activeModule) {
     return (
@@ -451,29 +489,50 @@ const ReportesSection = () => {
         <h2 className="app-title mb-8 text-center uppercase tracking-wider">Inventario de Mercancía</h2>
 
         <div className="grid grid-cols-2 gap-4 max-w-5xl mx-auto">
-          {modulos.map((m) => (
-            <button
-              key={m.id}
-              type="button"
-              onClick={() => openModuleFromGrid(m.id as ModuloTipo)}
-              className={`
-                ${m.id === "PROVEEDOR" || m.id === "TRANSPORTE" || m.id === "COMPRADOR" ? "col-span-2" : "col-span-1"}
-                group flex items-center justify-center gap-6 p-6 rounded-2xl border border-slate-200 
-                bg-white shadow-sm transition-all hover:shadow-md hover:border-slate-300 active:scale-[0.98]
-              `}
-            >
-              <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[#0f172a] text-white shadow-lg group-hover:bg-slate-800 transition-colors">
-                {m.icon}
-              </div>
+          {modulosGrid.map((m) => {
+            const puedeEntrar = moduloInventarioPermiteEntrada(m);
+            const etiqueta = etiquetaKgTarjetaInventario(m.loading, m.kg, m.aplica);
+            const anchoCompleto =
+              m.id === "PROVEEDOR" || m.id === "TRANSPORTE" || m.id === "COMPRADOR";
+            return (
+              <button
+                key={m.id}
+                type="button"
+                disabled={!puedeEntrar}
+                title={puedeEntrar ? undefined : "No aplica: no hay datos en este módulo"}
+                onClick={() => openModuleFromGrid(m.id)}
+                className={`
+                  ${anchoCompleto ? "col-span-2" : "col-span-1"}
+                  group flex items-center justify-center gap-6 p-6 rounded-2xl border
+                  ${puedeEntrar ? "border-slate-200 bg-white shadow-sm hover:shadow-md hover:border-slate-300 active:scale-[0.98]" : "border-slate-100 bg-slate-50 cursor-not-allowed opacity-75"}
+                  transition-all
+                `}
+              >
+                <div
+                  className={`flex h-14 w-14 items-center justify-center rounded-2xl shadow-lg transition-colors ${
+                    puedeEntrar
+                      ? "bg-[#0f172a] text-white group-hover:bg-slate-800"
+                      : "bg-slate-300 text-slate-500"
+                  }`}
+                >
+                  {modulosIconos[m.id]}
+                </div>
 
-              <div className="text-left">
-                <h3 className="app-title leading-tight">
-                  {m.label}{" "}
-                  <span className="text-slate-500 font-medium text-base">{m.value}</span>
-                </h3>
-              </div>
-            </button>
-          ))}
+                <div className="text-left">
+                  <h3 className="app-title leading-tight">
+                    {m.label}{" "}
+                    <span
+                      className={`font-medium text-base ${
+                        m.aplica ? "text-slate-500" : "text-slate-400 italic"
+                      }`}
+                    >
+                      {etiqueta}
+                    </span>
+                  </h3>
+                </div>
+              </button>
+            );
+          })}
         </div>
       </section>
     );
