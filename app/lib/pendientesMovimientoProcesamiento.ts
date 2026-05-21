@@ -2,7 +2,7 @@ import type { BodegaOrder, Slot } from "@/app/interfaces/bodega";
 import type { SolicitudProcesamiento } from "@/app/types/solicitudProcesamiento";
 import { normalizeProcesamientoEstado } from "@/app/types/solicitudProcesamiento";
 import { kgSobranteParaDevolucionMapa } from "@/app/lib/sobranteKg";
-import { findSlotPrimarioParaDevolverDesperdicio } from "@/lib/procesamientoInventarioBodega";
+import { findSlotPrimarioParaDevolverDesperdicio } from "@/lib/bodega/procesamientoInventarioBodega";
 
 export type PendienteMovimientoKind = "desperdicio" | "procesado";
 

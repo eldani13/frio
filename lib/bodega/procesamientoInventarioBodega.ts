@@ -1,7 +1,7 @@
 import type { Slot } from "@/app/interfaces/bodega";
 import type { SolicitudProcesamiento } from "@/app/types/solicitudProcesamiento";
 import { normalizeProcesamientoEstado } from "@/app/types/solicitudProcesamiento";
-import { coerceKgFromUnknown, coercePiezasFromUnknown, kgFromFirestoreSlotRecord } from "@/lib/coerceBodegaKg";
+import { coerceKgFromUnknown, coercePiezasFromUnknown, kgFromFirestoreSlotRecord } from "./coerceBodegaKg";
 
 /** Campos mínimos para descontar inventario desde la cola del operario (`tareasProcesamientoOperario`). */
 export function tareaColaOperarioToSolicitudInventario(t: Record<string, unknown>): SolicitudProcesamiento {

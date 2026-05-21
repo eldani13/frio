@@ -1,6 +1,7 @@
 import { child, get, ref } from "firebase/database";
 import { collection, getDocs } from "firebase/firestore";
-import type { Slot } from "../app/interfaces/bodega";
+import type { Slot } from "../../app/interfaces/bodega";
+import { isFridemInventoryAllowedForCode } from "./fridemAccountAccess";
 import { ensureFridemAuth, fridemDatabase, fridemDb } from "./fridemClient";
 
 export type FridemRaw = Partial<{
@@ -336,7 +337,9 @@ async function fetchRealtimeCandidates(warehouseId: string): Promise<Slot[]> {
   return [];
 }
 
-export async function fetchFridemSlots(warehouseId: string): Promise<Slot[]> {
+export async function fetchFridemSlots(warehouseId: string, codeCuenta?: string): Promise<Slot[]> {
+  if (!isFridemInventoryAllowedForCode(codeCuenta)) return [];
+
   const fromFirestore = await fetchFirestoreCandidates(warehouseId);
   if (fromFirestore.length) return fromFirestore;
 
@@ -403,7 +406,12 @@ async function fetchRawFromRealtime(warehouseId?: string): Promise<FridemRaw[]> 
   return [];
 }
 
-export async function fetchFridemInventoryRows(warehouseId?: string): Promise<FridemInventoryRow[]> {
+export async function fetchFridemInventoryRows(
+  warehouseId?: string,
+  codeCuenta?: string,
+): Promise<FridemInventoryRow[]> {
+  if (!isFridemInventoryAllowedForCode(codeCuenta)) return [];
+
   if (!fridemDb && !fridemDatabase) {
     throw new Error(
       "No hay base externa configurada. Revisa NEXT_PUBLIC_FRIDEM_* y NEXT_PUBLIC_FRIDEM_DATABASE_URL en tu .env.",

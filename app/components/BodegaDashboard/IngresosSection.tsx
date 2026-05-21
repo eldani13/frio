@@ -22,7 +22,7 @@ import {
   ZonaCuatroSlotsRow,
 } from "@/app/components/bodega/ZonaCuatroSlotsRow";
 import { ModalPlantilla } from "@/app/components/ui/ModalPlantilla";
-import { swalConfirm } from "@/lib/swal";
+import { swalConfirm } from "@/lib/ui/swal";
 import type { VentaPendienteCartonaje } from "@/app/types/ventaCuenta";
 
 const HIGH_TEMP_THRESHOLD = 5;

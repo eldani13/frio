@@ -16,13 +16,13 @@ import type { Catalogo } from "@/app/types/catalogo";
 import type { Comprador } from "@/app/types/comprador";
 import { ORDEN_COMPRA_ESTADOS } from "@/app/types/ordenCompra";
 import type { VentaEnCursoLineItem } from "@/app/types/ventaCuenta";
-import { esCatalogoSecundario, unidadVisualizacionDe } from "@/lib/catalogoProcesamiento";
+import { esCatalogoSecundario, unidadVisualizacionDe } from "@/lib/catalogo/catalogoProcesamiento";
 import {
   stockPrimarioDesdeSlotsPreferirKgCuandoExisten,
   stockTeoricoUnidadesSecundarioDesdeSlots,
   stockUnidadesSecundarioDesdeSlotsProcesamiento,
-} from "@/lib/stockPrimarioBodega";
-import { swalConfirm } from "@/lib/swal";
+} from "@/lib/bodega/stockPrimarioBodega";
+import { swalConfirm } from "@/lib/ui/swal";
 
 type DraftLine = VentaEnCursoLineItem;
 

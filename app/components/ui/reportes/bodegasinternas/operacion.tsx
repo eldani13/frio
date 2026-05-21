@@ -25,13 +25,13 @@ import {
   subscribeHistoryState,
   subscribeWarehouseState,
   type CloudWarehouseState,
-} from "@/lib/bodegaCloudState";
+} from "@/lib/bodega/bodegaCloudState";
 import {
   buildIngresoRecordByAutoId,
   filasInventarioInternoFromSlots,
   type CategoriaTermica,
   type FilaInventarioInterno,
-} from "@/lib/bodegaInternalInventoryRows";
+} from "@/lib/bodega/bodegaInternalInventoryRows";
 
 const GEIST_STACK = "var(--font-geist-sans),ui-sans-serif,system-ui,sans-serif";
 

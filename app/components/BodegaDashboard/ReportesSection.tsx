@@ -36,8 +36,8 @@ import {
   type SolicitudIntegracion,
 } from "@/app/types/solicitudIntegracion";
 import { SolicitudIntegracionService } from "@/app/services/solicitudIntegracionService";
-import { compareOrdenCompraByCodigoDesc } from "@/lib/ordenCompraSort";
-import { compareSolicitudCompraByCodigoDesc } from "@/lib/solicitudCompraSort";
+import { compareOrdenCompraByCodigoDesc } from "@/lib/ordenes/ordenCompraSort";
+import { compareSolicitudCompraByCodigoDesc } from "@/lib/ordenes/solicitudCompraSort";
 
 import { MdAssignment, MdBusiness, MdShoppingCart, MdWarehouse } from "react-icons/md";
 import { BiBarChartAlt2, BiCollection, BiUserCheck } from "react-icons/bi";

@@ -1,4 +1,4 @@
-import { auth, db } from "@/lib/firebaseClient";
+import { auth, db } from "@/lib/firebase/firebaseClient";
 import {
   collection,
   addDoc,
@@ -14,8 +14,8 @@ import {
   onSnapshot,
 } from "firebase/firestore";
 import { Catalogo } from "@/app/types/catalogo";
-import { coerceNumberImport } from "@/lib/catalogoPrecio";
-import { almacenProductCodeFromNumericId } from "@/lib/almacenProductCode";
+import { coerceNumberImport } from "@/lib/catalogo/catalogoPrecio";
+import { almacenProductCodeFromNumericId } from "@/lib/bodega/almacenProductCode";
 
 const PARENT_COLLECTION = "clientes";
 const SUB_COLLECTION = "productos";

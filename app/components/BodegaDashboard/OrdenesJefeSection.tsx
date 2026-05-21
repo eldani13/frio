@@ -27,7 +27,7 @@ import {
   cantidadPrimarioProcesamientoTexto,
   primarioCatalogoPorId,
 } from "@/app/lib/procesamientoDisplay";
-import { almacenProductCodeFromCatalogo } from "@/lib/almacenProductCode";
+import { almacenProductCodeFromCatalogo } from "@/lib/bodega/almacenProductCode";
 import { ProcesamientoOrdenesActivasBodega } from "@/app/components/BodegaDashboard/ProcesamientoOrdenesActivasBodega";
 import { AsignarProcesadorProcesamientoModal } from "@/app/components/BodegaDashboard/AsignarProcesadorProcesamientoModal";
 import BodegaZonaCajaCard from "../bodega/BodegaZonaCajaCard";
@@ -52,7 +52,7 @@ import {
 } from "../bodega/JefeOrderModalShell";
 import { RiUserReceivedLine } from "react-icons/ri";
 import { temperatureStringFromAnalyzeResponse } from "@/app/lib/imageAnalyzeApi";
-import { swalError, swalWarning } from "@/lib/swal";
+import { swalError, swalWarning } from "@/lib/ui/swal";
 
 const HIGH_TEMP_THRESHOLD = 5;
 

@@ -16,10 +16,10 @@ import {
   esCatalogoSecundario,
   gramosPorUnidadDesdeReglaConversion,
   REGLA_PRIMARIO_BASE_GRAMOS,
-} from "@/lib/catalogoProcesamiento";
-import { UNIDAD_VIS_CATALOGO_OPCIONES } from "@/lib/unidadVisualizacionCatalogo";
-import { precioCatalogoNumerico } from "@/lib/catalogoPrecio";
-import { swalWarning } from "@/lib/swal";
+} from "@/lib/catalogo/catalogoProcesamiento";
+import { UNIDAD_VIS_CATALOGO_OPCIONES } from "@/lib/catalogo/unidadVisualizacionCatalogo";
+import { precioCatalogoNumerico } from "@/lib/catalogo/catalogoPrecio";
+import { swalWarning } from "@/lib/ui/swal";
 
 interface CatalogoFormProps {
   isOpen: boolean;

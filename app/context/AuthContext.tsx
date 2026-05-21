@@ -2,7 +2,7 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
 import { onAuthStateChanged } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
-import { auth, db } from "@/lib/firebaseClient";
+import { auth, db } from "@/lib/firebase/firebaseClient";
 
 // Tipado extendido para incluir el código del cliente
 interface AuthContextType {

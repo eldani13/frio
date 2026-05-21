@@ -1,5 +1,5 @@
 import type { Catalogo } from "@/app/types/catalogo";
-import { unidadVisualizacionStockMode } from "@/lib/unidadVisualizacionCatalogo";
+import { unidadVisualizacionStockMode } from "./unidadVisualizacionCatalogo";
 
 /** Producto de catálogo marcado como secundario (tipo). */
 export function esCatalogoSecundario(p: Catalogo): boolean {

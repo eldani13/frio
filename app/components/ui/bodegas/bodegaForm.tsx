@@ -9,7 +9,7 @@ import {
 } from "@/app/components/ui/FormularioPlantilla";
 import { AsignarBodegaService } from "@/app/services/asignarbodegaService";
 import { useAuth } from "@/app/context/AuthContext";
-import { swalError } from "@/lib/swal";
+import { swalError } from "@/lib/ui/swal";
 
 interface Props {
   isOpen: boolean;

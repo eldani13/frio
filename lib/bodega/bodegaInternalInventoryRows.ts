@@ -1,4 +1,4 @@
-import type { Slot } from "../app/interfaces/bodega";
+import type { Slot } from "../../app/interfaces/bodega";
 import { kgFromFirestoreSlotRecord } from "./coerceBodegaKg";
 
 /** Alineado con ingresos / mapa: por encima de 5 °C se considera alerta. */

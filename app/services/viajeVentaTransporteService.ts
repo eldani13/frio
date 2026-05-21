@@ -1,4 +1,4 @@
-import { db } from "@/lib/firebaseClient";
+import { db } from "@/lib/firebase/firebaseClient";
 import { CatalogoService } from "@/app/services/catalogoService";
 import type { Catalogo } from "@/app/types/catalogo";
 import type { VentaEnCursoLineItem } from "@/app/types/ventaCuenta";

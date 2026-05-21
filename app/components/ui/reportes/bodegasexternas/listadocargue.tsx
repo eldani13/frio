@@ -2,7 +2,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import type { FridemInventoryRow } from "@/lib/fridemInventory";
+import type { FridemInventoryRow } from "@/lib/fridem/fridemInventory";
 
 type Props = {
   items: FridemInventoryRow[];

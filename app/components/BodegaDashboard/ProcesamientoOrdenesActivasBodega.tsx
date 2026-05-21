@@ -31,14 +31,14 @@ import {
   OCCUPIED_MAPA_TONE_PROCESADO,
 } from "@/app/lib/bodegaDisplay";
 import { kgSobranteParaDevolucionMapa, unidadesSecundarioEnterasParaMapa } from "@/app/lib/sobranteKg";
-import { recordMermaProcesamientoKg } from "@/lib/bodegaCloudState";
-import { swalConfirm, swalWarning } from "@/lib/swal";
+import { recordMermaProcesamientoKg } from "@/lib/bodega/bodegaCloudState";
+import { swalConfirm, swalWarning } from "@/lib/ui/swal";
 import { SolicitudProcesamientoService } from "@/app/services/solicitudProcesamientoService";
 import type { SolicitudProcesamiento } from "@/app/types/solicitudProcesamiento";
 import {
   deductSlotsAfterProcesamientoTerminado,
   findSlotPrimarioParaDevolverDesperdicio,
-} from "@/lib/procesamientoInventarioBodega";
+} from "@/lib/bodega/procesamientoInventarioBodega";
 import {
   desperdicioKgSugeridoDesdeMerma,
   stringKgInicialDesperdicio,
@@ -72,7 +72,7 @@ import {
   primarioCatalogoPorId,
   textoPrecioSecundarioCatalogo,
 } from "@/app/lib/procesamientoDisplay";
-import { almacenProductCodeFromCatalogo } from "@/lib/almacenProductCode";
+import { almacenProductCodeFromCatalogo } from "@/lib/bodega/almacenProductCode";
 
 function opcionesEstadoSelect(estadoActual: string): string[] {
   const cur = estadoActual.trim();

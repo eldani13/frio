@@ -29,7 +29,7 @@ import {
 } from "@/app/lib/procesamientoDisplay";
 import { unidadesSecundarioEnterasParaMapa } from "@/app/lib/sobranteKg";
 import { TarjetaOrdenProcesamientoSlotInner } from "@/app/components/BodegaDashboard/ProcesamientoOrdenesActivasBodega";
-import { swalConfirm, swalWarning } from "@/lib/swal";
+import { swalConfirm, swalWarning } from "@/lib/ui/swal";
 import { BodegaDetalleModalFila } from "@/app/components/bodega/CajaDetalleModal";
 import {
   JefeModalEmptyHint,

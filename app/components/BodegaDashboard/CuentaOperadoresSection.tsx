@@ -2,7 +2,7 @@
 
 import React from "react";
 import { doc, getDoc } from "firebase/firestore";
-import { db } from "@/lib/firebaseClient";
+import { db } from "@/lib/firebase/firebaseClient";
 import { useAuth } from "@/app/context/AuthContext";
 import {
   createOperadorCuenta,

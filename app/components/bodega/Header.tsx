@@ -5,7 +5,7 @@ import type { HeaderProps } from "../../interfaces/bodega/Header";
 import type { Role } from "../../interfaces/bodega";
 import SearchForm from "./SearchForm";
 import { HiOutlineSquares2X2 } from "react-icons/hi2";
-import { WHATSAPP_CUENTA_SOPORTE_HREF } from "@/lib/whatsappCuentaSoporte";
+import { WHATSAPP_CUENTA_SOPORTE_HREF } from "@/lib/soporte/whatsappCuentaSoporte";
 
 interface ExtendedHeaderProps extends HeaderProps {
   userDisplayName?: string;

@@ -1,4 +1,4 @@
-import { db } from "./firebaseClient";
+import { db } from "../firebase/firebaseClient";
 import {
   doc,
   getDoc,
@@ -15,7 +15,7 @@ import type {
   Box,
   HistoryState,
   Slot,
-} from "../app/interfaces/bodega";
+} from "../../app/interfaces/bodega";
 
 export const DEFAULT_WAREHOUSE_ID = process.env.NEXT_PUBLIC_WAREHOUSE_ID ?? "default";
 

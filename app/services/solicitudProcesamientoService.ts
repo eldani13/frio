@@ -1,5 +1,5 @@
 import { sobranteKgTotalTrasEnCurso } from "@/app/lib/sobranteKg";
-import { auth, db } from "@/lib/firebaseClient";
+import { auth, db } from "@/lib/firebase/firebaseClient";
 import type { ProcesamientoEstado, SolicitudProcesamiento } from "@/app/types/solicitudProcesamiento";
 import { normalizeProcesamientoEstado } from "@/app/types/solicitudProcesamiento";
 import {

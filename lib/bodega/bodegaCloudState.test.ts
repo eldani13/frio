@@ -21,7 +21,7 @@ describe("bodegaCloudState", () => {
       return cb(tx);
     });
 
-    vi.doMock("./firebaseClient", () => ({ db: {} }));
+    vi.doMock("../firebase/firebaseClient", () => ({ db: {} }));
     vi.doMock("firebase/firestore", () => ({
       doc: (...args: unknown[]) => ({ path: args.join("/") }),
       getDoc,
@@ -59,7 +59,7 @@ describe("bodegaCloudState", () => {
       data: () => ({ mermaProcesamientoKgTotal: 2 }),
     }));
 
-    vi.doMock("./firebaseClient", () => ({ db: {} }));
+    vi.doMock("../firebase/firebaseClient", () => ({ db: {} }));
     vi.doMock("firebase/firestore", () => ({
       doc: (...args: unknown[]) => ({ path: args.join("/") }),
       getDoc,
@@ -91,7 +91,7 @@ describe("bodegaCloudState", () => {
       return () => {};
     });
 
-    vi.doMock("./firebaseClient", () => ({ db: {} }));
+    vi.doMock("../firebase/firebaseClient", () => ({ db: {} }));
     vi.doMock("firebase/firestore", () => ({
       doc: (...args: unknown[]) => ({ path: args.join("/") }),
       getDoc,
@@ -127,7 +127,7 @@ describe("bodegaCloudState", () => {
       order.push(`end:${w}`);
     });
 
-    vi.doMock("./firebaseClient", () => ({ db: {} }));
+    vi.doMock("../firebase/firebaseClient", () => ({ db: {} }));
     vi.doMock("firebase/firestore", () => ({
       doc: (...args: unknown[]) => ({ path: args.join("/") }),
       getDoc: vi.fn(async () => ({ exists: () => false, data: () => ({}) })),

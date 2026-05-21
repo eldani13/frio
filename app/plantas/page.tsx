@@ -6,7 +6,7 @@ import { PlantaTable } from "@/app/components/ui/plantas/PlantaTable";
 import { PlantaForm } from "@/app/components/ui/plantas/PlantaForm";
 import { HiOutlinePlus, HiOutlineSquares2X2 } from "react-icons/hi2";
 import { useAuth } from "@/app/context/AuthContext";
-import { swalConfirmDelete, swalError } from "@/lib/swal";
+import { swalConfirmDelete, swalError } from "@/lib/ui/swal";
 
 export default function PlantasPage() {
   const [plantas, setPlantas] = useState<Planta[]>([]);

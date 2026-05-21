@@ -1,6 +1,6 @@
-import type { Slot } from "../app/interfaces/bodega";
-import type { Catalogo } from "../app/types/catalogo";
-import { secondaryTitleFromSlot, slotLooksLikeProcesamiento } from "../app/lib/bodegaDisplay";
+import type { Slot } from "../../app/interfaces/bodega";
+import type { Catalogo } from "../../app/types/catalogo";
+import { secondaryTitleFromSlot, slotLooksLikeProcesamiento } from "../../app/lib/bodegaDisplay";
 import {
   esCatalogoSecundario,
   estimadoSecundarioAplicarPerdidaPct,
@@ -8,7 +8,7 @@ import {
   reglaConversionDesdeCatalogoSecundario,
   unidadVisualizacionDe,
   unidadesSecundarioPorRegla,
-} from "./catalogoProcesamiento";
+} from "../catalogo/catalogoProcesamiento";
 import { coercePiezasFromUnknown, kgFromFirestoreSlotRecord } from "./coerceBodegaKg";
 
 function norm(s: string): string {

@@ -20,7 +20,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import type { FridemInventoryRow } from "@/lib/fridemInventory";
+import type { FridemInventoryRow } from "@/lib/fridem/fridemInventory";
 
 const GEIST_STACK = "var(--font-geist-sans),ui-sans-serif,system-ui,sans-serif";
 

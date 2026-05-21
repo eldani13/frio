@@ -20,12 +20,12 @@ import {
   mermaPctDesdeCatalogoSecundario,
   reglaConversionDesdeCatalogoSecundario,
   unidadesSecundarioPorRegla,
-} from "@/lib/catalogoProcesamiento";
-import { etiquetaUnidadVisualizacion } from "@/lib/unidadVisualizacionCatalogo";
-import { formatoPrecioCatalogo } from "@/lib/catalogoPrecio";
-import { subscribeWarehouseState } from "@/lib/bodegaCloudState";
-import { stockPrimarioDesdeSlotsPreferirKgCuandoExisten } from "@/lib/stockPrimarioBodega";
-import { swalConfirm } from "@/lib/swal";
+} from "@/lib/catalogo/catalogoProcesamiento";
+import { etiquetaUnidadVisualizacion } from "@/lib/catalogo/unidadVisualizacionCatalogo";
+import { formatoPrecioCatalogo } from "@/lib/catalogo/catalogoPrecio";
+import { subscribeWarehouseState } from "@/lib/bodega/bodegaCloudState";
+import { stockPrimarioDesdeSlotsPreferirKgCuandoExisten } from "@/lib/bodega/stockPrimarioBodega";
+import { swalConfirm } from "@/lib/ui/swal";
 
 export interface OrdenProcesamientoDraft {
   productoPrimarioId: string;
