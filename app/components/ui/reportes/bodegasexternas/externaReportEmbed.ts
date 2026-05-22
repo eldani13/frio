@@ -1,7 +1,7 @@
 /** URL embed de Looker Studio (Google Data Studio) por código de cuenta. */
 const DEFAULT_EMBEDS: Record<string, string> = {
   "000GX":
-    "https://datastudio.google.com/embed/reporting/e86c7eba-f669-499f-9666-0655492d5e66/page/mgzyF",
+    "https://datastudio.google.com/embed/reporting/8319190c-7a5c-48b2-9b1d-84701d583dd9/page/RMmyF",
 };
 
 function normalizeCode(code: string | undefined | null): string {
