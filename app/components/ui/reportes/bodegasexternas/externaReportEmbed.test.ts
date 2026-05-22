@@ -5,7 +5,8 @@ describe("externaReportEmbed", () => {
   it("devuelve URL para 000GX", () => {
     const url = getExternaReportEmbedUrl("000GX");
     expect(url).toContain("datastudio.google.com/embed/reporting/");
-    expect(url).toContain("e86c7eba-f669-499f-9666-0655492d5e66");
+    expect(url).toContain("8319190c-7a5c-48b2-9b1d-84701d583dd9");
+    expect(url).toContain("/page/RMmyF");
   });
 
   it("otras cuentas sin embed", () => {
